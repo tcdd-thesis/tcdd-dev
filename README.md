@@ -57,6 +57,8 @@ chmod +x deploy-pi.sh
 ./deploy-pi.sh
 ```
 
+**Alternative:** For step-by-step manual setup, see [PI_SETUP.md](PI_SETUP.md).
+
 What the script does (high level):
 
 - Installs system packages (git, build tools, ffmpeg, libatlas/blas if available)
@@ -148,7 +150,12 @@ cd backend/python
 python3 -m venv venv
 source venv/bin/activate   # on Windows: .\venv\Scripts\Activate.ps1
 pip install --upgrade pip
-pip install -r requirements.txt
+
+# On Raspberry Pi, use --no-cache-dir to avoid hash mismatches
+pip install --no-cache-dir --upgrade -r requirements.txt
+
+# On Pi, also install picamera2
+# pip install picamera2
 ```
 
 3. Install frontend deps and run the React development server:
@@ -298,31 +305,34 @@ The Node backend in this project serves the production build automatically when 
 
 ### Pip hash mismatch errors (piwheels)
 
-If you see `ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE` when installing dependencies on the Pi, this is because the Pi uses **piwheels.org** (precompiled wheels for Raspberry Pi) which may have different hashes than PyPI.
+If you see `ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE` when installing dependencies on the Pi, this is because the Pi uses **piwheels.org** (precompiled wheels for Raspberry Pi) which may have different SHA256 hashes than PyPI.
 
-**Solution:** Install packages without hash checking or regenerate requirements on the Pi:
+**Permanent solution (recommended):**
+
+The `requirements.txt` file intentionally omits version pins and hashes to work with piwheels. Always install with `--no-cache-dir --upgrade`:
 
 ```bash
 cd backend/python
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-
-# Install packages individually
-pip install flask==3.0.0 flask-cors==4.0.0 numpy opencv-python ultralytics torch torchvision
-
-# For Raspberry Pi camera support (Pi only)
+pip install --no-cache-dir --upgrade -r requirements.txt
 pip install picamera2
-
-# Generate fresh requirements.txt (optional)
-pip freeze > requirements.txt
 ```
 
-Alternatively, install with `--no-cache-dir` to bypass cache issues:
+**If hash errors persist, install packages individually:**
 
 ```bash
-pip install --no-cache-dir -r requirements.txt
+pip install --no-cache-dir --upgrade \
+  flask flask-cors numpy opencv-python pillow \
+  ultralytics torch torchvision picamera2
 ```
+
+**Why this happens:**
+- Piwheels rebuilds packages for ARM architecture with different build IDs
+- Hash mismatches are expected and safe when using official piwheels
+- Using `--no-cache-dir` ensures fresh downloads
+- No version pins allows pip to select compatible piwheels versions
 
 ### Camera not working
 
@@ -490,9 +500,4 @@ MIT — See the LICENSE file for details.
 
 ---
 
-If you'd like, I can also:
-
-- add a short `quick-start-pi.md` with exact apt packages and verified install commands for Raspberry Pi 5 (arm64), or
-- generate a simple `systemd` unit file template for the camera service and backend if your `deploy-pi.sh` doesn't already provide them.
-
-Tell me which of those you'd prefer and I will add it next.
+**Need help?** Check [PI_SETUP.md](PI_SETUP.md) for detailed Raspberry Pi 5 setup instructions and troubleshooting.
