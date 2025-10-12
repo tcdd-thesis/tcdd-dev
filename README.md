@@ -1,36 +1,36 @@
 # Sign Detection System for Raspberry Pi 5
 
-A real-time traffic sign detection web application designed to run on Raspberry Pi 5 with camera module. Uses YOLOv8 for detection, Flask for video streaming, Node.js/Express for the backend API, and React for the dashboard UI.
+A real-time traffic sign detection web application designed to run on Raspberry Pi 5 with a camera module. The project uses YOLOv8 for detection, a Flask-based Python camera server for video capture and inference, a Node.js/Express backend that proxies and provides API endpoints, and a React dashboard for live monitoring and visualization.
 
-## 🎯 Features
+# 🎯 Features
 
-- **Real-time Detection**: Live traffic sign detection using YOLOv8
-- **Camera Integration**: Optimized for Raspberry Pi Camera Module (with USB camera fallback)
-- **Web Dashboard**: Responsive React interface showing live feed and detections
-- **REST API**: Node.js backend with detection endpoints
-- **Video Streaming**: MJPEG stream with bounding box overlays
-- **System Status**: Real-time monitoring of camera and model status
-- **Performance Optimized**: Configurable detection intervals, JPEG quality, and frame rates
-- **Auto-Recovery**: Automatic reconnection on connection loss
-- **Resource Efficient**: Optimized memory usage and CPU utilization
+- Real-time detection with YOLOv8
+- Camera integration (Picamera2 / libcamera for the Pi Camera, USB webcam fallback)
+- React dashboard showing live feed, detection list and confidence
+- Node.js backend that proxies the Python camera server and exposes REST endpoints
+- MJPEG video streaming with bounding-box overlays
+- System status endpoints and WebSocket integration for live updates
+- Performance tuning options (resolution, FPS, confidence threshold)
+- Systemd services for auto-start and reliable operation on boot
 
-## ⚡ Performance
+## ⚡ Performance (typical)
 
-- **FPS**: 28-30 FPS (stable) on Raspberry Pi 5
-- **Latency**: 80-120ms detection latency
-- **Memory**: ~300MB RAM usage
-- **CPU**: 45-65% utilization (balanced mode)
+- FPS: 20–30 FPS depending on resolution and model size
+- Latency: ~80–200 ms depending on model (YOLOv8n is fastest)
+- Memory: ~200–600 MB depending on active services and model
+- CPU: varies by mode and model size; tuning recommended
 
-See [OPTIMIZATION.md](OPTIMIZATION.md) for detailed performance tuning guide.
+See [OPTIMIZATION.md](OPTIMIZATION.md) for tuning tips and trade-offs. Your mileage will vary depending on model size (n, s, m, l), resolution, and whether you convert models to ONNX/TFLite.
 
 ## 📋 System Requirements
 
-### Raspberry Pi 5
-- Raspberry Pi 5 (4GB+ RAM recommended)
-- Raspberry Pi Camera Module 3 (or USB webcam)
-- 32GB+ microSD card
-- Display (HDMI monitor or official touchscreen)
-- Raspbian OS (64-bit recommended)
+### Raspberry Pi 5 (recommended hardware)
+
+- Raspberry Pi 5 (4 GB+ recommended)
+- Raspberry Pi Camera Module 3 or a USB UVC webcam
+- 32 GB+ microSD card (use an A1/A2 card for better IO)
+- 64-bit OS recommended: Raspberry Pi OS (64-bit) or Ubuntu 24.04 (arm64)
+- Optional HDMI display or official Raspberry Pi touchscreen for kiosk mode
 
 ### Development Machine (Optional)
 - Windows/Mac/Linux with Node.js and Python
@@ -38,39 +38,50 @@ See [OPTIMIZATION.md](OPTIMIZATION.md) for detailed performance tuning guide.
 
 ## 🚀 Quick Start on Raspberry Pi
 
-### 1. Clone the Repository
+### 1. Clone the repository
+
+Pick a directory on your Pi and clone your fork or the project repository. Replace <your-repo-url> with your repository URL.
 
 ```bash
 cd ~
-git clone <your-repo-url>
-cd tcdd-ml-train/sample_sign_detection
+git clone <your-repo-url> tcdd-dev
+cd tcdd-dev
 ```
 
-### 2. Run Automated Setup
+### 2. Run the automated setup (on the Pi)
+
+The repository includes a helper script that attempts to install system packages, Python dependencies, Node.js, and create systemd services. Review the script before running it.
 
 ```bash
 chmod +x deploy-pi.sh
 ./deploy-pi.sh
 ```
 
-This script will:
-- Install all dependencies (Node.js, Python packages)
-- Set up picamera2 for Pi Camera
-- Install YOLOv8 and required libraries
-- Create systemd services
-- Build the React frontend
+What the script does (high level):
 
-### 3. Add Your Trained Model
+- Installs system packages (git, build tools, ffmpeg, libatlas/blas if available)
+- Installs or configures Picamera2 / libcamera where applicable
+- Installs Python packages from `backend/python/requirements.txt`
+- Installs Node.js (NodeSource) and builds the React frontend
+- Creates and enables `sign-detection-camera` and `sign-detection-backend` systemd services
 
-Copy your trained YOLOv8 model to the model directory:
+**Note:** The script builds the React frontend for production (`npm run build`). This creates optimized static files without the security vulnerabilities present in development dependencies.
+
+If you prefer manual steps, see the "Manual installation" section below.
+
+### 3. Add your trained model
+
+Copy your trained YOLOv8 model into the Python model folder. If there is no `best.pt` present, the camera server will fall back to a small pretrained YOLOv8 model (YOLOv8n) if configured.
 
 ```bash
 cp /path/to/your/best.pt backend/python/model/best.pt
 ```
 
-If you don't have a custom model, the system will use YOLOv8n pretrained.
+Update `backend/python/model/labels.txt` to match your classes.
 
-### 4. Start the Services
+### 4. Start the services
+
+Start both systemd services. These commands can be run from any directory since systemd services use absolute paths.
 
 ```bash
 # Start camera server
@@ -78,108 +89,103 @@ sudo systemctl start sign-detection-camera
 
 # Start backend API
 sudo systemctl start sign-detection-backend
+
+# Check status
+sudo systemctl daemon-reload
+sudo systemctl start sign-detection-camera
+sudo systemctl status sign-detection-camera
+sudo systemctl status sign-detection-backend
+
+# Follow logs (Ctrl-C to stop)
+sudo journalctl -u sign-detection-camera -f
+sudo journalctl -u sign-detection-backend -f
 ```
 
-### 5. Access the Dashboard
+**Note:** If the services fail to start, check the logs with `journalctl -u <service-name> -n 50` to see the last 50 log lines.
 
-Open a browser on your Pi:
+**Common issues:**
+- **Exit code 1/FAILURE**: Check logs with `sudo journalctl -u sign-detection-camera -n 50`
+- **Working directory wrong**: Ensure the systemd service file has the correct `WorkingDirectory` set to your project path
+- **Python environment**: Verify the service is using the correct Python interpreter and venv (if applicable)
+- **Missing dependencies**: Ensure all pip packages were installed successfully
+
+### 5. Access the dashboard
+
+Open a browser on your Pi at:
+
 ```
 http://localhost:5000
 ```
 
-Or from another device on the same network:
+Or access from another device using the Pi's IP address or mDNS name (if available):
+
 ```
+http://<PI_IP_ADDRESS>:5000
 http://raspberrypi.local:5000
 ```
 
-## 🛠️ Development Setup (Windows/Mac/Linux)
+## 🛠️ Development setup (Windows / macOS / Linux)
 
 ### Prerequisites
 
-- Node.js 16+ ([Download](https://nodejs.org/))
-- Python 3.8+ ([Download](https://www.python.org/))
+- Node.js 18+ (Node 20 LTS recommended)
+- Python 3.10+ (Python 3.11 recommended on Pi 5)
 - Git
 
-### Installation
+### Install dependencies (dev machine)
 
-1. **Install Backend Dependencies**
-   ```bash
-   cd backend
-   npm install
-   ```
+1. Install Node packages for the backend (proxy/server):
 
-2. **Install Python Dependencies**
-   ```bash
-   cd backend/python
-   pip install -r requirements.txt
-   ```
-
-3. **Install Frontend Dependencies**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-### Running Locally
-
-**Option 1: Use the start script (Linux/Mac)**
-```bash
-chmod +x start-dev.sh
-./start-dev.sh
-```
-
-**Option 2: Use PowerShell script (Windows)**
-```powershell
-.\start-dev.ps1
-```
-
-**Option 3: Manual start**
-
-Terminal 1 - Python Camera Server:
-```bash
-cd backend/python
-python camera_server.py
-```
-
-Terminal 2 - Node.js Backend:
 ```bash
 cd backend
-npm start
+npm install
 ```
 
-Terminal 3 - React Frontend:
+2. Install Python dependencies for the camera server:
+
+```bash
+cd backend/python
+python3 -m venv venv
+source venv/bin/activate   # on Windows: .\venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+3. Install frontend deps and run the React development server:
+
 ```bash
 cd frontend
+npm install
 npm start
 ```
 
-### Access Points
+### Running locally (three processes)
 
-- **Frontend Dashboard**: http://localhost:3000
-- **Backend API**: http://localhost:5000
-- **Python Camera Server**: http://localhost:5001
-- **Video Feed**: http://localhost:5000/video_feed
+- Python camera server (port 5001): `python backend/python/camera_server.py`
+- Node backend/proxy (port 5000): `npm start` from `backend/`
+- React frontend (port 3000): `npm start` from `frontend/`
 
-## 📁 Project Structure
+The Node backend proxies `/video_feed` and API routes to the Python server.
+
+## 📁 Project structure
 
 ```
-sample_sign_detection/
-├── backend/                      # Node.js + Express server
-│   ├── server.js                # Main server (proxies to Python)
+tcdd-dev/
+├── backend/                      # Node.js + Express server and proxy
+│   ├── server.js                 # Main server (proxies to Python)
 │   ├── package.json
 │   ├── utils/
-│   │   └── socketHandler.js     # WebSocket support
+│   │   └── socketHandler.js      # WebSocket support
 │   └── python/
-│       ├── camera_server.py     # Flask server with camera + YOLOv8
+│       ├── camera_server.py      # Flask server with camera + YOLOv8
 │       ├── requirements.txt
 │       ├── model/
-│       │   ├── best.pt          # Your trained model (add this)
-│       │   ├── labels.txt       # Class labels
-│       │   └── README.md        # Model setup guide
+│       │   ├── best.pt           # Your trained model (add this)
+│       │   ├── labels.txt        # Class labels
+│       │   └── README.md         # Model setup guide
 │       └── scripts/
-│           └── test_setup.py    # Pre-deployment test script
-│
-├── frontend/                    # React web app
+│           └── test_setup.py     # Pre-deployment test script
+├── frontend/                      # React web app
 │   ├── package.json
 │   ├── public/
 │   │   └── index.html
@@ -187,48 +193,48 @@ sample_sign_detection/
 │       ├── App.js
 │       ├── index.js
 │       ├── components/
-│       │   ├── DetectionCard.jsx    # Detection display card
-│       │   ├── ConfidenceBar.jsx    # Confidence visualization
-│       │   └── LiveFeed.jsx         # Video stream component
+│       │   ├── DetectionCard.jsx
+│       │   ├── ConfidenceBar.jsx
+│       │   └── LiveFeed.jsx
 │       ├── pages/
-│       │   └── Dashboard.jsx        # Main dashboard
+│       │   └── Dashboard.jsx
 │       └── styles/
-│           └── App.css              # Raspberry Pi optimized styles
-│
-├── shared/                      # Shared configuration
-│   ├── config.json              # Main configuration
-│   └── README.md                # Config documentation
-│
-├── deploy-pi.sh                 # Raspberry Pi deployment script
-├── start-dev.sh                 # Development start script (Bash)
-├── start-dev.ps1                # Development start script (PowerShell)
-├── .env.example                 # Environment variables template
-├── .gitignore                   # Git ignore rules
-├── QUICKREF.md                  # Quick reference commands
-└── README.md                    # This file
+│           └── App.css
+├── shared/
+│   ├── config.json
+│   └── README.md
+├── deploy-pi.sh
+├── start-dev.sh
+├── start-dev.ps1
+├── .env.example
+├── .gitignore
+├── QUICKREF.md
+└── README.md
 ```
 
-## 🔌 API Endpoints
+## 🔌 API endpoints
 
-### Node.js Backend (Port 5000)
+### Node.js backend (port 5000)
 
-- `GET /video_feed` - Proxy to Python video stream (MJPEG)
-- `GET /api/python/detections` - Proxy to Python server detections
-- `GET /api/python/status` - Get system status
-- `GET /health` - Health check endpoint
+- GET /video_feed — Proxy to Python video stream (MJPEG)
+- GET /api/python/detections — Proxy to Python server detections
+- GET /api/python/status — Get system status
+- GET /health — Health check
 
-### Python Camera Server (Port 5001)
+### Python camera server (port 5001)
 
-- `GET /video_feed` - MJPEG video stream with detections
-- `GET /api/detections` - Current detection results (JSON)
-- `GET /api/status` - Camera and model status
-- `GET /health` - Health check
+- GET /video_feed — MJPEG video stream with detections
+- GET /api/detections — Current detection results (JSON)
+- GET /api/status — Camera and model status
+- GET /health — Health check
 
 ## ⚙️ Configuration
 
-### Camera Settings
+### Camera settings
 
-Edit `backend/python/camera_server.py`:
+Edit `backend/python/camera_server.py` to adjust resolution, framerate and confidence.
+
+Example values:
 
 ```python
 CAMERA_WIDTH = 640
@@ -237,11 +243,11 @@ CAMERA_FPS = 30
 CONFIDENCE_THRESHOLD = 0.5
 ```
 
-### Model Configuration
+### Model configuration
 
 - Place your trained model at `backend/python/model/best.pt`
 - Update labels at `backend/python/model/labels.txt`
-- Adjust confidence threshold in camera_server.py
+- Optionally convert to ONNX/TFLite for faster inference. See `OPTIMIZATION.md`.
 
 ### Display Optimization
 
@@ -250,15 +256,15 @@ The frontend is optimized for:
 - HDMI displays up to 1920x1080
 - Responsive design adapts to screen size
 
-## 📊 Using Your Custom Model
+## 📊 Using your custom model
 
-If you trained a model using the YOLOv8 scripts in the parent directory:
+If you trained a model using Ultralytics/YOLO training, copy the final weights into the model folder and provide a matching `labels.txt`.
 
 ```bash
-# Copy your trained model
+# from project root
 cp ../runs/detect/train/weights/best.pt backend/python/model/best.pt
 
-# Update labels file with your classes
+# create labels file (example)
 cat > backend/python/model/labels.txt << EOF
 stop
 yield
@@ -270,117 +276,223 @@ EOF
 
 ## 🔧 Troubleshooting
 
-### Camera Not Working
+### npm audit vulnerabilities (frontend dependencies)
+
+When running `npm install` in the frontend, you may see security warnings about vulnerable packages (nth-check, postcss, webpack-dev-server). These are in **development dependencies** only and do not affect production builds.
+
+**Important:** Do NOT run `npm audit fix --force` as it will break react-scripts.
+
+**Recommended approach:**
+- For production on the Pi, use `npm run build` to create optimized static files
+- The vulnerabilities are in the dev server, not the production build
+- If running locally on a closed network, the risk is minimal
+
+**To deploy production build:**
+```bash
+cd frontend
+npm run build
+# Serve the build/ folder via the Node backend (already configured)
+```
+
+The Node backend in this project serves the production build automatically when available.
+
+### Pip hash mismatch errors (piwheels)
+
+If you see `ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE` when installing dependencies on the Pi, this is because the Pi uses **piwheels.org** (precompiled wheels for Raspberry Pi) which may have different hashes than PyPI.
+
+**Solution:** Install packages without hash checking or regenerate requirements on the Pi:
 
 ```bash
-# Check camera connection
+cd backend/python
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+
+# Install packages individually
+pip install flask==3.0.0 flask-cors==4.0.0 numpy opencv-python ultralytics torch torchvision
+
+# For Raspberry Pi camera support (Pi only)
+pip install picamera2
+
+# Generate fresh requirements.txt (optional)
+pip freeze > requirements.txt
+```
+
+Alternatively, install with `--no-cache-dir` to bypass cache issues:
+
+```bash
+pip install --no-cache-dir -r requirements.txt
+```
+
+### Camera not working
+
+```bash
+# Check basic libcamera functionality
 libcamera-hello
 
-# Verify picamera2 installation
+# Verify Picamera2 import (inside venv if used)
 python3 -c "from picamera2 import Picamera2; print('OK')"
 
-# Check permissions
+# Add your user to video group (log out/in after running)
 sudo usermod -a -G video $USER
 ```
 
-### Model Loading Errors
+### Model loading errors
 
 ```bash
-# Test model loading
+# Test model loading quickly
 cd backend/python
-python3 -c "
-from ultralytics import YOLO
-model = YOLO('model/best.pt')
-print('Model loaded:', model.names)
-"
+python3 -c "from ultralytics import YOLO; model = YOLO('model/best.pt'); print('Model loaded:', model.names)"
 ```
 
-### Port Already in Use
+### Port already in use
 
 ```bash
-# Kill processes on ports
-sudo lsof -ti:5000 | xargs kill -9
-sudo lsof -ti:5001 | xargs kill -9
+# Kill processes on ports (install lsof if missing)
+sudo lsof -ti:5000 | xargs -r kill -9
+sudo lsof -ti:5001 | xargs -r kill -9
 ```
 
-### Performance Issues on Pi
+### Performance issues on Pi
 
 - Reduce camera resolution (try 320x240)
 - Lower FPS to 15
 - Use ONNX or TFLite model format
 - Reduce confidence threshold
 
-## 🌐 Network Access
+### Systemd service fails to start
 
-To access from other devices on your network:
+If `sudo systemctl status sign-detection-camera` shows `exit-code` or `FAILURE`:
 
-1. Find your Pi's IP address:
-   ```bash
-   hostname -I
-   ```
-
-2. Update frontend API URL:
-   ```bash
-   # In frontend/.env
-   REACT_APP_API_URL=http://192.168.1.100:5000
-   ```
-
-3. Rebuild frontend:
-   ```bash
-   cd frontend
-   npm run build
-   ```
-
-## 🚦 Running as a Kiosk
-
-For full-screen display on Pi:
-
+**1. Check the detailed logs:**
 ```bash
-# Install unclutter to hide cursor
-sudo apt-get install unclutter
-
-# Edit autostart
-nano ~/.config/lxsession/LXDE-pi/autostart
-
-# Add:
-@chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:5000
-@unclutter -idle 0
+sudo journalctl -u sign-detection-camera -n 50 --no-pager
 ```
 
-## 📝 Systemd Service Management
+**2. Common fixes:**
+
+**Missing dependencies:**
+```bash
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+pip install -r requirements.txt
+pip install picamera2
+```
+
+**Wrong working directory in service file:**
+```bash
+sudo nano /etc/systemd/system/sign-detection-camera.service
+# Ensure WorkingDirectory=/home/pi/tcdd-dev/backend/python
+# Ensure ExecStart uses full path: /home/pi/tcdd-dev/backend/python/venv/bin/python camera_server.py
+sudo systemctl daemon-reload
+sudo systemctl restart sign-detection-camera
+```
+
+**Permission issues:**
+```bash
+sudo usermod -a -G video $USER
+# Log out and back in, then try again
+```
+
+**Test manually first:**
+```bash
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+python camera_server.py
+# If this works, the systemd service file needs updating
+```
+
+### Missing libcap-dev (build errors during pip install)
+
+If you see "You need to install libcap development headers":
 
 ```bash
-# Start services
+sudo apt update
+sudo apt install -y libcap-dev build-essential python3-dev
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 🌐 Network access
+
+1. Find your Pi's IP address:
+
+```bash
+hostname -I
+```
+
+2. Update the frontend environment variable if you want the built app to point to a specific API host. Edit `frontend/.env` or `frontend/.env.production` and set:
+
+```
+REACT_APP_API_URL=http://<PI_IP_ADDRESS>:5000
+```
+
+3. Rebuild frontend for production on the Pi (optional):
+
+```bash
+cd frontend
+npm run build
+```
+
+## 🚦 Running as a kiosk
+
+Install `unclutter` to hide the cursor and add the dashboard URL to your desktop environment autostart. Example (LXDE / Raspberry Pi OS):
+
+```bash
+sudo apt-get install unclutter
+mkdir -p ~/.config/lxsession/LXDE-pi
+cat >> ~/.config/lxsession/LXDE-pi/autostart <<EOF
+@chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:5000
+@unclutter -idle 0
+EOF
+```
+
+## 📝 systemd service management
+
+The `deploy-pi.sh` script attempts to create two services:
+
+- `sign-detection-camera` — the Python camera & inference server
+- `sign-detection-backend` — the Node.js proxy/backend
+
+Common service commands:
+
+```bash
 sudo systemctl start sign-detection-camera
 sudo systemctl start sign-detection-backend
 
-# Stop services
 sudo systemctl stop sign-detection-camera
 sudo systemctl stop sign-detection-backend
 
-# Enable auto-start on boot
 sudo systemctl enable sign-detection-camera
 sudo systemctl enable sign-detection-backend
 
-# View logs
 sudo journalctl -u sign-detection-camera -f
 sudo journalctl -u sign-detection-backend -f
 ```
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Test on Raspberry Pi
-5. Submit a pull request
+3. Make and test your changes (Pi recommended for hardware features)
+4. Submit a pull request with a clear description and testing notes
 
-## 📄 License
+## License
 
-MIT License - See LICENSE file for details
+MIT — See the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- YOLOv8 by Ultralytics
+- YOLOv8 (Ultralytics)
 - Raspberry Pi Foundation
 - React and Node.js communities
+
+---
+
+If you'd like, I can also:
+
+- add a short `quick-start-pi.md` with exact apt packages and verified install commands for Raspberry Pi 5 (arm64), or
+- generate a simple `systemd` unit file template for the camera service and backend if your `deploy-pi.sh` doesn't already provide them.
+
+Tell me which of those you'd prefer and I will add it next.
