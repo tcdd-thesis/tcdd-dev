@@ -1,0 +1,17 @@
+# Requirements for Raspberry Pi sign detection server
+# Core dependencies
+flask==3.0.0
+flask-cors==4.0.0
+numpy==1.24.3
+opencv-python==4.8.1.78
+
+# YOLOv8 for sign detection
+ultralytics==8.1.0
+torch==2.1.0
+torchvision==0.16.0
+
+# Raspberry Pi Camera (install on Pi only)
+# picamera2  # uncomment on Raspberry Pi
+
+# Optional for optimization
+# onnxruntime  # if using ONNX models for faster inference

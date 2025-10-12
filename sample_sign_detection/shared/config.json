@@ -1,0 +1,29 @@
+{
+  "backendPort": 5000,
+  "pythonServerPort": 5001,
+  "frontendPort": 3000,
+  "camera": {
+    "width": 640,
+    "height": 480,
+    "fps": 30,
+    "bufferSize": 1
+  },
+  "detection": {
+    "confidenceThreshold": 0.5,
+    "pollIntervalMs": 500,
+    "maxDetectionsDisplay": 5,
+    "detectionInterval": 1,
+    "jpegQuality": 80
+  },
+  "display": {
+    "fullscreen": false,
+    "optimizedForPi": true,
+    "theme": "dark"
+  },
+  "performance": {
+    "enableGPU": false,
+    "modelFormat": "pt",
+    "maxCacheSize": 100,
+    "compressionLevel": 6
+  }
+}
