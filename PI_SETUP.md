@@ -120,6 +120,36 @@ sudo systemctl start sign-detection-camera
 sudo systemctl start sign-detection-backend
 ```
 
+### 8a. Add Your Trained Model (Required for Production)
+
+Before starting services, add your trained YOLOv8 model:
+
+```bash
+cd ~/tcdd-dev/backend/python/model
+
+# Transfer model from dev machine
+# scp user@dev-machine:/path/to/best.pt ./best.pt
+
+# Or copy if already on Pi
+# cp /path/to/your/best.pt ./best.pt
+
+# Create labels file matching your training classes
+cat > labels.txt << EOF
+stop
+yield
+speed_limit_30
+speed_limit_50
+no_entry
+EOF
+
+# Verify model loads
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+python3 -c "from ultralytics import YOLO; m=YOLO('model/best.pt'); print('✓ Model OK:', m.names)"
+```
+
+See [backend/python/model/README.md](backend/python/model/README.md) for detailed instructions.
+
 ### 9. Check status
 
 ```bash

@@ -75,11 +75,46 @@ If you prefer manual steps, see the "Manual installation" section below.
 
 Copy your trained YOLOv8 model into the Python model folder. If there is no `best.pt` present, the camera server will fall back to a small pretrained YOLOv8 model (YOLOv8n) if configured.
 
+**From development machine to Pi:**
+
+```bash
+# Linux/Mac
+scp /path/to/best.pt pi@raspberrypi.local:~/tcdd-dev/backend/python/model/best.pt
+
+# Windows (PowerShell)
+# scp C:\path\to\best.pt pi@raspberrypi.local:/home/pi/tcdd-dev/backend/python/model/best.pt
+```
+
+**Or directly on Pi:**
+
 ```bash
 cp /path/to/your/best.pt backend/python/model/best.pt
 ```
 
-Update `backend/python/model/labels.txt` to match your classes.
+**Update labels to match your training classes:**
+
+```bash
+cd ~/tcdd-dev/backend/python/model
+cat > labels.txt << EOF
+stop
+yield
+speed_limit_30
+speed_limit_50
+no_entry
+pedestrian_crossing
+school_zone
+EOF
+```
+
+**Verify model loads correctly:**
+
+```bash
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+python3 -c "from ultralytics import YOLO; m=YOLO('model/best.pt'); print('✓ Model OK:', m.names)"
+```
+
+See [backend/python/model/README.md](backend/python/model/README.md) for detailed model management instructions.
 
 ### 4. Start the services
 
@@ -265,21 +300,194 @@ The frontend is optimized for:
 
 ## 📊 Using your custom model
 
-If you trained a model using Ultralytics/YOLO training, copy the final weights into the model folder and provide a matching `labels.txt`.
+### Training a Model
+
+If you trained a model using Ultralytics/YOLO training (locally, Colab, or Kaggle), copy the final weights into the model folder and provide a matching `labels.txt`.
+
+### Adding Model to Project
+
+**Option 1: From training directory (same machine)**
 
 ```bash
-# from project root
-cp ../runs/detect/train/weights/best.pt backend/python/model/best.pt
+# Navigate to project
+cd ~/tcdd-dev/backend/python/model
 
-# create labels file (example)
-cat > backend/python/model/labels.txt << EOF
+# Copy trained weights
+cp /path/to/training/runs/detect/train/weights/best.pt ./best.pt
+
+# Create labels file (match your training classes in order)
+cat > labels.txt << EOF
 stop
 yield
 speed_limit_30
 speed_limit_50
 no_entry
+pedestrian_crossing
+school_zone
 EOF
 ```
+
+**Option 2: Transfer from development machine to Pi**
+
+```bash
+# From your dev machine (Linux/Mac)
+scp /path/to/best.pt pi@raspberrypi.local:~/tcdd-dev/backend/python/model/best.pt
+scp /path/to/labels.txt pi@raspberrypi.local:~/tcdd-dev/backend/python/model/labels.txt
+
+# From Windows (PowerShell)
+scp C:\path\to\best.pt pi@raspberrypi.local:/home/pi/tcdd-dev/backend/python/model/best.pt
+```
+
+**Option 3: Download from cloud storage**
+
+```bash
+# On Pi
+cd ~/tcdd-dev/backend/python/model
+wget https://your-storage-url/best.pt -O best.pt
+wget https://your-storage-url/labels.txt -O labels.txt
+```
+
+### Verify Model
+
+Before restarting services, test that your model loads:
+
+```bash
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+
+python3 << EOF
+from ultralytics import YOLO
+model = YOLO('model/best.pt')
+print('✓ Model loaded successfully!')
+print('Classes:', model.names)
+print('Number of classes:', len(model.names))
+EOF
+```
+
+### Update Running Service
+
+After adding or updating your model:
+
+```bash
+# Restart camera service
+sudo systemctl restart sign-detection-camera
+
+# Check status
+sudo systemctl status sign-detection-camera
+
+# Watch logs for any errors
+sudo journalctl -u sign-detection-camera -f
+```
+
+### Model Performance Tuning
+
+Edit `backend/python/camera_server.py` to optimize for your model and Pi:
+
+```python
+# Resolution (lower = faster)
+CAMERA_WIDTH = 640   # Try 320 for better FPS
+CAMERA_HEIGHT = 480  # Try 240 for better FPS
+
+# Detection confidence (higher = fewer false positives)
+CONFIDENCE_THRESHOLD = 0.5  # Range: 0.3-0.8
+
+# Frame rate
+CAMERA_FPS = 30  # Try 15 for more stable detection
+```
+
+Restart service after changes:
+```bash
+sudo systemctl restart sign-detection-camera
+```
+
+### Model Formats and Conversion
+
+**Export to ONNX for better performance:**
+
+```bash
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+
+python3 << EOF
+from ultralytics import YOLO
+model = YOLO('model/best.pt')
+model.export(format='onnx', imgsz=640)
+print('✓ Model exported to ONNX')
+EOF
+
+# Update camera_server.py to use ONNX model:
+# model = YOLO('model/best.onnx')
+```
+
+**Export to TFLite for embedded devices:**
+
+```bash
+python3 << EOF
+from ultralytics import YOLO
+model = YOLO('model/best.pt')
+model.export(format='tflite', imgsz=640)
+print('✓ Model exported to TFLite')
+EOF
+```
+
+### Model Versioning
+
+Keep backup versions for easy rollback:
+
+```bash
+cd ~/tcdd-dev/backend/python/model
+
+# Backup current model
+cp best.pt best_v1_$(date +%Y%m%d).pt
+
+# Add new model
+cp /path/to/new_model.pt best.pt
+
+# Test new model
+sudo systemctl restart sign-detection-camera
+
+# If issues, rollback
+cp best_v1_20251013.pt best.pt
+sudo systemctl restart sign-detection-camera
+```
+
+### Troubleshooting Model Issues
+
+**Model won't load:**
+```bash
+# Check file exists and size
+ls -lh ~/tcdd-dev/backend/python/model/best.pt
+
+# Verify it's a valid model file
+file ~/tcdd-dev/backend/python/model/best.pt
+
+# Check permissions
+chmod 644 ~/tcdd-dev/backend/python/model/best.pt
+```
+
+**Wrong number of classes:**
+- Ensure `labels.txt` matches your training classes exactly
+- Check class order matches training data
+- Don't mix models from different training runs
+
+**Low detection accuracy:**
+- Verify labels match exactly (case-sensitive)
+- Check camera focus and lighting
+- Adjust confidence threshold (0.3-0.7 range)
+- Test model with sample images offline first
+
+**Service crashes after model update:**
+```bash
+# Check detailed logs
+sudo journalctl -u sign-detection-camera -n 100 --no-pager
+
+# Test manually
+cd ~/tcdd-dev/backend/python
+source venv/bin/activate
+python camera_server.py
+```
+
+For complete model management documentation, see [backend/python/model/README.md](backend/python/model/README.md).
 
 ## 🔧 Troubleshooting
 
