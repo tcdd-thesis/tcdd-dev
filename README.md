@@ -209,6 +209,41 @@ npm start
 
 The Node backend proxies `/video_feed` and API routes to the Python server.
 
+## ⚙️ Configuration
+
+**All settings are centralized in `shared/config.json`.**
+
+This single file controls model paths, camera settings, detection parameters, server ports, and UI behavior. All components (Python, Node.js, React) read from this configuration.
+
+### Quick Examples
+
+**Change model:**
+```json
+"detection": {
+  "modelPath": "backend/python/model/your-model.pt"
+}
+```
+
+**Adjust camera resolution:**
+```json
+"camera": {
+  "width": 1280,
+  "height": 720,
+  "fps": 30
+}
+```
+
+**Tune detection confidence:**
+```json
+"detection": {
+  "confidenceThreshold": 0.7
+}
+```
+
+**📖 Complete configuration guide: [CONFIG.md](CONFIG.md)**
+
+After editing config, restart the affected service (usually the Python camera server).
+
 ## 📁 Project structure
 
 ```

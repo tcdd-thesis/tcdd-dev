@@ -14,6 +14,9 @@ from collections import deque
 import logging
 from contextlib import contextmanager
 
+# Import configuration loader
+from config_loader import get_config_loader
+
 # Try importing picamera2 for Raspberry Pi camera, fall back to cv2
 try:
     from picamera2 import Picamera2
@@ -33,16 +36,27 @@ except ImportError:
 app = Flask(__name__)
 CORS(app)
 
-# Configuration from environment or defaults
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best.pt')
+# Load configuration from shared/config.json (with environment variable override support)
+config = get_config_loader()
+MODEL_PATH = os.getenv('MODEL_PATH', config.get_model_path())
 FALLBACK_MODEL = 'yolov8n.pt'
-CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', 640))
-CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', 480))
-CAMERA_FPS = int(os.getenv('CAMERA_FPS', 30))
-CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.5))
-DETECTION_INTERVAL = int(os.getenv('DETECTION_INTERVAL', 1))  # Run detection every N frames
-JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', 80))
+CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', config.get_camera_width()))
+CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', config.get_camera_height()))
+CAMERA_FPS = int(os.getenv('CAMERA_FPS', config.get_camera_fps()))
+CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', config.get_confidence_threshold()))
+DETECTION_INTERVAL = int(os.getenv('DETECTION_INTERVAL', config.get_detection_interval()))
+JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', config.get_jpeg_quality()))
 MAX_DETECTION_HISTORY = 10
+
+print(f"\n{'='*60}")
+print(f"Camera Server Configuration:")
+print(f"{'='*60}")
+print(f"Model Path:            {MODEL_PATH}")
+print(f"Camera Resolution:     {CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS")
+print(f"Confidence Threshold:  {CONFIDENCE_THRESHOLD}")
+print(f"Detection Interval:    {DETECTION_INTERVAL} frame(s)")
+print(f"JPEG Quality:          {JPEG_QUALITY}")
+print(f"{'='*60}\n")
 
 # Global state
 camera = None
@@ -462,7 +476,9 @@ def cleanup():
 if __name__ == '__main__':
     try:
         if start_server():
-            app.run(host='0.0.0.0', port=5001, threaded=True)
+            port = int(os.getenv('PORT', config.get_python_server_port()))
+            print(f"Starting Flask server on port {port}...")
+            app.run(host='0.0.0.0', port=port, threaded=True)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:

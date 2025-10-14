@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { attachSocket } = require('./utils/socketHandler');
+const config = require('./utils/configLoader');
 
 const app = express();
 
@@ -13,8 +14,8 @@ app.use(cors({
 
 app.use(express.json({ limit: '1mb' }));
 
-// Proxy configuration
-const PYTHON_SERVER = process.env.PYTHON_SERVER || 'http://localhost:5001';
+// Proxy configuration - from config.json or environment variables
+const PYTHON_SERVER = process.env.PYTHON_SERVER || config.getPythonServerUrl();
 const PROXY_TIMEOUT = parseInt(process.env.PROXY_TIMEOUT || '30000', 10);
 
 // Video feed proxy with optimized settings
@@ -65,6 +66,24 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Config endpoint - serve configuration to frontend
+app.get('/api/config', (req, res) => {
+  try {
+    res.json({
+      detection: {
+        pollIntervalMs: config.get('detection.pollIntervalMs'),
+        maxDetectionsDisplay: config.get('detection.maxDetectionsDisplay'),
+        confidenceThreshold: config.get('detection.confidenceThreshold')
+      },
+      display: config.get('display'),
+      camera: config.getCameraConfig()
+    });
+  } catch (error) {
+    console.error('Error serving config:', error);
+    res.status(500).json({ error: 'Failed to load configuration' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Express error:', err);
@@ -75,13 +94,23 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || config.getBackendPort();
 const server = app.listen(PORT, () => {
-  console.log(`Sign detection backend listening on port ${PORT}`);
-  console.log(`Proxying video feed from ${PYTHON_SERVER}`);
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`Backend Server Started`);
+  console.log(`${'='.repeat(60)}`);
+  console.log(`Listening on port:     ${PORT}`);
+  console.log(`Proxying Python from:  ${PYTHON_SERVER}`);
+  console.log(`Configuration loaded:  shared/config.json`);
+  console.log(`${'='.repeat(60)}\n`);
 });
 
 // attach socket.io (optional)
 attachSocket(server);
+
+// Watch for config changes
+config.watchConfig((newConfig) => {
+  console.log('⚠ Configuration updated. Restart server to apply changes to ports.');
+});
 
 module.exports = app;

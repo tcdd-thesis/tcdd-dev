@@ -9,6 +9,7 @@
     "bufferSize": 1
   },
   "detection": {
+    "modelPath": "backend/python/model/v0-20250827.1a.pt",
     "confidenceThreshold": 0.5,
     "pollIntervalMs": 500,
     "maxDetectionsDisplay": 5,

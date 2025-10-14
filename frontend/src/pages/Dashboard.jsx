@@ -1,19 +1,32 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import DetectionCard from '../components/DetectionCard';
 import LiveFeed from '../components/LiveFeed';
+import configService from '../services/configService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const POLL_INTERVAL = 500; // Poll detections every 500ms
-const STATUS_CHECK_INTERVAL = 5000; // Check status every 5 seconds
+let POLL_INTERVAL = 500; // Will be updated from config
+const STATUS_CHECK_INTERVAL = 5000;
 
 export default function Dashboard() {
   const [detections, setDetections] = useState([]);
   const [systemStatus, setSystemStatus] = useState(null);
   const [fps, setFps] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  const [maxDetections, setMaxDetections] = useState(5);
   const pollTimerRef = useRef(null);
   const statusTimerRef = useRef(null);
   const abortControllerRef = useRef(null);
+
+  // Load configuration on mount
+  useEffect(() => {
+    configService.ensureLoaded().then(() => {
+      POLL_INTERVAL = configService.getPollInterval();
+      setMaxDetections(configService.getMaxDetectionsDisplay());
+      console.log('✓ Dashboard configuration loaded');
+      console.log(`  Poll Interval: ${POLL_INTERVAL}ms`);
+      console.log(`  Max Detections: ${configService.getMaxDetectionsDisplay()}`);
+    });
+  }, []);
 
   // Fetch system status periodically
   const fetchStatus = useCallback(() => {
@@ -127,7 +140,7 @@ export default function Dashboard() {
                 {isOnline ? 'No signs detected' : 'System offline - reconnecting...'}
               </div>
             ) : (
-              detections.slice(0, 5).map((d, idx) => (
+              detections.slice(0, maxDetections).map((d, idx) => (
                 <DetectionCard key={`${d.id}-${d.timestamp}-${idx}`} detection={d} />
               ))
             )}
