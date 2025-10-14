@@ -133,19 +133,13 @@ cd ~/tcdd-dev/backend/python/model
 # Or copy if already on Pi
 # cp /path/to/your/best.pt ./best.pt
 
-# Create labels file matching your training classes
-cat > labels.txt << EOF
-stop
-yield
-speed_limit_30
-speed_limit_50
-no_entry
-EOF
+# Verify model loads and check classes
+cd ~/tcdd-dev
+source venv/bin/activate  # or .venv/bin/activate
+python backend/python/scripts/show_model_classes.py
 
-# Verify model loads
-cd ~/tcdd-dev/backend/python
-source venv/bin/activate
-python3 -c "from ultralytics import YOLO; m=YOLO('model/best.pt'); print('✓ Model OK:', m.names)"
+# Quick test
+python3 -c "from ultralytics import YOLO; m=YOLO('backend/python/model/best.pt'); print('✓ Model OK:', len(m.names), 'classes')"
 ```
 
 See [backend/python/model/README.md](backend/python/model/README.md) for detailed instructions.

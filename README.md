@@ -93,19 +93,6 @@ cp /path/to/your/best.pt backend/python/model/best.pt
 
 **Update labels to match your training classes:**
 
-```bash
-cd ~/tcdd-dev/backend/python/model
-cat > labels.txt << EOF
-stop
-yield
-speed_limit_30
-speed_limit_50
-no_entry
-pedestrian_crossing
-school_zone
-EOF
-```
-
 **Verify model loads correctly:**
 
 ```bash
@@ -258,7 +245,6 @@ tcdd-dev/
 │       ├── requirements.txt
 │       ├── model/
 │       │   ├── best.pt           # Your trained model (add this)
-│       │   ├── labels.txt        # Class labels
 │       │   └── README.md         # Model setup guide
 │       └── scripts/
 │           └── test_setup.py     # Pre-deployment test script
@@ -323,7 +309,8 @@ CONFIDENCE_THRESHOLD = 0.5
 ### Model configuration
 
 - Place your trained model at `backend/python/model/best.pt`
-- Update labels at `backend/python/model/labels.txt`
+- Model path is configured in `shared/config.json`
+- Class names are embedded in the `.pt` file (use `show_model_classes.py` to view)
 - Optionally convert to ONNX/TFLite for faster inference. See `OPTIMIZATION.md`.
 
 ### Display Optimization
@@ -337,7 +324,7 @@ The frontend is optimized for:
 
 ### Training a Model
 
-If you trained a model using Ultralytics/YOLO training (locally, Colab, or Kaggle), copy the final weights into the model folder and provide a matching `labels.txt`.
+If you trained a model using Ultralytics/YOLO training (locally, Colab, or Kaggle), copy the final weights (`.pt` file) into the model folder. **Note:** YOLOv8 models have class names embedded in the `.pt` file, so no separate labels file is needed.
 
 ### Adding Model to Project
 
@@ -349,17 +336,6 @@ cd ~/tcdd-dev/backend/python/model
 
 # Copy trained weights
 cp /path/to/training/runs/detect/train/weights/best.pt ./best.pt
-
-# Create labels file (match your training classes in order)
-cat > labels.txt << EOF
-stop
-yield
-speed_limit_30
-speed_limit_50
-no_entry
-pedestrian_crossing
-school_zone
-EOF
 ```
 
 **Option 2: Transfer from development machine to Pi**
@@ -367,7 +343,6 @@ EOF
 ```bash
 # From your dev machine (Linux/Mac)
 scp /path/to/best.pt pi@raspberrypi.local:~/tcdd-dev/backend/python/model/best.pt
-scp /path/to/labels.txt pi@raspberrypi.local:~/tcdd-dev/backend/python/model/labels.txt
 
 # From Windows (PowerShell)
 scp C:\path\to\best.pt pi@raspberrypi.local:/home/pi/tcdd-dev/backend/python/model/best.pt
@@ -379,10 +354,17 @@ scp C:\path\to\best.pt pi@raspberrypi.local:/home/pi/tcdd-dev/backend/python/mod
 # On Pi
 cd ~/tcdd-dev/backend/python/model
 wget https://your-storage-url/best.pt -O best.pt
-wget https://your-storage-url/labels.txt -O labels.txt
 ```
 
 ### Verify Model
+
+Check what classes your model detects:
+
+```bash
+cd ~/tcdd-dev
+source venv/bin/activate  # or .venv/bin/activate
+python backend/python/scripts/show_model_classes.py
+```
 
 Before restarting services, test that your model loads:
 
@@ -501,15 +483,15 @@ chmod 644 ~/tcdd-dev/backend/python/model/best.pt
 ```
 
 **Wrong number of classes:**
-- Ensure `labels.txt` matches your training classes exactly
-- Check class order matches training data
+- Verify you're using the correct model file for this project
+- Use `python scripts/show_model_classes.py model/best.pt` to check classes
 - Don't mix models from different training runs
 
 **Low detection accuracy:**
-- Verify labels match exactly (case-sensitive)
 - Check camera focus and lighting
 - Adjust confidence threshold (0.3-0.7 range)
 - Test model with sample images offline first
+- Use `show_model_classes.py` script to verify model classes
 
 **Service crashes after model update:**
 ```bash

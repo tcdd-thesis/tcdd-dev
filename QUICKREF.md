@@ -112,16 +112,15 @@ Browser → React (port 3000)
 
 ## 📝 File Locations
 
-- **Model**: `backend/python/model/best.pt`
-- **Labels**: `backend/python/model/labels.txt`
+- **Model**: `backend/python/model/best.pt` (contains weights and class names)
 - **Config**: `shared/config.json`
 - **Logs**: `sudo journalctl -u sign-detection-*`
 - **Services**: `/etc/systemd/system/sign-detection-*.service`
 
 ## 🔑 Important Notes
 
-1. **Model File**: Must add your trained `best.pt` model
-2. **Labels**: Update labels.txt with your classes
-3. **Permissions**: User must be in `video` group
-4. **Network**: For remote access, update REACT_APP_API_URL
-5. **Autostart**: Enable services with `systemctl enable`
+1. **Model File**: Must add your trained `best.pt` model (class names are embedded)
+2. **Permissions**: User must be in `video` group
+3. **Network**: For remote access, update REACT_APP_API_URL
+4. **Autostart**: Enable services with `systemctl enable`
+5. **Check Classes**: Run `python backend/python/scripts/show_model_classes.py`

@@ -5,7 +5,8 @@ This directory contains your trained YOLOv8 model for traffic sign detection.
 ## Required Files
 
 - **`best.pt`** - Your custom trained YOLOv8 model (required for production)
-- **`labels.txt`** - Class labels, one per line (required)
+
+**Note:** YOLOv8 models embed class names directly in the `.pt` file. The camera server uses `model.names` from the model file automatically. A `labels.txt` file is provided for documentation purposes only but is not used by the code.
 
 ## Quick Start: Add Your Trained Model
 
@@ -19,17 +20,6 @@ cd /path/to/tcdd-dev/backend/python/model
 
 # Copy your trained weights
 cp /path/to/training/runs/detect/train/weights/best.pt ./best.pt
-
-# Create labels file
-cat > labels.txt << EOF
-stop
-yield
-speed_limit_30
-speed_limit_50
-no_entry
-pedestrian_crossing
-school_zone
-EOF
 ```
 
 ### Option 2: Download from Remote Training
@@ -58,64 +48,32 @@ scp C:\path\to\best.pt pi@raspberrypi.local:/home/pi/tcdd-dev/backend/python/mod
 scp /path/to/best.pt pi@raspberrypi.local:~/tcdd-dev/backend/python/model/best.pt
 ```
 
-## Update Labels File
-
-The `labels.txt` file must match your training classes **in the exact order** they were trained:
-
-```bash
-cd /path/to/tcdd-dev/backend/python/model
-nano labels.txt
-```
-
-**Example `labels.txt`:**
-```
-stop
-yield
-speed_limit_30
-speed_limit_50
-speed_limit_70
-no_entry
-pedestrian_crossing
-school_zone
-```
-
-**Important:** 
-- One class per line
-- No extra spaces or blank lines
-- Order must match training data
-- Class names are case-sensitive
-
 ## Verify Your Model
 
-Before deploying, test that your model loads correctly:
+Before deploying, verify that your model loads correctly and check its embedded class names:
 
 ```bash
 cd /path/to/tcdd-dev/backend/python
-source venv/bin/activate  # if using venv
+source venv/bin/activate  # if using venv (Linux/Mac)
+# or: .venv\Scripts\activate  # if using venv (Windows)
 
-python3 << EOF
-from ultralytics import YOLO
-
-# Load your model
-model = YOLO('model/best.pt')
-
-# Print model info
-print('✓ Model loaded successfully!')
-print('Classes:', model.names)
-print('Number of classes:', len(model.names))
-
-# Test with a sample image (optional)
-# results = model('path/to/test_image.jpg')
-# results[0].show()
-EOF
+# Use the show_model_classes script
+python scripts/show_model_classes.py model/best.pt
 ```
 
 Expected output:
 ```
+Loading model from: model/best.pt
 ✓ Model loaded successfully!
-Classes: {0: 'stop', 1: 'yield', 2: 'speed_limit_30', ...}
-Number of classes: 8
+
+Model Classes (15 total):
+  [0] Green Light
+  [1] Red Light
+  [2] Speed Limit 10
+  ...
 ```
+
+These embedded class names are automatically used by the camera server at runtime.
 
 ## Restart Services After Model Update
 
@@ -229,17 +187,20 @@ file model/best.pt
 
 ### Wrong Number of Classes
 
-If you see errors like `RuntimeError: expected 80 classes, got 8`:
+If you see errors like `RuntimeError: expected 80 classes, got 15`:
 
-1. Ensure `labels.txt` matches your training data
-2. Retrain the model or use the correct weights file
-3. Check that you're not mixing models from different training runs
+1. Verify you're using the correct model file for this project
+2. Check that you're not mixing models from different training runs
+3. Use the verification script to confirm class count:
+   ```bash
+   python scripts/show_model_classes.py model/best.pt
+   ```
 
 ### Low Detection Accuracy
 
-- Verify labels match training classes
+- Verify model classes using `python scripts/show_model_classes.py model/best.pt`
 - Check camera focus and lighting
-- Adjust confidence threshold in `camera_server.py`
+- Adjust confidence threshold in `shared/config.json`
 - Consider retraining with more data
 - Try different image augmentation during training
 
@@ -256,11 +217,16 @@ python camera_server.py
 
 # Common fixes:
 # 1. Check file permissions
-chmod 644 model/best.pt model/labels.txt
+chmod 644 model/best.pt
 
-# 2. Verify model path in camera_server.py
+# 2. Verify model path in shared/config.json
+cat ../../shared/config.json | grep modelPath
+
 # 3. Ensure venv has ultralytics installed
 pip list | grep ultralytics
+
+# 4. Verify model classes
+python scripts/show_model_classes.py model/best.pt
 ```
 
 ## Model Versioning (Recommended)

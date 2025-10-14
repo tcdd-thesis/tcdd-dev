@@ -41,11 +41,8 @@ frontend/build/
 frontend/.cache/
 
 # Model files (too large for git)
-backend/python/model/*.pt
-backend/python/model/*.onnx
-backend/python/model/*.tflite
+backend/python/model/*
 !backend/python/model/README.md
-!backend/python/model/labels.txt
 
 # Test videos and images
 *.mp4
