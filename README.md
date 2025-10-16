@@ -91,7 +91,8 @@ tcdd-dev/
 
 ### 1. Install Dependencies
 
-Windows:
+**Windows:**
+```powershell
 # Create and activate virtual environment
 python -m venv venv
 .\venv\Scripts\Activate.ps1
@@ -101,8 +102,10 @@ python -m pip install --upgrade pip
 
 # Install dependencies
 pip install -r backend/requirements.txt
+```
 
-Linux/Raspberry Pi:
+**Linux/Raspberry Pi:**
+```bash
 # Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate
@@ -115,6 +118,9 @@ pip install -r backend/requirements.txt
 
 # On Raspberry Pi, also install PiCamera2
 pip install picamera2
+```
+
+> 💡 **Having issues?** See [DEPENDENCIES.md](DEPENDENCIES.md) for detailed troubleshooting!
 
 ### 2. Configure (Optional)
 
@@ -208,9 +214,15 @@ Linux: sudo lsof -ti:5000 | xargs kill -9
 tail -f data/logs/app.log
 curl -X POST http://localhost:5000/api/config/reload
 
-### NumPy Version Issues
-pip uninstall opencv-python -y
-pip install opencv-python --no-cache-dir
+### NumPy/OpenCV Compatibility Issues
+```bash
+# If you see "_ARRAY_API not found" or "numpy.core.multiarray failed to import"
+pip uninstall numpy opencv-python -y
+pip install numpy opencv-python --upgrade --no-cache-dir
+
+# Verify installation
+python -c "import cv2; import numpy as np; print('OK')"
+```
 
 ## Performance Tips
 

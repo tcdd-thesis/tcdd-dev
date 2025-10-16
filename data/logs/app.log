@@ -1,0 +1,39 @@
+2025-10-17 01:17:55,230 - config - INFO - Registered config change callback: on_config_change
+2025-10-17 01:17:55,234 - __main__ - INFO - ============================================================
+2025-10-17 01:17:55,234 - __main__ - INFO - Sign Detection System Starting...
+2025-10-17 01:17:55,234 - __main__ - INFO - ============================================================
+2025-10-17 01:17:55,235 - __main__ - INFO - Initializing camera...
+2025-10-17 01:17:55,235 - camera - INFO - Initializing OpenCV VideoCapture...
+2025-10-17 01:18:07,630 - camera - INFO - OpenCV camera initialized: 640x480
+2025-10-17 01:18:07,630 - __main__ - INFO - Initializing detector...
+2025-10-17 01:18:07,631 - detector - INFO - Loading YOLO model from backend/models/best.pt...
+2025-10-17 01:18:07,637 - detector - WARNING - Model file not found: backend/models/best.pt
+2025-10-17 01:18:07,638 - detector - INFO - YOLO will download default model on first run
+2025-10-17 01:18:08,587 - detector - ERROR - Failed to load model: [Errno 2] No such file or directory: 'backend\\models\\best.pt'
+2025-10-17 01:18:08,588 - __main__ - INFO - Initialization complete!
+2025-10-17 01:18:08,588 - __main__ - INFO - Server starting on http://0.0.0.0:5000
+2025-10-17 01:18:08,588 - __main__ - INFO - Press Ctrl+C to stop
+2025-10-17 01:18:08,588 - __main__ - INFO - ============================================================
+2025-10-17 01:18:08,603 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.254.134:5000
+2025-10-17 01:18:08,604 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-10-17 01:19:25,863 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:25] "GET / HTTP/1.1" 200 -
+2025-10-17 01:19:25,984 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:25] "GET /static/css/style.css HTTP/1.1" 200 -
+2025-10-17 01:19:25,985 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:25] "GET /static/js/app.js HTTP/1.1" 200 -
+2025-10-17 01:19:26,056 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:26] "GET /socket.io/?EIO=4&transport=polling&t=Pdk29rV HTTP/1.1" 200 -
+2025-10-17 01:19:26,057 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:26] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 01:19:26,149 - __main__ - INFO - Client connected via WebSocket
+2025-10-17 01:19:26,150 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:26] "POST /socket.io/?EIO=4&transport=polling&t=Pdk29sx&sid=Mo9SWJ6mq-uB4fbEAAAA HTTP/1.1" 200 -
+2025-10-17 01:19:26,154 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:26] "GET /socket.io/?EIO=4&transport=polling&t=Pdk29sy&sid=Mo9SWJ6mq-uB4fbEAAAA HTTP/1.1" 200 -
+2025-10-17 01:19:26,162 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:26] "GET /socket.io/?EIO=4&transport=polling&t=Pdk29tD&sid=Mo9SWJ6mq-uB4fbEAAAA HTTP/1.1" 200 -
+2025-10-17 01:19:29,600 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:29] "GET /api/logs?limit=200 HTTP/1.1" 200 -
+2025-10-17 01:19:30,126 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:30] "GET /api/config HTTP/1.1" 200 -
+2025-10-17 01:19:30,729 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:30] "GET /api/logs?limit=200 HTTP/1.1" 200 -
+2025-10-17 01:19:33,224 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:33] "GET /api/config HTTP/1.1" 200 -
+2025-10-17 01:19:36,056 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:36] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 01:19:46,165 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:46] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 01:19:56,161 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:56] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 01:20:06,058 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:20:06] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 01:20:16,164 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:20:16] "GET /api/status HTTP/1.1" 200 -

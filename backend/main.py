@@ -11,6 +11,11 @@ import os
 import sys
 import logging
 from datetime import datetime
+from pathlib import Path
+
+# Set project root directory (parent of backend/)
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+os.chdir(PROJECT_ROOT)
 
 # Import local modules
 from camera import Camera
@@ -31,6 +36,11 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Load configuration
 config = Config()
+
+# Create necessary directories before logging setup
+os.makedirs('data/logs', exist_ok=True)
+os.makedirs('data/captures', exist_ok=True)
+os.makedirs('backend/models', exist_ok=True)
 
 # Setup logging
 logging.basicConfig(
