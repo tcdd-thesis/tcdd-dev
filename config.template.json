@@ -1,0 +1,149 @@
+{
+  // =============================================================================
+  // SERVER CONFIGURATION
+  // =============================================================================
+  
+  "port": 5000,                    // Web server port (requires restart)
+  "debug": false,                  // Enable debug mode (requires restart)
+  "host": "0.0.0.0",              // Bind address (0.0.0.0 = all interfaces)
+  
+  
+  // =============================================================================
+  // CAMERA SETTINGS
+  // Changes here will restart the camera automatically (~2 seconds)
+  // =============================================================================
+  
+  "camera": {
+    // Resolution
+    "width": 640,                  // 320, 640, 1280, 1920
+    "height": 480,                 // 240, 480, 720, 1080
+    "fps": 30,                     // Target frames per second (1-60)
+    
+    // Image Adjustments
+    "rotation": 0,                 // Rotate image: 0, 90, 180, 270
+    "flip_horizontal": false,      // Mirror horizontally
+    "flip_vertical": false,        // Flip vertically
+    "brightness": 0.0,             // Brightness: -1.0 to 1.0
+    "contrast": 1.0,               // Contrast: 0.0 to 3.0
+    "saturation": 1.0,             // Saturation: 0.0 to 3.0 (0 = grayscale)
+    
+    // Camera Control
+    "auto_exposure": true,         // Automatic exposure
+    "use_mock": false              // Force mock camera (for testing)
+  },
+  
+  
+  // =============================================================================
+  // DETECTION SETTINGS
+  // Changes here will reload the detector automatically (~1 second)
+  // =============================================================================
+  
+  "detection": {
+    // Model Configuration
+    "model": "backend/models/yolov8n.pt",  // YOLO model path
+                                            // Options: yolov8n.pt (fastest)
+                                            //          yolov8s.pt (balanced)
+                                            //          yolov8m.pt (accurate)
+                                            //          yolov8l.pt (most accurate)
+    
+    // Detection Parameters
+    "confidence": 0.5,             // Min confidence: 0.0-1.0
+                                    // 0.3 = catch everything (more false positives)
+                                    // 0.5 = balanced (default)
+                                    // 0.7 = high precision (fewer false positives)
+    
+    "iou_threshold": 0.45,         // Non-max suppression IoU: 0.0-1.0
+    "max_detections": 100,         // Max detections per frame
+    "classes": [],                 // Filter classes (empty = all)
+                                    // Example: [0, 1, 2] for specific classes
+    
+    // Visualization
+    "show_labels": true,           // Show class names
+    "show_confidence": true,       // Show confidence scores
+    "bbox_thickness": 2,           // Bounding box thickness (pixels)
+    "font_scale": 0.5              // Label font size
+  },
+  
+  
+  // =============================================================================
+  // STREAMING SETTINGS
+  // Changes take effect immediately
+  // =============================================================================
+  
+  "streaming": {
+    "enabled": true,               // Enable video streaming
+    "quality": 85,                 // JPEG quality: 10-100
+                                    // Higher = better quality, more bandwidth
+    "max_fps": 30,                 // Max streaming FPS
+    "buffer_size": 2               // Frame buffer size
+  },
+  
+  
+  // =============================================================================
+  // AUTO-CAPTURE SETTINGS
+  // Automatically save frames with detections
+  // =============================================================================
+  
+  "capture": {
+    "save_detections": false,      // Auto-save frames with detections
+    "save_path": "data/captures",  // Save directory
+    "save_format": "jpg",          // Format: jpg, png, bmp
+    "save_timestamp": true,        // Include timestamp in filename
+    "min_confidence_to_save": 0.7  // Min confidence to trigger save
+  },
+  
+  
+  // =============================================================================
+  // LOGGING SETTINGS
+  // Level changes take effect immediately
+  // File path changes require restart
+  // =============================================================================
+  
+  "logging": {
+    "level": "INFO",               // DEBUG, INFO, WARNING, ERROR
+    "file": "data/logs/app.log",   // Log file path
+    "max_size_mb": 10,             // Max log file size (MB)
+    "backup_count": 5,             // Number of backup logs to keep
+    "console_output": true,        // Print to console
+    "log_detections": false        // Log every detection (verbose!)
+  },
+  
+  
+  // =============================================================================
+  // PERFORMANCE SETTINGS
+  // Changes will reload the detector
+  // =============================================================================
+  
+  "performance": {
+    "enable_gpu": false,           // Use GPU for inference (requires CUDA)
+    "num_threads": 4,              // CPU threads for inference
+    "inference_device": "cpu"      // Device: cpu, cuda, cuda:0
+  },
+  
+  
+  // =============================================================================
+  // ALERT SYSTEM
+  // Send notifications when detection threshold is reached
+  // =============================================================================
+  
+  "alerts": {
+    "enabled": false,              // Enable alerts
+    "detection_threshold": 10,     // Number of detections to trigger alert
+    "cooldown_seconds": 60,        // Min seconds between alerts
+    "webhook_url": ""              // Webhook URL (Slack, Discord, etc.)
+  },
+  
+  
+  // =============================================================================
+  // USER INTERFACE SETTINGS
+  // Changes take effect immediately or on page refresh
+  // =============================================================================
+  
+  "ui": {
+    "theme": "dark",               // Theme: dark, light
+    "show_fps": true,              // Display FPS counter
+    "show_stats": true,            // Display detection stats
+    "auto_start_camera": false,    // Auto-start camera on page load
+    "notification_duration": 3000  // Toast duration (milliseconds)
+  }
+}

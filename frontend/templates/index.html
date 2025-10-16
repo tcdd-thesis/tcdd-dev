@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Detection System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>🚦 Sign Detection</h1>
+        </div>
+        <div class="nav-menu">
+            <button class="nav-btn active" data-page="live">Live Feed</button>
+            <button class="nav-btn" data-page="logs">Logs</button>
+            <button class="nav-btn" data-page="settings">Settings</button>
+        </div>
+        <div class="status-indicator">
+            <span id="status-dot" class="dot offline"></span>
+            <span id="status-text">Offline</span>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="app-content">
+        <!-- Live Feed Page -->
+        <div id="page-live" class="page active">
+            <div class="controls">
+                <button id="btn-start" class="btn btn-success">▶ Start Camera</button>
+                <button id="btn-stop" class="btn btn-danger" disabled>⏹ Stop Camera</button>
+                <button id="btn-capture" class="btn btn-secondary" disabled>📷 Capture</button>
+            </div>
+
+            <div class="video-container">
+                <canvas id="video-canvas"></canvas>
+                <div id="no-feed" class="no-feed">
+                    <p>📹 Camera feed not active</p>
+                    <p class="hint">Click "Start Camera" to begin</p>
+                </div>
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat">
+                    <span class="label">FPS:</span>
+                    <span id="fps-value" class="value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Detections:</span>
+                    <span id="detection-count" class="value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Model:</span>
+                    <span id="model-name" class="value">Loading...</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Confidence:</span>
+                    <span id="confidence-value" class="value">50%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Page -->
+        <div id="page-logs" class="page">
+            <div class="controls">
+                <button id="btn-refresh-logs" class="btn btn-primary">🔄 Refresh</button>
+                <button id="btn-clear-display" class="btn btn-secondary">🗑️ Clear Display</button>
+                <select id="log-level-filter" class="select">
+                    <option value="">All Levels</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+
+            <div class="logs-container">
+                <pre id="logs-content">Loading logs...</pre>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="page-settings" class="page">
+            <h2>Camera Settings</h2>
+            <div class="settings-group">
+                <div class="setting-item">
+                    <label for="setting-width">Resolution Width</label>
+                    <input type="number" id="setting-width" class="input" value="640" min="320" max="1920" step="160">
+                </div>
+                <div class="setting-item">
+                    <label for="setting-height">Resolution Height</label>
+                    <input type="number" id="setting-height" class="input" value="480" min="240" max="1080" step="120">
+                </div>
+                <div class="setting-item">
+                    <label for="setting-fps">Frame Rate (FPS)</label>
+                    <input type="number" id="setting-fps" class="input" value="30" min="10" max="60" step="5">
+                </div>
+            </div>
+
+            <h2>Detection Settings</h2>
+            <div class="settings-group">
+                <div class="setting-item">
+                    <label for="setting-confidence">Confidence Threshold: <span id="confidence-display">0.5</span></label>
+                    <input type="range" id="setting-confidence" class="slider" min="0" max="100" value="50" step="5">
+                </div>
+                <div class="setting-item">
+                    <label for="setting-model">Model Path</label>
+                    <input type="text" id="setting-model" class="input" value="backend/models/yolov8n.pt">
+                </div>
+            </div>
+
+            <h2>System Settings</h2>
+            <div class="settings-group">
+                <div class="setting-item">
+                    <label for="setting-port">Server Port</label>
+                    <input type="number" id="setting-port" class="input" value="5000" min="1024" max="65535">
+                </div>
+                <div class="setting-item">
+                    <label for="setting-debug">Debug Mode</label>
+                    <input type="checkbox" id="setting-debug" class="checkbox">
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="btn-save-settings" class="btn btn-success">💾 Save Settings</button>
+                <button id="btn-load-settings" class="btn btn-primary">🔄 Reload from Server</button>
+                <button id="btn-reload-config" class="btn btn-secondary">📂 Reload from config.json</button>
+            </div>
+            
+            <div id="config-metadata" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; font-family: monospace;">
+                <small>Configuration metadata will appear here...</small>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <!-- Load SocketIO from CDN -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- Load our app -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

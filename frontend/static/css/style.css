@@ -1,0 +1,430 @@
+/**
+ * Sign Detection System - Styles
+ * Simple, clean, responsive design
+ */
+
+/* ========== CSS Variables ========== */
+:root {
+    --primary: #2196F3;
+    --success: #4CAF50;
+    --danger: #f44336;
+    --warning: #ff9800;
+    --secondary: #757575;
+    --dark: #212121;
+    --light: #f5f5f5;
+    --border: #e0e0e0;
+}
+
+/* ========== Reset & Base ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: var(--light);
+    color: var(--dark);
+    line-height: 1.6;
+}
+
+/* ========== Navigation ========== */
+.navbar {
+    background: white;
+    padding: 1rem 2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.nav-brand h1 {
+    font-size: 1.5rem;
+    color: var(--primary);
+}
+
+.nav-menu {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.nav-btn {
+    padding: 0.5rem 1.5rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    border-radius: 4px;
+    transition: all 0.3s;
+}
+
+.nav-btn:hover {
+    background: var(--light);
+}
+
+.nav-btn.active {
+    background: var(--primary);
+    color: white;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.dot.online {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulse 2s infinite;
+}
+
+.dot.offline {
+    background: var(--secondary);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ========== Main Content ========== */
+main {
+    max-width: 1400px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+}
+
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+/* ========== Buttons ========== */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-success { background: var(--success); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-secondary { background: var(--secondary); color: white; }
+
+/* ========== Controls ========== */
+.controls {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* ========== Video Container ========== */
+.video-container {
+    background: var(--dark);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    min-height: 480px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    margin-bottom: 1.5rem;
+}
+
+#video-canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.no-feed {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+    font-size: 1.5rem;
+}
+
+.no-feed p {
+    margin: 0.5rem 0;
+}
+
+.no-feed .hint {
+    font-size: 1rem;
+    color: rgba(255,255,255,0.6);
+}
+
+/* ========== Stats Bar ========== */
+.stats-bar {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stat {
+    padding: 0.5rem;
+    border-left: 3px solid var(--primary);
+}
+
+.stat .label {
+    font-size: 0.875rem;
+    color: var(--secondary);
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.stat .value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--dark);
+}
+
+/* ========== Logs ========== */
+.logs-container {
+    background: var(--dark);
+    color: #00ff00;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    overflow: auto;
+    max-height: 600px;
+}
+
+#logs-content {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+}
+
+/* ========== Settings ========== */
+#page-settings h2 {
+    margin: 2rem 0 1rem 0;
+    color: var(--primary);
+}
+
+#page-settings h2:first-child {
+    margin-top: 0;
+}
+
+.settings-group {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.setting-item {
+    margin-bottom: 1.5rem;
+}
+
+.setting-item:last-child {
+    margin-bottom: 0;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--dark);
+}
+
+.input, .select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.3s;
+}
+
+.input:focus, .select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+}
+
+.checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+/* ========== Toast Notifications ========== */
+#toast-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.toast {
+    padding: 1rem 1.5rem;
+    border-radius: 4px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s ease-out;
+    max-width: 300px;
+}
+
+.toast-info { background: var(--primary); }
+.toast-success { background: var(--success); }
+.toast-warning { background: var(--warning); }
+.toast-error { background: var(--danger); }
+
+.toast.fade-out {
+    animation: slideOut 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}
+
+/* ========== Responsive Design ========== */
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .nav-menu {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .nav-btn {
+        flex: 1;
+        text-align: center;
+    }
+    
+    main {
+        padding: 0 1rem;
+        margin: 1rem auto;
+    }
+    
+    .controls {
+        flex-direction: column;
+    }
+    
+    .controls .btn {
+        width: 100%;
+    }
+    
+    .stats-bar {
+        grid-template-columns: 1fr;
+    }
+    
+    #toast-container {
+        right: 1rem;
+        left: 1rem;
+        bottom: 1rem;
+    }
+    
+    .toast {
+        max-width: none;
+    }
+}
+
+/* ========== Utility Classes ========== */
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.hidden { display: none !important; }

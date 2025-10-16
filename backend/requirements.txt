@@ -1,0 +1,19 @@
+# Core Flask dependencies
+flask==3.0.0
+flask-cors==4.0.0
+flask-socketio==5.3.5
+python-socketio==5.10.0
+
+# Computer Vision
+opencv-python==4.8.1.78
+numpy==2.2.6
+
+# YOLO Detection
+ultralytics==8.0.228
+
+# Raspberry Pi Camera (only works on RPi)
+# picamera2==0.3.16
+
+# Optional: For additional model formats
+# tensorflow==2.15.0
+# torch==2.1.0
