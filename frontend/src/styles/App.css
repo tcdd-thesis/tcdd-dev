@@ -1,8 +1,12 @@
-/* Raspberry Pi optimized styles */
+/* Raspberry Pi optimized styles - 480x640 */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html {
+  font-size: 14px; /* Base font size for rem calculations */
 }
 
 body { 
@@ -12,59 +16,81 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optimize for small touchscreen */
+button, select, input {
+  touch-action: manipulation;
 }
 
 .page-dashboard { 
   width: 100vw;
   min-height: 100vh;
-  padding: 16px;
+  padding: 8px;
 }
 
-/* Header */
-.dashboard-header {
+.dashboard {
+  width: 100%;
+  height: 100vh;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
 }
 
-.dashboard-header h1 {
-  font-size: 28px;
+/* Overlay controls container */
+.overlay-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.overlay-controls > * {
+  pointer-events: auto;
+}
+
+/* Exit button overlay (top right) */
+.exit-button-overlay {
+  background: rgba(244, 67, 54, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.2rem;
   font-weight: 700;
-  color: #fff;
-}
-
-.system-status {
+  line-height: 1;
+  transition: all 0.3s ease;
+  min-width: 36px;
+  height: 36px;
   display: flex;
-  gap: 16px;
   align-items: center;
-  font-size: 14px;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-.status-ok {
-  color: #4caf50;
-  font-weight: 600;
+.exit-button-overlay:hover {
+  background: rgba(244, 67, 54, 1);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.6);
 }
 
-.status-error {
-  color: #f44336;
-  font-weight: 600;
-}
-
-.status-detail {
-  color: #b0bec5;
-  font-size: 13px;
+.exit-button-overlay:active {
+  transform: scale(0.95);
 }
 
 /* Dashboard content */
 .dashboard-content {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
+  flex: 1;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
 }
 
 @media (max-width: 1024px) {
@@ -75,19 +101,20 @@ body {
 
 /* Video section */
 .video-section {
-  background: #1a1f3a;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  background: #000;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .live-feed {
   position: relative;
   width: 100%;
-  border-radius: 8px;
+  flex: 1;
   overflow: hidden;
   background: #000;
-  min-height: 360px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -95,74 +122,75 @@ body {
 
 .live-feed img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain;
   display: block;
 }
 
 .live-feed .loading,
 .live-feed .error {
-  padding: 20px;
+  padding: 10px;
   text-align: center;
   color: #90caf9;
-  font-size: 16px;
+  font-size: 0.8rem;
 }
 
 .live-feed .error {
   color: #ff5252;
-  max-width: 400px;
+  max-width: 300px;
 }
 
 /* Detections section */
 .detections-section {
   background: #1a1f3a;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .detections-section h3 {
-  font-size: 20px;
-  margin-bottom: 16px;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
   color: #90caf9;
-  border-bottom: 2px solid #2a5298;
-  padding-bottom: 8px;
+  border-bottom: 1px solid #2a5298;
+  padding-bottom: 4px;
 }
 
 .detections-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 500px;
+  gap: 6px;
+  max-height: 280px;
   overflow-y: auto;
 }
 
 .detections-list::-webkit-scrollbar {
-  width: 8px;
+  width: 4px;
 }
 
 .detections-list::-webkit-scrollbar-track {
   background: #0a0e27;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .detections-list::-webkit-scrollbar-thumb {
   background: #2a5298;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .no-detections {
   text-align: center;
-  padding: 40px 20px;
+  padding: 20px 10px;
   color: #607d8b;
-  font-size: 16px;
+  font-size: 0.8rem;
 }
 
 .detection-card {
   background: linear-gradient(135deg, #1e2a3a 0%, #2d3e50 100%);
   border: 1px solid #34495e;
-  border-left: 4px solid #4caf50;
-  padding: 14px 16px;
-  border-radius: 8px;
+  border-left: 3px solid #4caf50;
+  padding: 8px 10px;
+  border-radius: 6px;
   transition: all 0.2s ease;
   animation: slideIn 0.3s ease;
 }
@@ -179,20 +207,20 @@ body {
 }
 
 .detection-card:hover {
-  transform: translateX(4px);
+  transform: translateX(3px);
   border-left-color: #66bb6a;
-  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.2);
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
 }
 
 .detection-card h4 {
-  font-size: 18px;
+  font-size: 0.9rem;
   color: #4caf50;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-transform: capitalize;
 }
 
 .detection-card p {
-  font-size: 14px;
+  font-size: 0.7rem;
   color: #b0bec5;
   margin: 4px 0;
 }

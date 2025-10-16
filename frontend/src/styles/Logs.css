@@ -1,0 +1,264 @@
+/* Logs Page Styles - 480x640 */
+.logs-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+  padding: 0.8rem;
+}
+
+.logs-controls {
+  max-width: 480px;
+  margin: 0 auto 0.8rem auto;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem;
+  border-radius: 8px;
+}
+
+.filter-controls,
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 120px;
+}
+
+.filter-controls label,
+.sort-controls label {
+  color: white;
+  font-weight: 600;
+  font-size: 0.65rem;
+}
+
+.filter-controls select,
+.sort-controls select {
+  flex: 1;
+  padding: 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 5px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-controls select:hover,
+.sort-controls select:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: white;
+}
+
+.clear-logs-button {
+  padding: 0.35rem 0.8rem;
+  background: rgba(244, 67, 54, 0.9);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.65rem;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.clear-logs-button:hover {
+  background: rgba(244, 67, 54, 1);
+  transform: scale(1.02);
+}
+
+/* Stats Cards */
+.logs-stats {
+  max-width: 480px;
+  margin: 0 auto 0.8rem auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  padding: 0.6rem;
+  text-align: center;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #9C27B0;
+}
+
+.stat-label {
+  font-size: 0.6rem;
+  color: #666;
+  font-weight: 500;
+}
+
+/* Logs List */
+.logs-list {
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.log-entry {
+  background: white;
+  border-radius: 8px;
+  padding: 0.6rem;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  animation: slideIn 0.4s ease-out;
+}
+
+.log-entry:hover {
+  transform: translateX(5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.log-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.log-timestamp {
+  color: #999;
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.log-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.log-confidence {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+}
+
+.log-confidence > span:first-child {
+  font-weight: 600;
+  color: #666;
+  min-width: 60px;
+}
+
+.confidence-bar {
+  flex: 1;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.log-location {
+  color: #666;
+  font-size: 0.6rem;
+}
+
+/* No Logs State */
+.no-logs {
+  background: white;
+  border-radius: 10px;
+  padding: 1.5rem 0.8rem;
+  text-align: center;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.no-logs p {
+  font-size: 0.85rem;
+  color: #666;
+  margin: 0.25rem 0;
+}
+
+.no-logs-subtitle {
+  font-size: 0.7rem !important;
+  color: #999 !important;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .logs-controls {
+    flex-direction: column;
+  }
+
+  .filter-controls,
+  .sort-controls {
+    width: 100%;
+  }
+
+  .clear-logs-button {
+    width: 100%;
+  }
+
+  .logs-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .log-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .log-confidence {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .log-confidence > span:first-child {
+    min-width: auto;
+  }
+}
