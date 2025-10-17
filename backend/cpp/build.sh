@@ -24,8 +24,8 @@ mkdir -p build
 # Download nlohmann/json if not present
 if [ ! -f "../third_party/json.hpp" ]; then
     echo "Downloading nlohmann/json..."
-    chmod +x ../download_deps.sh
-    (cd .. && ./download_deps.sh)
+    chmod +x ./download_deps.sh
+    (./download_deps.sh)
 fi
 
 cd build
