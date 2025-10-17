@@ -2,12 +2,40 @@
 
 ## Problem: "Failed to read from camera" Error
 
-If you see continuous `[CAMERA] Error: Failed to read from camera` messages, the camera is not working properly with OpenCV.
+If you see continuous `[CAMERA] Error: Failed to read from camera` messages, the camera hardware works but OpenCV cannot access it.
+
+### Quick Test
+
+First, verify camera hardware works:
+```bash
+rpicam-hello --timeout 5000
+# or
+libcamera-hello --timeout 5000
+```
+
+If this works ✓, but C++ server fails ✗, **OpenCV likely wasn't compiled with GStreamer support**.
+
+## Root Cause: OpenCV Without GStreamer
+
+The Raspberry Pi Camera Module V3 requires **libcamera**, which OpenCV accesses through **GStreamer**. If OpenCV was compiled without GStreamer support, it cannot use the camera.
 
 ## Quick Diagnosis
 
-Run the camera diagnostic script:
+**Step 1: Check if camera hardware works**
+```bash
+rpicam-hello --timeout 5000
+```
 
+**Step 2: Check if OpenCV has GStreamer support**
+```bash
+python3 -c "import cv2; print('GStreamer:', cv2.getBuildInformation())" | grep -i gstreamer
+```
+
+Look for:
+- `GStreamer: YES` ✓ (Good - OpenCV can use camera)
+- `GStreamer: NO` ✗ (Bad - OpenCV cannot use libcamera)
+
+**Step 3: Run camera diagnostic script**
 ```bash
 cd backend/cpp
 chmod +x diagnose_camera.sh

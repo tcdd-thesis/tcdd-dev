@@ -1,6 +1,9 @@
 #include "camera.h"
 #include "logging_flags.h"
 #include <iostream>
+#include <thread>
+#include <chrono>
+#include <functional>
 
 Camera::Camera() {}
 
@@ -30,39 +33,81 @@ bool Camera::initialize(int width, int height, int fps, int bufferSize) {
 }
 
 bool Camera::tryOpenCamera(int cameraIndex) {
-    // Try different backends in order
-    std::vector<std::pair<std::string, int>> backends = {
-        {"GStreamer", cv::CAP_GSTREAMER},
-        {"V4L2", cv::CAP_V4L2},
-        {"ANY", cv::CAP_ANY}
+    // Try different approaches in order
+    struct CameraBackend {
+        std::string name;
+        std::function<bool(cv::VideoCapture&)> openFunc;
     };
     
-    for (const auto& [name, backend] : backends) {
-        std::cout << "  Trying " << name << " backend..." << std::endl;
-        
-        if (backend == cv::CAP_GSTREAMER) {
-            // GStreamer pipeline for libcamera (Raspberry Pi Camera Module V3)
-            std::string pipeline = "libcamerasrc ! video/x-raw,width=" + std::to_string(width) + 
+    std::vector<CameraBackend> backends = {
+        // 1. Try GStreamer with simple libcamerasrc (best for Pi Camera V3)
+        {"GStreamer-libcamera", [&](cv::VideoCapture& cap) {
+            std::string pipeline = "libcamerasrc ! "
+                                   "video/x-raw,width=" + std::to_string(width) + 
                                    ",height=" + std::to_string(height) + 
-                                   ",framerate=" + std::to_string(fps) + "/1 ! videoconvert ! appsink";
-            capture.open(pipeline, cv::CAP_GSTREAMER);
-        } else {
-            capture.open(cameraIndex, backend);
-        }
+                                   ",format=I420 ! "
+                                   "videoconvert ! "
+                                   "appsink drop=1";
+            std::cout << "    Pipeline: " << pipeline << std::endl;
+            return cap.open(pipeline, cv::CAP_GSTREAMER);
+        }},
         
-        if (capture.isOpened()) {
+        // 2. Try GStreamer with auto source (fallback)
+        {"GStreamer-auto", [&](cv::VideoCapture& cap) {
+            std::string pipeline = "autovideosrc ! "
+                                   "video/x-raw,width=" + std::to_string(width) + 
+                                   ",height=" + std::to_string(height) + " ! "
+                                   "videoconvert ! "
+                                   "appsink";
+            std::cout << "    Pipeline: " << pipeline << std::endl;
+            return cap.open(pipeline, cv::CAP_GSTREAMER);
+        }},
+        
+        // 3. Try V4L2 backend
+        {"V4L2", [&](cv::VideoCapture& cap) {
+            return cap.open(cameraIndex, cv::CAP_V4L2);
+        }},
+        
+        // 4. Try ANY backend (OpenCV default)
+        {"ANY", [&](cv::VideoCapture& cap) {
+            return cap.open(cameraIndex, cv::CAP_ANY);
+        }}
+    };
+    
+    for (const auto& backend : backends) {
+        std::cout << "  Trying " << backend.name << " backend..." << std::endl;
+        
+        if (backend.openFunc(capture)) {
+            std::cout << "    Camera opened, testing frame capture..." << std::endl;
+            
             // Test if we can actually read a frame
             cv::Mat testFrame;
-            if (capture.read(testFrame) && !testFrame.empty()) {
-                std::cout << "  ✓ " << name << " backend works!" << std::endl;
+            bool canRead = false;
+            
+            // Try reading a few times (first frame might take time to initialize)
+            for (int attempt = 0; attempt < 5; attempt++) {
+                if (capture.read(testFrame) && !testFrame.empty()) {
+                    canRead = true;
+                    std::cout << "    ✓ Successfully captured test frame on attempt " << (attempt + 1) << std::endl;
+                    break;
+                }
+                std::cout << "    Attempt " << (attempt + 1) << " failed, retrying..." << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            }
+            
+            if (canRead) {
+                std::cout << "  ✓ " << backend.name << " backend works! (Frame: " 
+                          << testFrame.cols << "x" << testFrame.rows << ")" << std::endl;
                 
-                // Set camera properties (may not work for all backends)
-                capture.set(cv::CAP_PROP_FRAME_WIDTH, width);
-                capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
-                capture.set(cv::CAP_PROP_FPS, fps);
-                capture.set(cv::CAP_PROP_BUFFERSIZE, bufferSize);
+                // For V4L2/ANY backends, try to set properties
+                if (backend.name == "V4L2" || backend.name == "ANY") {
+                    capture.set(cv::CAP_PROP_FRAME_WIDTH, width);
+                    capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+                    capture.set(cv::CAP_PROP_FPS, fps);
+                    capture.set(cv::CAP_PROP_BUFFERSIZE, bufferSize);
+                }
                 
-                // Verify settings
+                // Verify actual settings
                 int actualWidth = capture.get(cv::CAP_PROP_FRAME_WIDTH);
                 int actualHeight = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
                 int actualFps = capture.get(cv::CAP_PROP_FPS);
@@ -73,13 +118,17 @@ bool Camera::tryOpenCamera(int cameraIndex) {
                 opened = true;
                 return true;
             } else {
-                std::cout << "  ✗ " << name << " opened but cannot read frames" << std::endl;
+                std::cout << "  ✗ " << backend.name << " opened but cannot read frames after 5 attempts" << std::endl;
                 capture.release();
             }
         } else {
-            std::cout << "  ✗ " << name << " backend failed to open" << std::endl;
+            std::cout << "  ✗ " << backend.name << " backend failed to open" << std::endl;
         }
     }
+    
+    std::cerr << "\n✗ All backends failed. Camera hardware detected but OpenCV cannot access it." << std::endl;
+    std::cerr << "  This usually means OpenCV was not compiled with GStreamer support." << std::endl;
+    std::cerr << "  Try using a video file instead: ./cpp_server --file video.mp4" << std::endl;
     
     return false;
 }
