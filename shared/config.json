@@ -1,6 +1,6 @@
 {
   "backendPort": 5000,
-  "pythonServerPort": 5001,
+  "cppServerPort": 5100,
   "frontendPort": 3000,
   "camera": {
     "width": 640,
@@ -9,8 +9,13 @@
     "bufferSize": 1
   },
   "detection": {
-    "modelPath": "backend/python/model/v0-20250827.1a.pt",
+    "modelFormat": "ncnn",
+    "modelPath": ["backend/model/model.ncnn.param", "backend/model/model.ncnn.bin"],
+    "labelsPath": "backend/model/labels.txt",
     "confidenceThreshold": 0.5,
+    "nmsThreshold": 0.5,
+    "iouThreshold": 0.5,
+    "inputSize": [640, 480],
     "pollIntervalMs": 500,
     "maxDetectionsDisplay": 5,
     "detectionInterval": 1,
@@ -23,8 +28,13 @@
   },
   "performance": {
     "enableGPU": false,
-    "modelFormat": "pt",
+    "useVulkan": false,
     "maxCacheSize": 100,
     "compressionLevel": 6
+  },
+  "logging": {
+    "format": "csv",
+    "path": "logs/",
+    "metricsInterval": 1000
   }
 }
