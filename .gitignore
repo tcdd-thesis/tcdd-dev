@@ -34,6 +34,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+logs/
 
 # Frontend build
 frontend/build/
@@ -42,6 +43,15 @@ frontend/.cache/
 # Model files (too large for git)
 backend/python/model/*
 !backend/python/model/README.md
+backend/model/*
+!backend/model/README.md
+
+# C++ build artifacts
+backend/cpp/build/
+backend/build/
+backend/*.exe
+backend/camera_server
+backend/cpp_server
 
 # Test videos and images
 *.mp4
