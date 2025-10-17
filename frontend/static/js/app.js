@@ -79,6 +79,18 @@ function switchPage(pageName) {
     // Load page-specific content
     if (pageName === 'logs') loadLogs();
     if (pageName === 'settings') loadSettings();
+
+    // Auto-start/stop camera for live feed
+    if (pageName === 'live') {
+        if (!state.streaming) {
+            startCamera();
+        }
+    } else {
+        // If leaving live feed, stop camera but keep detection running
+        if (state.streaming && state.currentPage === 'live') {
+            stopCamera();
+        }
+    }
 }
 
 // ============================================================================
@@ -412,12 +424,32 @@ function connectWebSocket() {
 async function checkStatus() {
     try {
         const status = await api.get('/status');
-        
-        if (status.model) {
+        const dot = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+        if (status.camera && status.detector) {
+            dot.className = 'dot online';
+            text.textContent = 'Camera Ready';
+        } else if (status.camera) {
+            dot.className = 'dot online';
+            text.textContent = 'Camera Only';
+        } else if (status.detector) {
+            dot.className = 'dot online';
+            text.textContent = 'Detection Only';
+        } else if (status.streaming) {
+            dot.className = 'dot online';
+            text.textContent = 'Streaming';
+        } else {
+            dot.className = 'dot offline';
+            text.textContent = 'Offline';
+        }
+        if (status.model && document.getElementById('model-name')) {
             document.getElementById('model-name').textContent = status.model.split('/').pop();
         }
-        
     } catch (error) {
+        const dot = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+        dot.className = 'dot offline';
+        text.textContent = 'Offline';
         console.error('Failed to check status:', error);
     }
 }
