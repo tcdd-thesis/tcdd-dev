@@ -39,6 +39,9 @@ public:
     // Update status metrics (thread-safe)
     void updateStatus(const json& status);
     
+    // Set verbose logging
+    static void setVerbose(bool enabled) { verboseLogging = enabled; }
+    
     // Check if server is running
     bool isRunning() const { return running; }
 
@@ -46,6 +49,9 @@ private:
     int port = 5100;
     std::atomic<bool> running{false};
     std::unique_ptr<std::thread> serverThread;
+    
+    // Verbose logging flag
+    static bool verboseLogging;
     
     // Shared data (protected by mutexes)
     cv::Mat currentFrame;

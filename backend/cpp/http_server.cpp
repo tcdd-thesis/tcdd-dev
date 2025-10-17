@@ -7,6 +7,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+// Initialize static verbose flag
+bool HttpServer::verboseLogging = false;
+
 HttpServer::HttpServer() {}
 
 HttpServer::~HttpServer() {
@@ -45,16 +48,39 @@ void HttpServer::stop() {
 void HttpServer::updateFrame(const cv::Mat& frame) {
     std::lock_guard<std::mutex> lock(frameMutex);
     currentFrame = frame.clone();
+    if (verboseLogging) {
+        static int frameUpdateCount = 0;
+        frameUpdateCount++;
+        if (frameUpdateCount % 100 == 0) {
+            std::cout << "[SERVER] Updated " << frameUpdateCount << " frames (" 
+                      << frame.cols << "x" << frame.rows << ")" << std::endl;
+        }
+    }
 }
 
 void HttpServer::updateDetections(const std::vector<Detection>& detections) {
     std::lock_guard<std::mutex> lock(detectionsMutex);
     currentDetections = detections;
+    if (verboseLogging) {
+        static int detectionUpdateCount = 0;
+        detectionUpdateCount++;
+        if (detectionUpdateCount % 100 == 0 || !detections.empty()) {
+            std::cout << "[SERVER] Detection update #" << detectionUpdateCount 
+                      << ": " << detections.size() << " objects" << std::endl;
+        }
+    }
 }
 
 void HttpServer::updateStatus(const json& status) {
     std::lock_guard<std::mutex> lock(statusMutex);
     currentStatus = status;
+    if (verboseLogging) {
+        static int statusUpdateCount = 0;
+        statusUpdateCount++;
+        if (statusUpdateCount % 100 == 0) {
+            std::cout << "[SERVER] Status update #" << statusUpdateCount << std::endl;
+        }
+    }
 }
 
 std::vector<uchar> HttpServer::encodeJpeg(const cv::Mat& frame) {
@@ -77,6 +103,10 @@ std::string HttpServer::buildMjpegBoundary(const std::vector<uchar>& jpegData) {
 std::string HttpServer::handleGetDetections() {
     std::lock_guard<std::mutex> lock(detectionsMutex);
     
+    if (verboseLogging) {
+        std::cout << "[API] handleGetDetections called - " << currentDetections.size() << " detections" << std::endl;
+    }
+    
     json result = json::array();
     for (const auto& det : currentDetections) {
         result.push_back({
@@ -97,10 +127,23 @@ std::string HttpServer::handleGetDetections() {
 
 std::string HttpServer::handleGetStatus() {
     std::lock_guard<std::mutex> lock(statusMutex);
+    if (verboseLogging) {
+        std::cout << "[API] handleGetStatus called - Status: " 
+                  << (currentStatus.empty() ? "EMPTY" : "OK") << std::endl;
+        if (currentStatus.empty()) {
+            std::cout << "[API] WARNING: currentStatus is empty, returning empty JSON object" << std::endl;
+        }
+    }
+    if (currentStatus.empty()) {
+        return "{}";
+    }
     return currentStatus.dump();
 }
 
 std::string HttpServer::handleHealth() {
+    if (verboseLogging) {
+        std::cout << "[API] handleHealth called" << std::endl;
+    }
     json response = {
         {"status", "ok"},
         {"server", "cpp"},
@@ -176,6 +219,11 @@ void HttpServer::serverLoop() {
             continue;
         }
         
+        // Get client IP address
+        char clientIP[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(address.sin_addr), clientIP, INET_ADDRSTRLEN);
+        int clientPort = ntohs(address.sin_port);
+        
         // Read request (simplified - just read first line)
         char buffer[4096] = {0};
         ssize_t valread = read(client_fd, buffer, sizeof(buffer) - 1);
@@ -189,8 +237,18 @@ void HttpServer::serverLoop() {
             if (endLine != std::string::npos) {
                 std::string requestLine = request.substr(0, endLine);
                 
+                // Log incoming request
+                if (verboseLogging) {
+                    std::cout << "\n[HTTP] " << clientIP << ":" << clientPort 
+                              << " -> " << requestLine << std::endl;
+                }
+                
                 // Simple routing
                 if (requestLine.find("GET /video_feed") != std::string::npos) {
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Starting MJPEG stream for " << clientIP << std::endl;
+                    }
+                    
                     // MJPEG stream - send headers and start streaming
                     std::string headers = 
                         "HTTP/1.1 200 OK\r\n"
@@ -200,6 +258,7 @@ void HttpServer::serverLoop() {
                     
                     send(client_fd, headers.c_str(), headers.length(), 0);
                     
+                    int framesSent = 0;
                     // Stream frames
                     while (running) {
                         cv::Mat frame;
@@ -215,7 +274,21 @@ void HttpServer::serverLoop() {
                             std::string boundary = buildMjpegBoundary(jpegData);
                             
                             if (send(client_fd, boundary.c_str(), boundary.length(), MSG_NOSIGNAL) < 0) {
+                                if (verboseLogging) {
+                                    std::cout << "[HTTP] Client " << clientIP << " disconnected after " 
+                                              << framesSent << " frames" << std::endl;
+                                }
                                 break; // Client disconnected
+                            }
+                            framesSent++;
+                            
+                            if (verboseLogging && framesSent % 100 == 0) {
+                                std::cout << "[HTTP] Streamed " << framesSent << " frames to " 
+                                          << clientIP << std::endl;
+                            }
+                        } else {
+                            if (verboseLogging) {
+                                std::cout << "[HTTP] Warning: Empty frame, waiting..." << std::endl;
                             }
                         }
                         
@@ -223,33 +296,62 @@ void HttpServer::serverLoop() {
                     }
                     
                 } else if (requestLine.find("GET /api/detections") != std::string::npos) {
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Serving detections to " << clientIP << std::endl;
+                    }
+                    std::string jsonResponse = handleGetDetections();
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Response: " << jsonResponse.substr(0, 100) 
+                                  << (jsonResponse.length() > 100 ? "..." : "") << std::endl;
+                    }
+                    
                     response = 
                         "HTTP/1.1 200 OK\r\n"
                         "Content-Type: application/json\r\n"
                         "Access-Control-Allow-Origin: *\r\n"
                         "Connection: close\r\n\r\n" +
-                        handleGetDetections();
+                        jsonResponse;
                     send(client_fd, response.c_str(), response.length(), 0);
                     
                 } else if (requestLine.find("GET /api/status") != std::string::npos) {
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Serving status to " << clientIP << std::endl;
+                    }
+                    std::string jsonResponse = handleGetStatus();
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Status response: " << jsonResponse << std::endl;
+                    }
+                    
                     response = 
                         "HTTP/1.1 200 OK\r\n"
                         "Content-Type: application/json\r\n"
                         "Access-Control-Allow-Origin: *\r\n"
                         "Connection: close\r\n\r\n" +
-                        handleGetStatus();
+                        jsonResponse;
                     send(client_fd, response.c_str(), response.length(), 0);
                     
                 } else if (requestLine.find("GET /health") != std::string::npos) {
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Health check from " << clientIP << std::endl;
+                    }
+                    std::string jsonResponse = handleHealth();
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] Health response: " << jsonResponse << std::endl;
+                    }
+                    
                     response = 
                         "HTTP/1.1 200 OK\r\n"
                         "Content-Type: application/json\r\n"
                         "Access-Control-Allow-Origin: *\r\n"
                         "Connection: close\r\n\r\n" +
-                        handleHealth();
+                        jsonResponse;
                     send(client_fd, response.c_str(), response.length(), 0);
                     
                 } else {
+                    if (verboseLogging) {
+                        std::cout << "[HTTP] 404 Not Found for " << clientIP << ": " << requestLine << std::endl;
+                    }
+                    
                     response = 
                         "HTTP/1.1 404 Not Found\r\n"
                         "Content-Type: text/plain\r\n"

@@ -8,13 +8,17 @@ cd backend/cpp
 chmod +x build.sh download_deps.sh
 ./build.sh
 
-# Run server
+# Run server (normal mode)
 cd ../..
 ./backend/cpp_server
+
+# Run with verbose logging (for debugging)
+./backend/cpp_server --verbose
 
 # With options
 ./backend/cpp_server --vulkan           # Enable Vulkan
 ./backend/cpp_server --file video.mp4   # Use video file
+./backend/cpp_server --verbose --vulkan # Combine flags
 ./backend/cpp_server --help             # Show help
 ```
 

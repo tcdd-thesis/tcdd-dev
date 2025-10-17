@@ -1,5 +1,7 @@
 #include "detector.h"
+#include "logging_flags.h"
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <algorithm>
 #include <chrono>
@@ -101,8 +103,19 @@ ncnn::Mat Detector::preprocess(const cv::Mat& frame) {
 
 std::vector<Detection> Detector::detect(const cv::Mat& frame) {
     if (!initialized || frame.empty()) {
+        if (Logging::verbose) {
+            static int emptyFrameCount = 0;
+            emptyFrameCount++;
+            if (emptyFrameCount % 10 == 1) {
+                std::cout << "[DETECTOR] Warning: " 
+                          << (!initialized ? "Not initialized" : "Empty frame") << std::endl;
+            }
+        }
         return {};
     }
+    
+    static int detectCount = 0;
+    detectCount++;
     
     auto start = std::chrono::high_resolution_clock::now();
     
@@ -114,7 +127,14 @@ std::vector<Detection> Detector::detect(const cv::Mat& frame) {
     ex.input("in0", in);  // YOLOv8 input name is typically "in0" or "images"
     
     ncnn::Mat out;
-    ex.extract("out0", out);  // YOLOv8 output name is typically "out0" or "output0"
+    int ret = ex.extract("out0", out);  // YOLOv8 output name is typically "out0" or "output0"
+    
+    if (ret != 0) {
+        if (Logging::verbose) {
+            std::cout << "[DETECTOR] Warning: Inference extraction failed with code " << ret << std::endl;
+        }
+        return {};
+    }
     
     // Postprocess
     std::vector<Detection> detections = postprocess(out, frame.cols, frame.rows);
@@ -124,6 +144,12 @@ std::vector<Detection> Detector::detect(const cv::Mat& frame) {
     
     auto end = std::chrono::high_resolution_clock::now();
     inferenceTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
+    
+    if (Logging::verbose && (detectCount % 100 == 1 || !detections.empty())) {
+        std::cout << "[DETECTOR] Frame #" << detectCount << ": " 
+                  << detections.size() << " detections in " 
+                  << std::fixed << std::setprecision(1) << inferenceTimeMs << "ms" << std::endl;
+    }
     
     return detections;
 }

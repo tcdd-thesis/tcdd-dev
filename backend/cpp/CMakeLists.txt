@@ -30,6 +30,7 @@ set(SOURCES
     http_server.cpp
     config_loader.cpp
     logger.cpp
+    logging_flags.cpp
 )
 
 set(HEADERS
@@ -38,6 +39,7 @@ set(HEADERS
     http_server.h
     config_loader.h
     logger.h
+    logging_flags.h
 )
 
 # Create executable

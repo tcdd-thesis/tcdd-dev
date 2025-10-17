@@ -8,6 +8,7 @@
 #include "camera.h"
 #include "detector.h"
 #include "http_server.h"
+#include "logging_flags.h"
 
 // Global flag for graceful shutdown
 std::atomic<bool> g_running{true};
@@ -31,6 +32,7 @@ void printUsage(const char* progName) {
     std::cout << "Options:\n";
     std::cout << "  -h, --help        Show this help message\n";
     std::cout << "  -v, --vulkan      Enable Vulkan compute (if available)\n";
+    std::cout << "  --verbose         Enable verbose logging\n";
     std::cout << "  -f, --file PATH   Use video file instead of camera\n";
     std::cout << "  -c, --config PATH Specify custom config file path\n";
     std::cout << "\n";
@@ -39,6 +41,7 @@ void printUsage(const char* progName) {
 int main(int argc, char* argv[]) {
     // Parse command line arguments
     bool useVulkan = false;
+    bool verboseLogging = false;
     std::string videoFile;
     std::string configPath;
     
@@ -50,6 +53,8 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "-v" || arg == "--vulkan") {
             useVulkan = true;
+        } else if (arg == "--verbose") {
+            verboseLogging = true;
         } else if (arg == "-f" || arg == "--file") {
             if (i + 1 < argc) {
                 videoFile = argv[++i];
@@ -68,6 +73,10 @@ int main(int argc, char* argv[]) {
     }
     
     printBanner();
+    
+    // Set global verbose flag
+    Logging::verbose = verboseLogging;
+    HttpServer::setVerbose(verboseLogging);
     
     // Install signal handler
     signal(SIGINT, signalHandler);
@@ -167,6 +176,17 @@ int main(int argc, char* argv[]) {
     std::cout << "✓ Server running on port " << serverPort << "\n";
     std::cout << "✓ Press Ctrl+C to stop\n\n";
     
+    if (verboseLogging) {
+        std::cout << "════════════════════════════════════════════════\n";
+        std::cout << "Verbose logging enabled:\n";
+        std::cout << "  [HTTP]     - HTTP requests and responses\n";
+        std::cout << "  [API]      - API endpoint calls\n";
+        std::cout << "  [SERVER]   - Server data updates\n";
+        std::cout << "  [CAMERA]   - Camera frame capture\n";
+        std::cout << "  [DETECTOR] - Object detection operations\n";
+        std::cout << "════════════════════════════════════════════════\n\n";
+    }
+    
     // Main processing loop
     Logger::Metrics metrics;
     int frameCount = 0;
@@ -180,12 +200,24 @@ int main(int argc, char* argv[]) {
     while (g_running) {
         auto frameStart = std::chrono::high_resolution_clock::now();
         
+        static int mainLoopCount = 0;
+        mainLoopCount++;
+        
         // Capture frame
         cv::Mat frame;
         if (!camera.captureFrame(frame)) {
             droppedFrames++;
+            if (verboseLogging && droppedFrames % 10 == 1) {
+                std::cout << "[CAMERA] Warning: Failed to capture frame (dropped: " 
+                          << droppedFrames << ")" << std::endl;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
+        }
+        
+        if (verboseLogging && mainLoopCount % 100 == 1) {
+            std::cout << "[MAIN] Processing frame #" << mainLoopCount 
+                      << " (" << frame.cols << "x" << frame.rows << ")" << std::endl;
         }
         
         auto captureEnd = std::chrono::high_resolution_clock::now();

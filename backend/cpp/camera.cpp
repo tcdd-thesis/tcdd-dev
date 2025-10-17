@@ -1,4 +1,5 @@
 #include "camera.h"
+#include "logging_flags.h"
 #include <iostream>
 
 Camera::Camera() {}
@@ -83,25 +84,48 @@ bool Camera::initializeFromFile(const std::string& videoPath) {
 
 bool Camera::captureFrame(cv::Mat& frame) {
     if (!opened) {
+        if (Logging::verbose) {
+            std::cout << "[CAMERA] Error: Camera not opened" << std::endl;
+        }
         return false;
     }
     
     std::lock_guard<std::mutex> lock(frameMutex);
     
+    static int captureCount = 0;
+    captureCount++;
+    
     if (!capture.read(frame)) {
         // If using video file, loop back to start
         if (usingFile) {
+            if (Logging::verbose) {
+                std::cout << "[CAMERA] Video file ended, looping back to start" << std::endl;
+            }
             capture.set(cv::CAP_PROP_POS_FRAMES, 0);
             if (!capture.read(frame)) {
+                if (Logging::verbose) {
+                    std::cout << "[CAMERA] Error: Failed to read from video file after loop" << std::endl;
+                }
                 return false;
             }
         } else {
+            if (Logging::verbose) {
+                std::cout << "[CAMERA] Error: Failed to read from camera" << std::endl;
+            }
             return false;
         }
     }
     
     if (frame.empty()) {
+        if (Logging::verbose) {
+            std::cout << "[CAMERA] Error: Captured frame is empty" << std::endl;
+        }
         return false;
+    }
+    
+    if (Logging::verbose && captureCount % 100 == 1) {
+        std::cout << "[CAMERA] Captured frame #" << captureCount 
+                  << " (" << frame.cols << "x" << frame.rows << ")" << std::endl;
     }
     
     // Store current frame

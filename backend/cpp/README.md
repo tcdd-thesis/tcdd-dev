@@ -13,6 +13,51 @@ This directory contains the C++ implementation of the TCDD traffic sign detectio
 - **CSV Logging**: Performance metrics logging
 - **Vulkan Support**: Optional GPU acceleration
 - **Multi-threaded**: Concurrent capture, inference, and serving
+- **Verbose Logging**: Comprehensive request/response tracking for troubleshooting
+
+## Quick Start
+
+```bash
+# 1. Install dependencies and build (first time only)
+cd backend/cpp
+chmod +x troubleshoot.sh build.sh
+./troubleshoot.sh  # Check if everything is ready
+./build.sh         # Build the server
+
+# 2. Run the server
+cd build
+./tcdd_server
+
+# 3. Run with verbose logging (for debugging)
+./tcdd_server --verbose
+
+# 4. Test endpoints
+curl http://localhost:5100/health
+curl http://localhost:5100/api/status
+```
+
+See [SETUP.md](SETUP.md) for detailed installation instructions.
+
+## Troubleshooting
+
+If you encounter issues:
+
+```bash
+# Run the troubleshooting script
+cd backend/cpp
+./troubleshoot.sh
+
+# Run with verbose logging to see detailed operations
+./build/tcdd_server --verbose 2>&1 | tee server.log
+
+# Filter specific issues
+./build/tcdd_server --verbose | grep "\[HTTP\]"   # HTTP requests only
+./build/tcdd_server --verbose | grep "Error"      # Errors only
+```
+
+**Note**: Verbose logging is disabled by default. Use the `--verbose` flag to enable detailed logging for troubleshooting.
+
+See [VERBOSE_LOGGING.md](VERBOSE_LOGGING.md) for detailed logging documentation.
 
 ## Dependencies
 
@@ -110,6 +155,12 @@ cd backend
 ./cpp_server
 ```
 
+### With Verbose Logging (for debugging)
+
+```bash
+./cpp_server --verbose
+```
+
 ### With Video File (for testing)
 
 ```bash
@@ -126,6 +177,12 @@ cd backend
 
 ```bash
 ./cpp_server --config path/to/config.json
+```
+
+### Combined Flags
+
+```bash
+./cpp_server --verbose --vulkan --file video.mp4
 ```
 
 ## API Endpoints
@@ -230,17 +287,64 @@ const proxyTarget = `http://localhost:${config.cppServerPort || 5100}`;
 
 ## Troubleshooting
 
-### Camera Not Found
+### Quick Diagnostics
+
+Run the troubleshooting script to check your setup:
+
+```bash
+cd backend/cpp
+chmod +x troubleshoot.sh
+./troubleshoot.sh
+```
+
+This will check:
+- System dependencies (OpenCV, NCNN)
+- Camera devices
+- Config and model files
+- Network ports
+- File permissions
+
+### Common Issues
+
+#### Camera Not Found
 - Ensure Raspberry Pi camera is enabled: `sudo raspi-config`
 - Check camera connection: `libcamera-hello`
 - Try V4L2 devices: `v4l2-ctl --list-devices`
+- Check verbose logs: `./tcdd_server | grep "\[CAMERA\]"`
 
-### NCNN Model Loading Fails
+#### NCNN Model Loading Fails
 - Verify model files exist and paths are correct
 - Check param/bin file compatibility
 - Ensure input/output layer names match (default: "in0", "out0")
+- Check initialization logs at startup
 
-### Low FPS
+#### /video_feed Loading Forever
+Enable verbose logging to diagnose:
+```bash
+./tcdd_server | grep -E "\[HTTP\]|\[CAMERA\]"
+```
+
+Look for:
+- HTTP connection established
+- MJPEG stream started
+- Frames being sent
+- Empty frame warnings
+
+See [VERBOSE_LOGGING.md](VERBOSE_LOGGING.md) for detailed diagnostics.
+
+#### /api/status Returns null
+Check if status is being updated:
+```bash
+./tcdd_server | grep -E "\[API\]|\[SERVER\]"
+```
+
+Should see:
+- `[SERVER] Status update` messages
+- `[API] handleGetStatus called - Status: OK`
+
+If status is EMPTY, main loop may not be running.
+
+#### Low FPS
 - Enable Vulkan if available
 - Reduce input resolution
 - Increase `detectionInterval`
@@ -276,6 +380,17 @@ Target performance on Raspberry Pi 5:
 - **Inference Time**: 30-50ms (NCNN CPU)
 - **Inference Time**: 15-25ms (NCNN Vulkan)
 - **Latency**: <100ms end-to-end
+
+## Documentation
+
+- **[README.md](README.md)**: This file - overview and quick start
+- **[SETUP.md](SETUP.md)**: Detailed installation and setup guide
+- **[QUICKREF.md](QUICKREF.md)**: Quick reference for common commands
+- **[CONFIG_USAGE.md](CONFIG_USAGE.md)**: Configuration system guide
+- **[VERBOSE_LOGGING.md](VERBOSE_LOGGING.md)**: Logging and troubleshooting guide
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)**: Technical implementation details
+- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)**: Production deployment checklist
+- **[REFACTOR_SUMMARY.md](REFACTOR_SUMMARY.md)**: Configuration refactoring notes
 
 ## License
 
