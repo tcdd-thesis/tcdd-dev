@@ -53,12 +53,16 @@ cd ~
 git clone --depth=1 https://github.com/Tencent/ncnn.git
 cd ncnn
 
+# Initialize submodules (REQUIRED!)
+git submodule update --init
+
 # Create build directory
 mkdir -p build
 cd build
 
-# Configure (with Vulkan support)
+# Configure (with Vulkan support and system-wide installation)
 cmake -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
       -DNCNN_VULKAN=ON \
       -DNCNN_BUILD_EXAMPLES=OFF \
       -DNCNN_BUILD_TOOLS=ON \
@@ -67,12 +71,13 @@ cmake -DCMAKE_BUILD_TYPE=Release \
 # Build (this may take 30-60 minutes)
 make -j$(nproc)
 
-# Install
+# Install system-wide
 sudo make install
 sudo ldconfig
 
-# Verify
+# Verify installation
 ls /usr/local/include/ncnn/
+ls /usr/local/lib/libncnn.a
 ```
 
 ## Step 5: Enable Camera
