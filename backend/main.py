@@ -21,6 +21,7 @@ os.chdir(PROJECT_ROOT)
 from camera import Camera
 from detector import Detector
 from config import Config
+from metrics_logger import MetricsLogger
 
 # Initialize Flask app
 app = Flask(__name__,
@@ -57,6 +58,7 @@ logger = logging.getLogger(__name__)
 camera = None
 detector = None
 is_streaming = True  # Always streaming in backend
+metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -284,14 +286,17 @@ def handle_disconnect():
     logger.info("Client disconnected from WebSocket")
 
 def stream_video():
-    """Stream video frames with detections to connected clients"""
+    """Stream video frames with detections to connected clients and log metrics"""
     global is_streaming
     
     logger.info("Starting video stream...")
+    frame_count = 0
+    total_detections = 0
+    last_time = datetime.now()
     
     while is_streaming:
         try:
-            # Capture frame from camera
+            frame_start = datetime.now()
             frame = camera.get_frame()
             
             if frame is None:
@@ -305,7 +310,9 @@ def stream_video():
             
             # Encode frame as JPEG
             import cv2
+            encode_start = datetime.now()
             _, buffer = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            encode_end = datetime.now()
             
             # Convert to base64
             import base64
@@ -324,6 +331,25 @@ def stream_video():
                 'count': len(detections)
             })
             
+            # Metrics logging
+            frame_count += 1
+            total_detections += len(detections)
+            
+            # Calculate FPS
+            now = datetime.now()
+            elapsed = (now - last_time).total_seconds()
+            fps = frame_count / elapsed if elapsed > 0 else 0
+            inference_time_ms = (encode_start - frame_start).total_seconds() * 1000
+            encode_time_ms = (encode_end - encode_start).total_seconds() * 1000
+            metrics_logger.log(
+                frame=frame_count,
+                fps=fps,
+                detections=len(detections),
+                inference_time_ms=inference_time_ms,
+                encode_time_ms=encode_time_ms,
+                total_detections=total_detections
+            )
+            
             # Small delay to control frame rate
             socketio.sleep(1.0 / config.get('camera.fps', 30))
             
@@ -332,6 +358,7 @@ def stream_video():
             socketio.sleep(0.1)
     
     logger.info("Video stream stopped")
+    metrics_logger.close()
 
 # ============================================================================
 # MAIN
