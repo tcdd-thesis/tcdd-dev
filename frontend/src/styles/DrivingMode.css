@@ -3,6 +3,10 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
   padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .page-header {
@@ -11,6 +15,7 @@
   gap: 0.4rem;
   margin-bottom: 0.8rem;
   color: white;
+  align-self: flex-start;
 }
 
 .back-button {
@@ -41,13 +46,19 @@
 .mode-selection {
   max-width: 480px;
   margin: 0 auto;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .modes-grid {
   display: flex;
   flex-direction: row;
   justify-content: center;
+  align-items: center;
   gap: 0.8rem;
+  flex: 1;
 }
 
 .mode-card {

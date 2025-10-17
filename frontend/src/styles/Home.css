@@ -1,18 +1,29 @@
 /* Home Page Styles - Optimized for 480x640 */
 .home-container {
-  min-height: 100vh;
+  height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  padding: 0.8rem;
+  padding: 0;
   color: white;
 }
 
 .home-header {
   text-align: center;
-  margin-bottom: 1rem;
   animation: fadeInDown 0.6s ease-out;
+  align-self: center;
+  width: 100%;
+}
+
+.home-center-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  width: 100%;
 }
 
 .home-title {
@@ -60,10 +71,11 @@
   display: flex;
   flex-direction: row;
   justify-content: center;
+  align-items: center;
   gap: 0.6rem;
   max-width: 480px;
   width: 100%;
-  margin-bottom: 1rem;
+  flex: 1;
 }
 
 .menu-card {
