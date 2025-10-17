@@ -103,22 +103,16 @@
         <div id="page-logs" class="page">
             <div class="page-header">
                 <button class="btn-back" onclick="goHome()">← Back</button>
-                <h2>Detection Logs</h2>
+                <h2>Activity Log</h2>
             </div>
             
             <div class="controls-compact">
-                <button id="btn-refresh-logs" class="btn btn-primary btn-touch">🔄</button>
-                <button id="btn-clear-display" class="btn btn-secondary btn-touch">🗑️</button>
-                <select id="log-level-filter" class="select select-touch">
-                    <option value="">All</option>
-                    <option value="INFO">INFO</option>
-                    <option value="WARNING">WARN</option>
-                    <option value="ERROR">ERROR</option>
-                </select>
+                <button id="btn-refresh-logs" class="btn btn-primary btn-touch">🔄 Refresh</button>
+                <button id="btn-clear-display" class="btn btn-secondary btn-touch">🗑️ Clear</button>
             </div>
 
-            <div class="logs-container-compact">
-                <pre id="logs-content">Loading logs...</pre>
+            <div class="logs-container-friendly">
+                <div id="logs-content-friendly"></div>
             </div>
         </div>
 

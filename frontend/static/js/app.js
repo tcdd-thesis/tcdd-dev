@@ -158,36 +158,126 @@ function handleVideoFrame(data) {
 }
 
 // ============================================================================
-// LOGS PAGE
+// LOGS PAGE (User-Friendly Version)
 // ============================================================================
 
 async function loadLogs() {
     try {
-        const response = await api.get('/logs?limit=200');
-        const logsContent = document.getElementById('logs-content');
+        const response = await api.get('/logs?limit=100');
+        const logsContainer = document.getElementById('logs-content-friendly');
         
         if (response.logs && response.logs.length > 0) {
-            const filter = document.getElementById('log-level-filter').value;
-            let logs = response.logs;
+            logsContainer.innerHTML = '';
             
-            if (filter) {
-                logs = logs.filter(log => log.includes(filter));
-            }
+            // Parse and format logs
+            response.logs.forEach(logLine => {
+                const entry = parseLogLine(logLine);
+                if (entry) {
+                    logsContainer.appendChild(createLogEntry(entry));
+                }
+            });
             
-            logsContent.textContent = logs.join('');
-            logsContent.scrollTop = logsContent.scrollHeight;
+            // Scroll to bottom
+            logsContainer.scrollTop = logsContainer.scrollHeight;
         } else {
-            logsContent.textContent = 'No logs available';
+            logsContainer.innerHTML = `
+                <div class="log-empty">
+                    <span class="icon">📋</span>
+                    <div>No activity yet</div>
+                </div>
+            `;
         }
         
     } catch (error) {
         console.error('Failed to load logs:', error);
-        document.getElementById('logs-content').textContent = 'Error loading logs';
+        const logsContainer = document.getElementById('logs-content-friendly');
+        logsContainer.innerHTML = `
+            <div class="log-empty">
+                <span class="icon">⚠️</span>
+                <div>Could not load activity log</div>
+            </div>
+        `;
     }
 }
 
+function parseLogLine(logLine) {
+    // Parse log format: "2025-10-17 12:04:44,454 - module - LEVEL - message"
+    const match = logLine.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - (.+?) - (\w+) - (.+)/);
+    
+    if (match) {
+        const [, timestamp, module, level, message] = match;
+        return {
+            timestamp,
+            module,
+            level,
+            message: formatMessage(message, level)
+        };
+    }
+    
+    return null;
+}
+
+function formatMessage(message, level) {
+    // Make messages more user-friendly
+    const friendlyMessages = {
+        'Initializing camera': '📹 Starting camera...',
+        'Camera started': '✅ Camera ready',
+        'Camera stopped': '⏹️ Camera stopped',
+        'Initializing OpenCV VideoCapture': '📹 Setting up camera',
+        'Sign Detection System Starting': '🚀 System starting...',
+        'Registered config change callback': '⚙️ Configuration loaded',
+        'Config file reloaded': '🔄 Settings updated',
+        'Camera resolution changed': '📐 Resolution updated',
+        'Detection started': '🎯 Detection active',
+        'Detection stopped': '⏸️ Detection paused',
+        'Model loaded': '🤖 AI model ready',
+        'Frame captured': '📸 Image saved',
+        'Server starting': '🌐 Server starting...',
+        'WebSocket connected': '🔌 Connected',
+        'WebSocket disconnected': '🔌 Disconnected',
+    };
+    
+    // Check for exact matches
+    for (const [key, friendly] of Object.entries(friendlyMessages)) {
+        if (message.includes(key)) {
+            return friendly;
+        }
+    }
+    
+    // Check for patterns
+    if (message.includes('FPS')) return `📊 ${message}`;
+    if (message.includes('detected')) return `🎯 ${message}`;
+    if (message.includes('error') || message.includes('Error')) return `❌ ${message}`;
+    if (message.includes('warning') || message.includes('Warning')) return `⚠️ ${message}`;
+    if (message.includes('success') || message.includes('Success')) return `✅ ${message}`;
+    
+    return message;
+}
+
+function createLogEntry(entry) {
+    const div = document.createElement('div');
+    const levelClass = entry.level.toLowerCase();
+    div.className = `log-entry ${levelClass}`;
+    
+    // Format time (show only HH:MM:SS)
+    const time = entry.timestamp.split(' ')[1];
+    
+    div.innerHTML = `
+        <div class="log-time">${time}</div>
+        <div class="log-message">${entry.message}</div>
+    `;
+    
+    return div;
+}
+
 function clearLogsDisplay() {
-    document.getElementById('logs-content').textContent = 'Logs cleared';
+    const logsContainer = document.getElementById('logs-content-friendly');
+    logsContainer.innerHTML = `
+        <div class="log-empty">
+            <span class="icon">✨</span>
+            <div>Display cleared</div>
+        </div>
+    `;
     showToast('Display cleared', 'info');
 }
 
@@ -373,7 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Logs controls
     document.getElementById('btn-refresh-logs').addEventListener('click', loadLogs);
     document.getElementById('btn-clear-display').addEventListener('click', clearLogsDisplay);
-    document.getElementById('log-level-filter').addEventListener('change', loadLogs);
     
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
