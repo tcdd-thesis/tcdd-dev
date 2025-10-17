@@ -1,17 +1,17 @@
 /**
- * Sign Detection System - Main Application
- * Vanilla JavaScript - No frameworks required
+ * Sign Detection System - Touchscreen Application
+ * Optimized for 2.8" LCD (640x480)
  */
 
 // Global state
 const state = {
     streaming: false,
     socket: null,
-    currentPage: 'live',
+    currentPage: 'home',
     fps: 0,
     detectionCount: 0,
     config: null,
-    configAutoReload: true  // Auto-reload config from server
+    configAutoReload: true
 };
 
 // API helper
@@ -49,28 +49,31 @@ const api = {
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
+    toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
     
     setTimeout(() => {
-        toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), 300);
+        toast.remove();
     }, 3000);
 }
 
-// Page Navigation
+// Navigation
+function goHome() {
+    // Stop camera if streaming
+    if (state.streaming) {
+        stopCamera();
+    }
+    
+    switchPage('home');
+}
+
 function switchPage(pageName) {
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
     
     document.getElementById(`page-${pageName}`).classList.add('active');
-    document.querySelector(`[data-page="${pageName}"]`).classList.add('active');
-    
     state.currentPage = pageName;
     
     // Load page-specific content
@@ -195,42 +198,32 @@ function clearLogsDisplay() {
 async function loadSettings() {
     try {
         const response = await api.get('/config');
-        state.config = response.config || response;  // Handle both old and new format
+        state.config = response.config || response;
         const config = state.config;
         
-        // Display metadata if available
-        if (response.metadata) {
-            console.log('Config metadata:', response.metadata);
-            const metadataDiv = document.getElementById('config-metadata');
-            if (metadataDiv) {
-                metadataDiv.innerHTML = `
-                    <small>
-                        Last modified: ${response.metadata.last_modified || 'Unknown'}<br>
-                        File: ${response.metadata.file}<br>
-                        Active callbacks: ${response.metadata.callbacks_registered || 0}
-                    </small>
-                `;
-            }
+        // Resolution dropdown
+        const resolution = `${config.camera?.width || 640}x${config.camera?.height || 480}`;
+        const resolutionSelect = document.getElementById('setting-resolution');
+        if (resolutionSelect) {
+            resolutionSelect.value = resolution;
         }
         
-        // Camera settings
-        document.getElementById('setting-width').value = config.camera?.width || 640;
-        document.getElementById('setting-height').value = config.camera?.height || 480;
-        document.getElementById('setting-fps').value = config.camera?.fps || 30;
+        // FPS dropdown
+        const fpsSelect = document.getElementById('setting-fps');
+        if (fpsSelect) {
+            fpsSelect.value = config.camera?.fps || 30;
+        }
         
-        // Detection settings
+        // Confidence slider
         const confidence = config.detection?.confidence || 0.5;
-        document.getElementById('setting-confidence').value = confidence * 100;
-        document.getElementById('confidence-display').textContent = confidence.toFixed(2);
-        document.getElementById('setting-model').value = config.detection?.model || '';
+        const confidenceSlider = document.getElementById('setting-confidence');
+        const confidenceDisplay = document.getElementById('confidence-display');
+        if (confidenceSlider && confidenceDisplay) {
+            confidenceSlider.value = Math.round(confidence * 100);
+            confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
+        }
         
-        // System settings
-        document.getElementById('setting-port').value = config.port || 5000;
-        document.getElementById('setting-debug').checked = config.debug || false;
-        
-        // Update live stats
-        document.getElementById('model-name').textContent = config.detection?.model?.split('/').pop() || 'Unknown';
-        document.getElementById('confidence-value').textContent = `${Math.round(confidence * 100)}%`;
+        showToast('Settings loaded', 'success');
         
     } catch (error) {
         console.error('Failed to load settings:', error);
@@ -240,60 +233,37 @@ async function loadSettings() {
 
 async function saveSettings() {
     try {
+        // Parse resolution
+        const resolution = document.getElementById('setting-resolution').value.split('x');
+        const width = parseInt(resolution[0]);
+        const height = parseInt(resolution[1]);
+        
+        // Get FPS
+        const fps = parseInt(document.getElementById('setting-fps').value);
+        
+        // Get confidence
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
         
         const config = {
-            port: parseInt(document.getElementById('setting-port').value),
-            debug: document.getElementById('setting-debug').checked,
             camera: {
-                width: parseInt(document.getElementById('setting-width').value),
-                height: parseInt(document.getElementById('setting-height').value),
-                fps: parseInt(document.getElementById('setting-fps').value)
+                width: width,
+                height: height,
+                fps: fps
             },
             detection: {
-                model: document.getElementById('setting-model').value,
                 confidence: confidence
             }
         };
         
-        showToast('Saving configuration...', 'info');
+        showToast('Saving...', 'info');
         const response = await api.put('/config', config);
         
-        // Update state with new config
         state.config = response.config;
-        
-        showToast('✅ Settings saved and applied!', 'success');
-        console.log('Configuration saved:', response);
-        
-        // Update live display
-        document.getElementById('confidence-value').textContent = `${Math.round(confidence * 100)}%`;
-        if (response.config) {
-            document.getElementById('model-name').textContent = config.detection?.model?.split('/').pop() || 'Unknown';
-        }
+        showToast('Settings saved!', 'success');
         
     } catch (error) {
         console.error('Failed to save settings:', error);
-        showToast('❌ Failed to save settings', 'error');
-    }
-}
-
-async function reloadConfig() {
-    try {
-        showToast('Reloading configuration from file...', 'info');
-        const response = await api.post('/config/reload');
-        
-        state.config = response.config;
-        
-        if (state.currentPage === 'settings') {
-            loadSettings();
-        }
-        
-        showToast(response.message, 'success');
-        console.log('Configuration reloaded:', response);
-        
-    } catch (error) {
-        console.error('Failed to reload config:', error);
-        showToast('❌ Failed to reload config', 'error');
+        showToast('Save failed', 'error');
     }
 }
 
@@ -376,10 +346,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
+    // Menu buttons - Home page navigation
+    document.querySelectorAll('.menu-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const page = btn.getAttribute('data-page');
+            switchPage(page);
+        });
+    });
+    
     // Live Feed controls
     document.getElementById('btn-start').addEventListener('click', startCamera);
     document.getElementById('btn-stop').addEventListener('click', stopCamera);
     document.getElementById('btn-capture').addEventListener('click', captureFrame);
+    
+    // Driving Mode buttons
+    document.getElementById('btn-casual-mode').addEventListener('click', () => {
+        showToast('Casual Mode - Coming Soon!', 'info');
+        // TODO: Implement casual driving mode
+    });
+    
+    document.getElementById('btn-gamified-mode').addEventListener('click', () => {
+        showToast('Gamified Mode - Coming Soon!', 'info');
+        // TODO: Implement gamified driving mode
+    });
     
     // Logs controls
     document.getElementById('btn-refresh-logs').addEventListener('click', loadLogs);
@@ -389,12 +378,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
     document.getElementById('btn-load-settings').addEventListener('click', loadSettings);
-    document.getElementById('btn-reload-config').addEventListener('click', reloadConfig);
     
     // Confidence slider update
     document.getElementById('setting-confidence').addEventListener('input', (e) => {
-        const value = (e.target.value / 100).toFixed(2);
-        document.getElementById('confidence-display').textContent = value;
+        const value = e.target.value;
+        document.getElementById('confidence-display').textContent = value + '%';
     });
     
     // Connect WebSocket
@@ -405,6 +393,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Periodic status check
     setInterval(checkStatus, 10000);
+    
+    // Start on home page
+    switchPage('home');
     
     console.log('✓ Application ready!');
 });

@@ -137,25 +137,40 @@ Or manually: cd backend && python main.py
 Local: http://localhost:5000
 Network: http://<YOUR_PI_IP>:5000
 
-## Usage
+## 🎮 Usage
+
+### Touchscreen Interface (2.8" LCD - 640x480)
+
+The system features a touch-optimized interface with **4 main buttons**:
+
+1. **📹 Live Feed** - Real-time detection with bounding boxes
+2. **🚗 Driving Mode** - Choose Casual or Gamified driving assistance
+3. **⚙️ Settings** - Configure camera and detection parameters
+4. **📋 Logs** - View detection and system logs
+
+See **[TOUCHSCREEN_UI.md](TOUCHSCREEN_UI.md)** for complete touchscreen interface guide.
 
 ### Live Feed Page
-- Click "Start Camera" to begin detection
+- Tap **"▶ Start"** to begin detection
 - View real-time detections with bounding boxes
 - Monitor FPS and detection count
-- Click "Capture" to save current frame
+- Tap **"📷"** to save current frame
+- Tap **"← Back"** to return home
 
-### Logs Page
-- View system logs in real-time
-- Filter by log level (INFO, WARNING, ERROR)
-- Refresh or clear display
+### Driving Mode Page
+- **Casual Mode** - Simple, clean detection display
+- **Gamified Mode** - Score points and achievements (coming soon)
 
 ### Settings Page
-- Adjust camera resolution and FPS
-- Change detection confidence threshold
-- Configure model path
-- Click "Save Settings" - changes apply automatically!
-- Or click "Reload from config.json" after manually editing the file
+- Adjust camera resolution (640x480, 800x600, 1280x720)
+- Change FPS (15, 30, 60)
+- Set detection confidence threshold (slider)
+- Tap **"💾 Save"** - changes apply automatically!
+
+### Logs Page
+- View detection logs in real-time
+- Filter by level (All, INFO, WARN, ERROR)
+- Refresh or clear display
 
 ## Configuration
 

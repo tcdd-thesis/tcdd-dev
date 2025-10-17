@@ -37,3 +37,49 @@
 2025-10-17 01:19:56,161 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:19:56] "GET /api/status HTTP/1.1" 200 -
 2025-10-17 01:20:06,058 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:20:06] "GET /api/status HTTP/1.1" 200 -
 2025-10-17 01:20:16,164 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 01:20:16] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:04:44,454 - config - INFO - Registered config change callback: on_config_change
+2025-10-17 12:04:44,459 - __main__ - INFO - ============================================================
+2025-10-17 12:04:44,459 - __main__ - INFO - Sign Detection System Starting...
+2025-10-17 12:04:44,460 - __main__ - INFO - ============================================================
+2025-10-17 12:04:44,460 - __main__ - INFO - Initializing camera...
+2025-10-17 12:04:44,460 - camera - INFO - Initializing OpenCV VideoCapture...
+2025-10-17 12:04:56,740 - camera - INFO - OpenCV camera initialized: 640x480
+2025-10-17 12:04:56,740 - __main__ - INFO - Initializing detector...
+2025-10-17 12:04:56,741 - detector - INFO - Loading YOLO model from backend/models/best.pt...
+2025-10-17 12:04:56,741 - detector - WARNING - Model file not found: backend/models/best.pt
+2025-10-17 12:04:56,741 - detector - INFO - YOLO will download default model on first run
+2025-10-17 12:04:57,733 - detector - ERROR - Failed to load model: [Errno 2] No such file or directory: 'backend\\models\\best.pt'
+2025-10-17 12:04:57,733 - __main__ - INFO - Initialization complete!
+2025-10-17 12:04:57,733 - __main__ - INFO - Server starting on http://0.0.0.0:5000
+2025-10-17 12:04:57,733 - __main__ - INFO - Press Ctrl+C to stop
+2025-10-17 12:04:57,734 - __main__ - INFO - ============================================================
+2025-10-17 12:04:57,742 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.254.134:5000
+2025-10-17 12:04:57,742 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-10-17 12:05:10,368 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "GET / HTTP/1.1" 200 -
+2025-10-17 12:05:10,681 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "GET /static/js/app.js HTTP/1.1" 200 -
+2025-10-17 12:05:10,682 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "GET /static/css/style.css HTTP/1.1" 200 -
+2025-10-17 12:05:10,770 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "GET /socket.io/?EIO=4&transport=polling&t=PdmLy_g HTTP/1.1" 200 -
+2025-10-17 12:05:10,771 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:05:10,780 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-10-17 12:05:10,782 - __main__ - INFO - Client connected via WebSocket
+2025-10-17 12:05:10,783 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "POST /socket.io/?EIO=4&transport=polling&t=PdmLy_s&sid=4ttsnpJcj5XzFoNaAAAA HTTP/1.1" 200 -
+2025-10-17 12:05:10,789 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:10] "GET /socket.io/?EIO=4&transport=polling&t=PdmLy_u&sid=4ttsnpJcj5XzFoNaAAAA HTTP/1.1" 200 -
+2025-10-17 12:05:20,782 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:20] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:05:22,028 - camera - INFO - Camera started
+2025-10-17 12:05:22,029 - __main__ - INFO - Camera started
+2025-10-17 12:05:22,030 - __main__ - INFO - Starting video stream...
+2025-10-17 12:05:22,030 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:22] "POST /api/camera/start HTTP/1.1" 200 -
+2025-10-17 12:05:31,087 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:31] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:05:35,757 - camera - INFO - Camera stopped
+2025-10-17 12:05:35,788 - __main__ - INFO - Camera stopped
+2025-10-17 12:05:35,788 - __main__ - INFO - Video stream stopped
+2025-10-17 12:05:35,790 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:35] "POST /api/camera/stop HTTP/1.1" 200 -
+2025-10-17 12:05:36,180 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:36] "GET /api/config HTTP/1.1" 200 -
+2025-10-17 12:05:40,780 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:40] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:05:45,396 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:45] "GET /api/logs?limit=200 HTTP/1.1" 200 -
+2025-10-17 12:05:50,768 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:05:50] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:06:01,173 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:06:01] "GET /api/status HTTP/1.1" 200 -
+2025-10-17 12:06:11,164 - werkzeug - INFO - 127.0.0.1 - - [17/Oct/2025 12:06:11] "GET /api/status HTTP/1.1" 200 -
