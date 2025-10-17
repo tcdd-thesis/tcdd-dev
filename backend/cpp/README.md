@@ -167,6 +167,17 @@ cd backend
 ./cpp_server --file path/to/video.mp4
 ```
 
+### Without ML Detection (for troubleshooting)
+
+```bash
+./cpp_server --no-ml
+```
+
+This disables model loading and inference, showing only the camera feed. Useful for:
+- Testing camera feed without ML overhead
+- Isolating camera vs detection issues
+- Debugging false positive problems
+
 ### With Vulkan Acceleration
 
 ```bash
@@ -183,6 +194,7 @@ cd backend
 
 ```bash
 ./cpp_server --verbose --vulkan --file video.mp4
+./cpp_server --verbose --no-ml  # Test camera feed only
 ```
 
 ## API Endpoints

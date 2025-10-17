@@ -15,10 +15,14 @@ cd ../..
 # Run with verbose logging (for debugging)
 ./backend/cpp_server --verbose
 
+# Run without ML detection (troubleshooting)
+./backend/cpp_server --no-ml
+
 # With options
 ./backend/cpp_server --vulkan           # Enable Vulkan
 ./backend/cpp_server --file video.mp4   # Use video file
 ./backend/cpp_server --verbose --vulkan # Combine flags
+./backend/cpp_server --verbose --no-ml  # Camera feed only (no detection)
 ./backend/cpp_server --help             # Show help
 ```
 
@@ -129,6 +133,28 @@ cp model.ncnn.* backend/model/
 | Low FPS | Enable Vulkan or reduce resolution |
 | Build errors | Check dependencies: `pkg-config --modversion opencv4` |
 | Port in use | Change `cppServerPort` in config |
+| False positives | Try `--no-ml` flag to test camera feed without detection |
+| Too many detections | Increase `confidenceThreshold` in config.json |
+
+### Debug Detection Issues
+
+```bash
+# Test camera feed without ML
+./backend/cpp_server --verbose --no-ml
+
+# If feed is clean → problem is in detection
+# If feed has issues → problem is in camera/preprocessing
+
+# Adjust detection thresholds
+# Edit shared/config.json:
+{
+  "detection": {
+    "confidenceThreshold": 0.7,  # Increase to reduce false positives
+    "nmsThreshold": 0.5,
+    "iouThreshold": 0.5
+  }
+}
+```
 
 ## Systemd Service
 

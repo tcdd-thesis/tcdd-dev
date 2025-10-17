@@ -33,6 +33,7 @@ void printUsage(const char* progName) {
     std::cout << "  -h, --help        Show this help message\n";
     std::cout << "  -v, --vulkan      Enable Vulkan compute (if available)\n";
     std::cout << "  --verbose         Enable verbose logging\n";
+    std::cout << "  --no-ml           Disable ML detection (camera feed only)\n";
     std::cout << "  -f, --file PATH   Use video file instead of camera\n";
     std::cout << "  -c, --config PATH Specify custom config file path\n";
     std::cout << "\n";
@@ -42,6 +43,7 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     bool useVulkan = false;
     bool verboseLogging = false;
+    bool disableML = false;
     std::string videoFile;
     std::string configPath;
     
@@ -55,6 +57,8 @@ int main(int argc, char* argv[]) {
             useVulkan = true;
         } else if (arg == "--verbose") {
             verboseLogging = true;
+        } else if (arg == "--no-ml") {
+            disableML = true;
         } else if (arg == "-f" || arg == "--file") {
             if (i + 1 < argc) {
                 videoFile = argv[++i];
@@ -131,32 +135,39 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Initialize detector
+    // Initialize detector (skip if --no-ml flag is set)
     Detector detector;
-    auto modelPaths = config.getArray<std::string>("detection.modelPath");
-    if (modelPaths.size() < 2) {
-        std::cerr << "✗ Invalid model path configuration. Need param and bin files." << std::endl;
-        return 1;
-    }
+    bool mlEnabled = !disableML;
     
-    if (!detector.initialize(
-        modelPaths[0],  // param file
-        modelPaths[1],  // bin file
-        config.getArray<int>("detection.inputSize"),
-        config.get<float>("detection.confidenceThreshold", 0.5f),
-        config.get<float>("detection.nmsThreshold", 0.5f),
-        config.get<float>("detection.iouThreshold", 0.5f),
-        useVulkan || config.get<bool>("performance.useVulkan", false)
-    )) {
-        std::cerr << "✗ Failed to initialize detector" << std::endl;
-        return 1;
-    }
-    
-    // Try to load class names
-    std::string labelsPath = config.get<std::string>("detection.labelsPath", "backend/model/labels.txt");
-    if (!detector.loadClassNames(labelsPath)) {
-        std::cerr << "⚠ Warning: Could not load class labels from: " << labelsPath << std::endl;
-        std::cerr << "  Detections will use numeric class IDs instead of names." << std::endl;
+    if (mlEnabled) {
+        auto modelPaths = config.getArray<std::string>("detection.modelPath");
+        if (modelPaths.size() < 2) {
+            std::cerr << "✗ Invalid model path configuration. Need param and bin files." << std::endl;
+            return 1;
+        }
+        
+        if (!detector.initialize(
+            modelPaths[0],  // param file
+            modelPaths[1],  // bin file
+            config.getArray<int>("detection.inputSize"),
+            config.get<float>("detection.confidenceThreshold", 0.5f),
+            config.get<float>("detection.nmsThreshold", 0.5f),
+            config.get<float>("detection.iouThreshold", 0.5f),
+            useVulkan || config.get<bool>("performance.useVulkan", false)
+        )) {
+            std::cerr << "✗ Failed to initialize detector" << std::endl;
+            return 1;
+        }
+        
+        // Try to load class names
+        std::string labelsPath = config.get<std::string>("detection.labelsPath", "backend/model/labels.txt");
+        if (!detector.loadClassNames(labelsPath)) {
+            std::cerr << "⚠ Warning: Could not load class labels from: " << labelsPath << std::endl;
+            std::cerr << "  Detections will use numeric class IDs instead of names." << std::endl;
+        }
+    } else {
+        std::cout << "\n⚠ ML Detection DISABLED (--no-ml flag set)" << std::endl;
+        std::cout << "  Camera feed will be shown without object detection\n" << std::endl;
     }
     
     // Initialize HTTP server
@@ -224,15 +235,23 @@ int main(int argc, char* argv[]) {
         metrics.camera_frame_time_ms = 
             std::chrono::duration<double, std::milli>(captureEnd - frameStart).count();
         
-        // Run detection
-        std::vector<Detection> detections = detector.detect(frame);
-        metrics.inference_time_ms = detector.getInferenceTime();
-        metrics.detections_count = detections.size();
-        totalDetections += detections.size();
-        metrics.total_detections = totalDetections;
-        
-        // Draw detections on frame
-        Detector::drawDetections(frame, detections);
+        // Run detection (skip if --no-ml flag is set)
+        std::vector<Detection> detections;
+        if (mlEnabled) {
+            detections = detector.detect(frame);
+            metrics.inference_time_ms = detector.getInferenceTime();
+            metrics.detections_count = detections.size();
+            totalDetections += detections.size();
+            metrics.total_detections = totalDetections;
+            
+            // Draw detections on frame
+            Detector::drawDetections(frame, detections);
+        } else {
+            // ML disabled - no inference
+            metrics.inference_time_ms = 0.0;
+            metrics.detections_count = 0;
+            metrics.total_detections = 0;
+        }
         
         // Encode to JPEG (for timing)
         auto encodeStart = std::chrono::high_resolution_clock::now();
