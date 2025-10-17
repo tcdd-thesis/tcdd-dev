@@ -22,6 +22,7 @@ from camera import Camera
 from detector import Detector
 from config import Config
 from metrics_logger import MetricsLogger
+import psutil
 
 # Initialize Flask app
 app = Flask(__name__,
@@ -227,7 +228,7 @@ def reload_config():
     """
     try:
         reloaded = config.reload()
-        
+
         if reloaded:
             logger.info("✅ Configuration reloaded from file")
             return jsonify({
@@ -240,85 +241,53 @@ def reload_config():
                 'message': 'No changes detected in config file',
                 'config': config.get_all()
             }), 200
-            
+
     except Exception as e:
         logger.error(f"❌ Error reloading config: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/logs', methods=['GET'])
-def get_logs():
-    """Get recent log entries"""
-    try:
-        log_file = config.get('logging.file', 'data/logs/app.log')
-        limit = request.args.get('limit', 100, type=int)
-        
-        if not os.path.exists(log_file):
-            return jsonify({'logs': []}), 200
-        
-        with open(log_file, 'r') as f:
-            lines = f.readlines()
-            recent_logs = lines[-limit:]
-        
-        return jsonify({'logs': recent_logs}), 200
-        
-    except Exception as e:
-        logger.error(f"Error getting logs: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'ok', 'service': 'sign-detection'}), 200
-
 # ============================================================================
-# WEBSOCKET HANDLERS
+# STREAMING LOOP WITH METRICS
 # ============================================================================
-
-@socketio.on('connect')
-def handle_connect():
-    """Handle client connection"""
-    logger.info("Client connected via WebSocket")
-    emit('connection_response', {'status': 'connected'})
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle client disconnection"""
-    logger.info("Client disconnected from WebSocket")
 
 def stream_video():
-    """Stream video frames with detections to connected clients and log metrics"""
+    """Stream video frames with detections and log C++-style metrics to CSV"""
     global is_streaming
-    
     logger.info("Starting video stream...")
     frame_count = 0
     total_detections = 0
-    last_time = datetime.now()
-    
+    dropped_frames = 0
+    last_fps_time = datetime.now()
+    jpeg_quality = config.get('streaming.quality', 85)
+    process = psutil.Process(os.getpid())
+
     while is_streaming:
         try:
-            frame_start = datetime.now()
+            # Capture frame timing
+            frame_capture_start = datetime.now()
             frame = camera.get_frame()
-            
+            frame_capture_end = datetime.now()
             if frame is None:
+                dropped_frames += 1
+                socketio.sleep(0)
                 continue
-            
-            # Run detection
+
+            # Inference timing
+            inference_start = datetime.now()
             detections = detector.detect(frame)
-            
-            # Draw detections on frame
+            inference_end = datetime.now()
+
             annotated_frame = detector.draw_detections(frame, detections)
-            
-            # Encode frame as JPEG
+
+            # JPEG encode timing
             import cv2
-            encode_start = datetime.now()
-            _, buffer = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            encode_end = datetime.now()
-            
-            # Convert to base64
+            jpeg_start = datetime.now()
+            _, buffer = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)])
+            jpeg_end = datetime.now()
+
+            # Emit to clients
             import base64
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
-            
-            # Send to connected clients
             socketio.emit('video_frame', {
                 'frame': frame_base64,
                 'detections': [
@@ -330,33 +299,40 @@ def stream_video():
                 ],
                 'count': len(detections)
             })
-            
-            # Metrics logging
+
+            # Metrics
             frame_count += 1
             total_detections += len(detections)
-            
-            # Calculate FPS
             now = datetime.now()
-            elapsed = (now - last_time).total_seconds()
-            fps = frame_count / elapsed if elapsed > 0 else 0
-            inference_time_ms = (encode_start - frame_start).total_seconds() * 1000
-            encode_time_ms = (encode_end - encode_start).total_seconds() * 1000
+            elapsed = (now - last_fps_time).total_seconds()
+            fps = (frame_count / elapsed) if elapsed > 0 else 0.0
+            camera_frame_time_ms = (frame_capture_end - frame_capture_start).total_seconds() * 1000.0
+            inference_time_ms = (inference_end - inference_start).total_seconds() * 1000.0
+            jpeg_encode_time_ms = (jpeg_end - jpeg_start).total_seconds() * 1000.0
+            cpu_usage_percent = psutil.cpu_percent(interval=None)
+            ram_usage_mb = process.memory_info().rss / (1024 * 1024)
+            queue_size = 0
+
             metrics_logger.log(
-                frame=frame_count,
+                timestamp_iso=now.isoformat(),
                 fps=fps,
-                detections=len(detections),
                 inference_time_ms=inference_time_ms,
-                encode_time_ms=encode_time_ms,
-                total_detections=total_detections
+                detections_count=len(detections),
+                cpu_usage_percent=cpu_usage_percent,
+                ram_usage_mb=ram_usage_mb,
+                camera_frame_time_ms=camera_frame_time_ms,
+                jpeg_encode_time_ms=jpeg_encode_time_ms,
+                total_detections=total_detections,
+                dropped_frames=dropped_frames,
+                queue_size=queue_size
             )
-            
-            # Small delay to control frame rate
+
             socketio.sleep(1.0 / config.get('camera.fps', 30))
-            
+
         except Exception as e:
             logger.error(f"Error in video stream: {e}")
             socketio.sleep(0.1)
-    
+
     logger.info("Video stream stopped")
     metrics_logger.close()
 

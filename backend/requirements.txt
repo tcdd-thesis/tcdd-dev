@@ -14,6 +14,9 @@ ultralytics==8.0.228
 # Raspberry Pi Camera (only works on RPi)
 # picamera2==0.3.16
 
+# System metrics for logging
+psutil==6.0.0
+
 # Optional: For additional model formats
 # tensorflow==2.15.0
 # torch==2.1.0

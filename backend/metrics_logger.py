@@ -21,23 +21,41 @@ class MetricsLogger:
         self.filepath = os.path.join(self.log_dir, filename)
         self.file = open(self.filepath, 'w', newline='')
         self.writer = csv.writer(self.file)
+        # Match C++ header order
         self.writer.writerow([
-            'timestamp', 'frame', 'fps', 'detections', 'inference_time_ms', 'encode_time_ms', 'total_detections'
+            'timestamp',
+            'fps',
+            'inference_time_ms',
+            'detections_count',
+            'cpu_usage_percent',
+            'ram_usage_mb',
+            'camera_frame_time_ms',
+            'jpeg_encode_time_ms',
+            'total_detections',
+            'dropped_frames',
+            'queue_size'
         ])
         self.file.flush()
 
-    def log(self, frame, fps, detections, inference_time_ms, encode_time_ms, total_detections):
+    def log(self, *, timestamp_iso: str, fps: float, inference_time_ms: float,
+            detections_count: int, cpu_usage_percent: float, ram_usage_mb: float,
+            camera_frame_time_ms: float, jpeg_encode_time_ms: float,
+            total_detections: int, dropped_frames: int, queue_size: int):
         with self.lock:
             self.frame_count += 1
             if self.frame_count % self.interval == 0:
                 self.writer.writerow([
-                    datetime.now().isoformat(),
-                    frame,
-                    fps,
-                    detections,
+                    timestamp_iso,
+                    f"{fps:.2f}",
                     f"{inference_time_ms:.2f}",
-                    f"{encode_time_ms:.2f}",
-                    total_detections
+                    detections_count,
+                    f"{cpu_usage_percent:.2f}",
+                    f"{ram_usage_mb:.2f}",
+                    f"{camera_frame_time_ms:.2f}",
+                    f"{jpeg_encode_time_ms:.2f}",
+                    total_detections,
+                    dropped_frames,
+                    queue_size
                 ])
                 self.file.flush()
 
