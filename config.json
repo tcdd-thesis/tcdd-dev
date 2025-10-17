@@ -18,7 +18,11 @@
   },
   
   "detection": {
-    "model": "backend/models/best.pt",
+  "engine": "ultralytics",
+  "model": "backend/models/best.pt",
+  "ncnn_param": "backend/models/model.ncnn.param",
+  "ncnn_bin": "backend/models/model.ncnn.bin",
+  "labels": "backend/models/labels.txt",
     "confidence": 0.5,
     "iou_threshold": 0.45,
     "max_detections": 100,
@@ -26,7 +30,15 @@
     "show_labels": true,
     "show_confidence": true,
     "bbox_thickness": 2,
-    "font_scale": 0.5
+    "font_scale": 0.5,
+    "ultralytics": {
+      "confidence": 0.5,
+      "iou_threshold": 0.45
+    },
+    "ncnn": {
+      "confidence": 0.5,
+      "iou_threshold": 0.45
+    }
   },
   
   "streaming": {

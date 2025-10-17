@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Sign Detector - YOLO Detection Engine
-Handles sign detection using YOLOv8
+Sign Detector - Detection Engine
+Handles sign detection using Ultralytics YOLOv8 or NCNN
 """
 
 import logging
@@ -19,9 +19,17 @@ except ImportError:
     HAS_YOLO = False
     logger.warning("ultralytics not available, using mock detector")
 
+# Try importing NCNN
+try:
+    import ncnn
+    HAS_NCNN = True
+except ImportError:
+    HAS_NCNN = False
+    logger.warning("ncnn not available, NCNN engine will not work")
+
 
 class Detector:
-    """YOLO-based sign detector"""
+    """Sign detector supporting Ultralytics YOLOv8 and NCNN"""
     
     def __init__(self, config):
         """
@@ -31,43 +39,66 @@ class Detector:
             config: Configuration object
         """
         self.config = config
+        self.engine = config.get('detection.engine', 'ultralytics')
         self.model = None
         self.loaded = False
-        
-        # Detection settings
-        self.model_path = config.get('detection.model', 'backend/models/yolov8n.pt')
-        self.confidence = config.get('detection.confidence', 0.5)
-        
+        self.labels = self._load_labels(config.get('detection.labels', 'backend/models/labels.txt'))
+        self.confidence = self._get_confidence()
+        self.iou_threshold = self._get_iou_threshold()
+        self.model_path = config.get('detection.model', 'backend/models/best.pt')
+        self.ncnn_param = config.get('detection.ncnn_param', 'backend/models/model.ncnn.param')
+        self.ncnn_bin = config.get('detection.ncnn_bin', 'backend/models/model.ncnn.bin')
+        self.input_size = (config.get('camera.width', 640), config.get('camera.height', 480))
         self._load_model()
     
+    def _get_confidence(self):
+        # Per-engine override, fallback to global
+        if self.engine == 'ncnn':
+            return self.config.get('detection.ncnn.confidence', self.config.get('detection.confidence', 0.5))
+        else:
+            return self.config.get('detection.ultralytics.confidence', self.config.get('detection.confidence', 0.5))
+
+    def _get_iou_threshold(self):
+        if self.engine == 'ncnn':
+            return self.config.get('detection.ncnn.iou_threshold', self.config.get('detection.iou_threshold', 0.45))
+        else:
+            return self.config.get('detection.ultralytics.iou_threshold', self.config.get('detection.iou_threshold', 0.45))
+
+    def _load_labels(self, labels_path):
+        if not os.path.exists(labels_path):
+            logger.warning(f"Labels file not found: {labels_path}")
+            return None
+        with open(labels_path, 'r') as f:
+            return [line.strip() for line in f if line.strip()]
+
     def _load_model(self):
-        """Load YOLO model"""
-        try:
+        if self.engine == 'ultralytics':
             if not HAS_YOLO:
-                logger.warning("YOLO not available - using mock detector")
+                logger.warning("Ultralytics not available - using mock detector")
                 self.loaded = False
                 return
-            
-            logger.info(f"Loading YOLO model from {self.model_path}...")
-            
-            # Check if model exists
+            logger.info(f"Loading Ultralytics YOLO model from {self.model_path}...")
             if not os.path.exists(self.model_path):
                 logger.warning(f"Model file not found: {self.model_path}")
                 logger.info("YOLO will download default model on first run")
-            
-            # Load model
             self.model = YOLO(self.model_path)
-            
-            # Warm up model with dummy input
             dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
             _ = self.model(dummy_frame, conf=self.confidence, verbose=False)
-            
             self.loaded = True
             logger.info(f"Model loaded successfully! Classes: {len(self.model.names)}")
-            logger.info(f"Model classes: {list(self.model.names.values())}")
-            
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+        elif self.engine == 'ncnn':
+            if not HAS_NCNN:
+                logger.warning("NCNN not available - using mock detector")
+                self.loaded = False
+                return
+            logger.info(f"Loading NCNN model: {self.ncnn_param}, {self.ncnn_bin}")
+            self.net = ncnn.Net()
+            self.net.load_param(self.ncnn_param)
+            self.net.load_model(self.ncnn_bin)
+            self.loaded = True
+            logger.info("NCNN model loaded successfully!")
+        else:
+            logger.warning(f"Unknown detection engine: {self.engine}")
             self.loaded = False
     
     def detect(self, frame):
@@ -86,17 +117,24 @@ class Detector:
         if frame is None:
             return []
         
+        if not self.loaded:
+            return self._mock_detect(frame)
+        
+        if self.engine == 'ultralytics':
+            return self._detect_ultralytics(frame)
+        elif self.engine == 'ncnn':
+            return self._detect_ncnn(frame)
+        else:
+            return self._mock_detect(frame)
+    
+    def _detect_ultralytics(self, frame):
         try:
-            if not self.loaded or not HAS_YOLO:
-                return self._mock_detect(frame)
-            
-            # Run inference
             results = self.model(
                 frame,
                 conf=self.confidence,
+                iou=self.iou_threshold,
                 verbose=False
             )
-            
             detections = []
             
             if results and len(results) > 0:
@@ -108,25 +146,68 @@ class Detector:
                         xyxy = box.xyxy[0].cpu().numpy()
                         conf = float(box.conf[0].cpu().numpy())
                         cls = int(box.cls[0].cpu().numpy())
+                        class_name = self.model.names[cls] if self.model and hasattr(self.model, 'names') else str(cls)
                         
                         detections.append({
-                            'class_name': self.model.names[cls],
+                            'class_name': class_name,
                             'confidence': conf,
                             'bbox': [int(x) for x in xyxy]  # [x1, y1, x2, y2]
                         })
             
             return detections
-            
+        
         except Exception as e:
-            logger.error(f"Detection error: {e}")
+            logger.error(f"Ultralytics detection error: {e}")
+            return []
+    
+    def _detect_ncnn(self, frame):
+        try:
+            # Preprocess: resize, normalize, convert to RGB
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, self.input_size)
+            img = img.astype(np.float32) / 255.0
+            img = np.transpose(img, (2, 0, 1))  # HWC to CHW
+            img = np.expand_dims(img, 0)  # Add batch dim
+            img = np.ascontiguousarray(img)
+            
+            # NCNN expects ncnn.Mat
+            ncnn_img = ncnn.Mat(img)
+            ex = self.net.create_extractor()
+            ex.input("input", ncnn_img)
+            out = ex.extract("output")
+            
+            # Postprocess: parse output (assume YOLOv8 format)
+            # This part may need adjustment for your model's output
+            detections = []
+            
+            for i in range(out.h):
+                row = out.row(i)
+                conf = float(row[4])
+                
+                if conf < self.confidence:
+                    continue
+                
+                x1, y1, x2, y2 = [int(row[j]) for j in range(0, 4)]
+                cls = int(row[5]) if len(row) > 5 else 0
+                class_name = self.labels[cls] if self.labels and cls < len(self.labels) else str(cls)
+                
+                detections.append({
+                    'class_name': class_name,
+                    'confidence': conf,
+                    'bbox': [x1, y1, x2, y2]
+                })
+            
+            return detections
+        
+        except Exception as e:
+            logger.error(f"NCNN detection error: {e}")
             return []
     
     def _mock_detect(self, frame):
         """
-        Mock detector for testing without YOLO
+        Mock detector for testing without YOLO or NCNN
         Returns dummy detections
         """
-        # Occasionally return a mock detection
         import random
         
         if random.random() > 0.7:  # 30% chance
@@ -205,8 +286,9 @@ class Detector:
     def get_info(self):
         """Get detector information"""
         return {
-            'model': self.model_path,
+            'engine': self.engine,
+            'model': self.model_path if self.engine == 'ultralytics' else self.ncnn_param,
             'loaded': self.loaded,
             'confidence_threshold': self.confidence,
-            'classes': list(self.model.names.values()) if self.loaded and self.model else []
+            'classes': self.labels if self.labels else []
         }
