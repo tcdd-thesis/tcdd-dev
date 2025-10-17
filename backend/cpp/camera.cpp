@@ -30,34 +30,58 @@ bool Camera::initialize(int width, int height, int fps, int bufferSize) {
 }
 
 bool Camera::tryOpenCamera(int cameraIndex) {
-    // Try V4L2 backend (common on Linux/Pi)
-    capture.open(cameraIndex, cv::CAP_V4L2);
+    // Try different backends in order
+    std::vector<std::pair<std::string, int>> backends = {
+        {"GStreamer", cv::CAP_GSTREAMER},
+        {"V4L2", cv::CAP_V4L2},
+        {"ANY", cv::CAP_ANY}
+    };
     
-    if (!capture.isOpened()) {
-        // Fallback to default backend
-        capture.open(cameraIndex);
+    for (const auto& [name, backend] : backends) {
+        std::cout << "  Trying " << name << " backend..." << std::endl;
+        
+        if (backend == cv::CAP_GSTREAMER) {
+            // GStreamer pipeline for libcamera (Raspberry Pi Camera Module V3)
+            std::string pipeline = "libcamerasrc ! video/x-raw,width=" + std::to_string(width) + 
+                                   ",height=" + std::to_string(height) + 
+                                   ",framerate=" + std::to_string(fps) + "/1 ! videoconvert ! appsink";
+            capture.open(pipeline, cv::CAP_GSTREAMER);
+        } else {
+            capture.open(cameraIndex, backend);
+        }
+        
+        if (capture.isOpened()) {
+            // Test if we can actually read a frame
+            cv::Mat testFrame;
+            if (capture.read(testFrame) && !testFrame.empty()) {
+                std::cout << "  ✓ " << name << " backend works!" << std::endl;
+                
+                // Set camera properties (may not work for all backends)
+                capture.set(cv::CAP_PROP_FRAME_WIDTH, width);
+                capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+                capture.set(cv::CAP_PROP_FPS, fps);
+                capture.set(cv::CAP_PROP_BUFFERSIZE, bufferSize);
+                
+                // Verify settings
+                int actualWidth = capture.get(cv::CAP_PROP_FRAME_WIDTH);
+                int actualHeight = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
+                int actualFps = capture.get(cv::CAP_PROP_FPS);
+                
+                std::cout << "  Actual resolution: " << actualWidth << "x" << actualHeight 
+                          << " @ " << actualFps << " FPS" << std::endl;
+                
+                opened = true;
+                return true;
+            } else {
+                std::cout << "  ✗ " << name << " opened but cannot read frames" << std::endl;
+                capture.release();
+            }
+        } else {
+            std::cout << "  ✗ " << name << " backend failed to open" << std::endl;
+        }
     }
     
-    if (!capture.isOpened()) {
-        return false;
-    }
-    
-    // Set camera properties
-    capture.set(cv::CAP_PROP_FRAME_WIDTH, width);
-    capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
-    capture.set(cv::CAP_PROP_FPS, fps);
-    capture.set(cv::CAP_PROP_BUFFERSIZE, bufferSize);
-    
-    // Verify settings
-    int actualWidth = capture.get(cv::CAP_PROP_FRAME_WIDTH);
-    int actualHeight = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-    int actualFps = capture.get(cv::CAP_PROP_FPS);
-    
-    std::cout << "  Actual resolution: " << actualWidth << "x" << actualHeight 
-              << " @ " << actualFps << " FPS" << std::endl;
-    
-    opened = true;
-    return true;
+    return false;
 }
 
 bool Camera::initializeFromFile(const std::string& videoPath) {
