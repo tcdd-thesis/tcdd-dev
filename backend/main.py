@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 # Global instances
 camera = None
 detector = None
-is_streaming = False
+is_streaming = True  # Always streaming in backend
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -115,9 +115,8 @@ config.register_change_callback(on_config_change)
 # ============================================================================
 
 def initialize():
-    """Initialize camera and detector"""
-    global camera, detector
-    
+    """Initialize camera and detector and start background streaming"""
+    global camera, detector, is_streaming
     try:
         logger.info("Initializing camera...")
         camera = Camera(config)
@@ -126,6 +125,10 @@ def initialize():
         detector = Detector(config)
         
         logger.info("Initialization complete!")
+        # Start camera and detection immediately
+        camera.start()
+        is_streaming = True
+        socketio.start_background_task(stream_video)
         return True
         
     except Exception as e:
@@ -170,43 +173,13 @@ def get_status():
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
-    """Start camera and detection"""
-    global is_streaming
-    
-    try:
-        if camera and detector:
-            camera.start()
-            is_streaming = True
-            logger.info("Camera started")
-            
-            # Start sending frames via WebSocket
-            socketio.start_background_task(stream_video)
-            
-            return jsonify({'message': 'Camera started'}), 200
-        else:
-            return jsonify({'error': 'System not initialized'}), 500
-            
-    except Exception as e:
-        logger.error(f"Error starting camera: {e}")
-        return jsonify({'error': str(e)}), 500
+    """Start camera and detection (no-op, always running)"""
+    return jsonify({'message': 'Camera already running'}), 200
 
 @app.route('/api/camera/stop', methods=['POST'])
 def stop_camera():
-    """Stop camera and detection"""
-    global is_streaming
-    
-    try:
-        if camera:
-            camera.stop()
-            is_streaming = False
-            logger.info("Camera stopped")
-            return jsonify({'message': 'Camera stopped'}), 200
-        else:
-            return jsonify({'error': 'Camera not initialized'}), 500
-            
-    except Exception as e:
-        logger.error(f"Error stopping camera: {e}")
-        return jsonify({'error': str(e)}), 500
+    """Stop camera and detection (not supported in always-on mode)"""
+    return jsonify({'message': 'Camera always running in background'}), 200
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
