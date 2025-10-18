@@ -68,6 +68,29 @@ body.touchscreen {
     flex-shrink: 0; /* Prevent header from shrinking */
 }
 
+.status-panel {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.status-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.7);
+}
+
 .status-indicator {
     display: flex;
     align-items: center;

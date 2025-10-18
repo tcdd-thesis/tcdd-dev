@@ -11,7 +11,12 @@ const state = {
     fps: 0,
     detectionCount: 0,
     config: null,
-    configAutoReload: true
+    configAutoReload: true,
+    status: {
+        wifi: false,
+        backend: false,
+        camera: false
+    }
 };
 
 // API helper
@@ -92,12 +97,14 @@ async function startCamera() {
         
         state.streaming = true;
         document.getElementById('no-feed').style.display = 'none';
+        updateStatus('camera', true);
         
         showToast('Camera started!', 'success');
         
     } catch (error) {
         console.error('Failed to start camera:', error);
         showToast('Failed to start camera', 'error');
+        updateStatus('camera', false);
     }
 }
 
@@ -108,6 +115,7 @@ async function stopCamera() {
         
         state.streaming = false;
         document.getElementById('no-feed').style.display = 'flex';
+        updateStatus('camera', false);
         
         showToast('Camera stopped', 'success');
         
@@ -771,15 +779,16 @@ function connectWebSocket() {
     
     state.socket.on('connect', () => {
         console.log('WebSocket connected');
-        document.getElementById('status-dot').className = 'dot online';
-        document.getElementById('status-text').textContent = 'Online';
+        updateStatus('backend', true);
         showToast('Connected to server', 'success');
+        // Check full system status
+        checkSystemStatus();
     });
     
     state.socket.on('disconnect', () => {
         console.log('WebSocket disconnected');
-        document.getElementById('status-dot').className = 'dot offline';
-        document.getElementById('status-text').textContent = 'Offline';
+        updateStatus('backend', false);
+        updateStatus('camera', false);
         showToast('Disconnected from server', 'warning');
     });
     
@@ -814,17 +823,78 @@ function connectWebSocket() {
 // SYSTEM STATUS
 // ============================================================================
 
-async function checkStatus() {
+function updateStatus(component, isOnline) {
+    state.status[component] = isOnline;
+    
+    const statusElement = document.getElementById(`status-${component}`);
+    if (!statusElement) return;
+    
+    const dot = statusElement.querySelector('.status-dot');
+    
+    if (isOnline) {
+        dot.className = 'status-dot dot online';
+        statusElement.classList.add('connected');
+    } else {
+        dot.className = 'status-dot dot offline';
+        statusElement.classList.remove('connected');
+    }
+}
+
+async function checkWiFiStatus() {
+    // Check WiFi by trying to reach the backend
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        
+        await fetch('/api/status', { 
+            signal: controller.signal,
+            cache: 'no-cache'
+        });
+        
+        clearTimeout(timeoutId);
+        updateStatus('wifi', true);
+        return true;
+    } catch (error) {
+        updateStatus('wifi', false);
+        return false;
+    }
+}
+
+async function checkSystemStatus() {
+    try {
+        // Check WiFi
+        const hasWiFi = await checkWiFiStatus();
+        
+        if (!hasWiFi) {
+            updateStatus('backend', false);
+            updateStatus('camera', false);
+            return;
+        }
+        
+        // Check backend and camera
         const status = await api.get('/status');
         
+        updateStatus('backend', true);
+        updateStatus('camera', status.camera || false);
+        
+        // Update model info if available
         if (status.model) {
-            document.getElementById('model-name').textContent = status.model.split('/').pop();
+            const modelElement = document.getElementById('model-name');
+            if (modelElement) {
+                modelElement.textContent = status.model.split('/').pop();
+            }
         }
         
     } catch (error) {
         console.error('Failed to check status:', error);
+        updateStatus('backend', false);
+        updateStatus('camera', false);
     }
+}
+
+// Legacy function for backward compatibility
+async function checkStatus() {
+    await checkSystemStatus();
 }
 
 // ============================================================================
@@ -895,10 +965,10 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     
     // Initial status check
-    checkStatus();
+    checkSystemStatus();
     
-    // Periodic status check
-    setInterval(checkStatus, 10000);
+    // Periodic status checks
+    setInterval(checkSystemStatus, 5000);  // Check every 5 seconds
     
     // Start on home page
     switchPage('home');
