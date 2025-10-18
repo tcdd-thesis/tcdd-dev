@@ -580,7 +580,310 @@ body.touchscreen {
     animation: slideIn 0.3s ease;
 }
 
-@keyframes slideIn {
+/* Violations list */
+.violations-log-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    background: #0a0a0a;
+}
+
+.violations-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.violation-card {
+    background: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    border-left: 4px solid #666;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.violation-card * {
+    pointer-events: none;
+}
+
+.violation-card:hover {
+    background: #222;
+    transform: translateX(4px);
+}
+
+.violation-card.severity-low {
+    border-left-color: #4caf50;
+}
+
+.violation-card.severity-medium {
+    border-left-color: #ff9800;
+}
+
+.violation-card.severity-high {
+    border-left-color: #f44336;
+}
+
+.violation-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+}
+
+.violation-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.violation-main {
+    flex: 1;
+}
+
+.violation-type {
+    font-size: 16px;
+    font-weight: 600;
+    text-transform: capitalize;
+    margin-bottom: 4px;
+}
+
+.violation-location {
+    font-size: 13px;
+    color: #999;
+}
+
+.violation-meta {
+    text-align: right;
+}
+
+.violation-time {
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.violation-date {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+}
+
+.violation-card-footer {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.3);
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.violation-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+}
+
+.violation-badge .badge-label {
+    color: #888;
+}
+
+.violation-badge .badge-value {
+    color: #fff;
+    font-weight: 600;
+}
+
+.violation-badge.action-wrong {
+    background: rgba(244, 67, 54, 0.2);
+}
+
+.violation-badge.action-wrong .badge-value {
+    color: #f44336;
+}
+
+.violation-badge.action-right {
+    background: rgba(76, 175, 80, 0.2);
+}
+
+.violation-badge.action-right .badge-value {
+    color: #4caf50;
+}
+
+.violation-badge.action-unknown {
+    background: rgba(158, 158, 158, 0.2);
+}
+
+/* Modal for violation details */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-content {
+    background: #1a1a1a;
+    border-radius: 12px;
+    max-width: 600px;
+    max-height: 90vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.btn-close:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.detail-section {
+    margin-bottom: 20px;
+}
+
+.detail-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.detail-label {
+    font-size: 12px;
+    color: #888;
+}
+
+.detail-value {
+    font-size: 14px;
+    color: #fff;
+    font-weight: 500;
+}
+
+.detail-highlight {
+    color: #ff9800;
+    font-weight: 700;
+}
+
+.detail-link {
+    color: #2196f3;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.detail-link:hover {
+    text-decoration: underline;
+}
+
+.severity-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.severity-badge.severity-low {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+}
+
+.severity-badge.severity-medium {
+    background: rgba(255, 152, 0, 0.2);
+    color: #ff9800;
+}
+
+.severity-badge.severity-high {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+}
+
+.action-wrong {
+    color: #f44336;
+}
+
+.action-right {
+    color: #4caf50;
+}
+
+.action-unknown {
+    color: #999;
+}
+
+.status-auto {
+    color: #2196f3;
+}
+
+.status-pending {
+    color: #ff9800;
+}
+
+.status-confirmed {
+    color: #4caf50;
+}
+
+.logs-divider { height: 1px; background: #333; margin: 8px 0; }@keyframes slideIn {
     from {
         transform: translateX(400px);
         opacity: 0;

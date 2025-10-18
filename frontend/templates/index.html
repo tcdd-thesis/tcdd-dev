@@ -96,16 +96,27 @@
         <div id="page-logs" class="page">
             <div class="page-header">
                 <button class="btn-back" onclick="goHome()">← Back</button>
-                <h2>Activity Log</h2>
+                <h2>Violation Logs</h2>
             </div>
             
             <div class="controls-compact">
-                <button id="btn-refresh-logs" class="btn btn-primary btn-touch">↻ Refresh</button>
-                <button id="btn-clear-display" class="btn btn-secondary btn-touch">✕ Clear</button>
+                <button id="btn-refresh-logs" class="btn btn-primary btn-touch" onclick="loadViolations()">↻ Refresh</button>
+                <button id="btn-clear-display" class="btn btn-secondary btn-touch" onclick="clearViolationsDisplay()">✕ Clear</button>
             </div>
 
-            <div class="logs-container-friendly">
-                <div id="logs-content-friendly"></div>
+            <div class="violations-log-container">
+                <div id="violations-list" class="violations-list"></div>
+            </div>
+            
+            <!-- Detail Modal -->
+            <div id="violation-detail-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Violation Details</h3>
+                        <button class="btn-close" onclick="closeViolationDetail()">✕</button>
+                    </div>
+                    <div id="violation-detail-content" class="modal-body"></div>
+                </div>
             </div>
         </div>
 
