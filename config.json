@@ -24,8 +24,8 @@
       "backend/models/model.ncnn.bin"
     ],
     "labels": "backend/models/labels.txt",
-    "confidence": 0.5,
-    "iou_threshold": 0.45,
+    "confidence": 0.6,
+    "iou_threshold": 0.7,
     "max_detections": 100,
     "classes": [],
     "show_labels": true,

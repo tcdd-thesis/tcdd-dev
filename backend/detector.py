@@ -344,6 +344,11 @@ class Detector:
             
             logger.debug(f"Found {len(detections)} detections above confidence threshold {self.confidence}")
             
+            # Apply NMS to remove overlapping detections (add this BEFORE return)
+            if len(detections) > 1:
+                detections = self._apply_nms(detections, self.iou_threshold)
+                logger.debug(f"After NMS: {len(detections)} detections remaining")
+
             return detections
         
         except Exception as e:
@@ -352,6 +357,59 @@ class Detector:
             logger.error(traceback.format_exc())
             return []
     
+    def _apply_nms(self, detections, iou_threshold):
+        """
+        Apply Non-Maximum Suppression to remove overlapping detections
+        
+        Args:
+            detections: List of detection dicts with 'bbox' and 'confidence'
+            iou_threshold: IOU threshold for considering boxes as duplicates
+            
+        Returns:
+            Filtered list of detections after NMS
+        """
+        if len(detections) == 0:
+            return detections
+        
+        # Extract boxes and scores
+        boxes = np.array([d['bbox'] for d in detections])  # [[x1, y1, x2, y2], ...]
+        scores = np.array([d['confidence'] for d in detections])
+        
+        # Calculate areas
+        x1 = boxes[:, 0]
+        y1 = boxes[:, 1]
+        x2 = boxes[:, 2]
+        y2 = boxes[:, 3]
+        areas = (x2 - x1 + 1) * (y2 - y1 + 1)
+        
+        # Sort by confidence (descending)
+        order = scores.argsort()[::-1]
+        
+        keep = []
+        while order.size > 0:
+            # Pick detection with highest confidence
+            i = order[0]
+            keep.append(i)
+            
+            # Calculate IOU with remaining boxes
+            xx1 = np.maximum(x1[i], x1[order[1:]])
+            yy1 = np.maximum(y1[i], y1[order[1:]])
+            xx2 = np.minimum(x2[i], x2[order[1:]])
+            yy2 = np.minimum(y2[i], y2[order[1:]])
+            
+            w = np.maximum(0.0, xx2 - xx1 + 1)
+            h = np.maximum(0.0, yy2 - yy1 + 1)
+            inter = w * h
+            
+            iou = inter / (areas[i] + areas[order[1:]] - inter)
+            
+            # Keep only boxes with IOU less than threshold
+            inds = np.where(iou <= iou_threshold)[0]
+            order = order[inds + 1]
+        
+        # Return filtered detections
+        return [detections[i] for i in keep]    
+
     def _mock_detect(self, frame):
         """Mock detector for testing without YOLO or NCNN"""
         import random
