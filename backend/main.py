@@ -22,6 +22,7 @@ from camera import Camera
 from detector import Detector
 from config import Config
 from metrics_logger import MetricsLogger
+from violations_logger import ViolationsLogger
 import psutil
 
 # Initialize Flask app
@@ -60,6 +61,7 @@ camera = None
 detector = None
 is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
+violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -249,6 +251,24 @@ def reload_config():
         logger.error(f"❌ Error reloading config: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ----------------------------------------------------------------------------
+# VIOLATIONS API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/violations', methods=['GET'])
+def get_violations():
+    """Return recent violation events as JSON array for UI display."""
+    try:
+        limit = int(request.args.get('limit', '100'))
+        events = violations_logger.tail(limit=limit)
+        return jsonify({
+            'count': len(events),
+            'violations': events
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting violations: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # ============================================================================
 # STREAMING LOOP WITH METRICS
 # ============================================================================
@@ -302,6 +322,36 @@ def stream_video():
                 ],
                 'count': len(detections)
             })
+
+            # Simple example: derive and log violation events (stub)
+            # In a real implementation, this would use tracked vehicles, signal state, and rules.
+            # Here we log a synthetic violation when a STOP sign is detected with high confidence.
+            try:
+                stop_dets = [d for d in detections if d.get('class_name', '').lower() in ('stop', 'stop_sign')]
+                if stop_dets:
+                    top = max(stop_dets, key=lambda d: d.get('confidence', 0))
+                    if top.get('confidence', 0) >= max(0.85, config.get('detection.confidence', 0.5)):
+                        event = {
+                            'id': f"evt_{now.strftime('%Y%m%d_%H%M%S')}_{frame_count:06d}",
+                            'timestamp': now.isoformat(),
+                            'violation_type': 'stop_sign',
+                            'confidence': float(top['confidence']),
+                            'driver_action': 'unknown',
+                            'action_confidence': 0.0,
+                            'vehicle': {'track_id': None},
+                            'context': {'camera_id': 'cam-01', 'frame_id': frame_count},
+                            'evidence': {
+                                'sign_detected': {'label': top['class_name'], 'conf': float(top['confidence'])},
+                                'bboxes': {'sign': top['bbox']}
+                            },
+                            'thresholds': {'decision_threshold': config.get('detection.confidence', 0.5)},
+                            'severity': 'low',
+                            'review': {'status': 'auto'},
+                            'model': detector.get_info() if detector else {'engine': 'unknown', 'model': 'n/a'}
+                        }
+                        violations_logger.log(event)
+            except Exception as e:
+                logger.debug(f"Violation logging skipped: {e}")
 
             # Metrics
             frame_count += 1
