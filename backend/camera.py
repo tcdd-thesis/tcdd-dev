@@ -120,28 +120,25 @@ class Camera:
     def get_frame(self):
         """
         Capture a single frame
-        
         Returns:
-            numpy.ndarray: Frame in BGR format, or None if failed
+            numpy.ndarray: Frame in RGB format for NCNN, or None if failed
         """
         if not self.running:
             return None
-        
         try:
             if self.use_picamera and self.camera:
-                # PiCamera2 returns RGB, convert to BGR for OpenCV compatibility
+                # PiCamera2 returns RGB888, perfect for NCNN
                 frame = self.camera.capture_array()
-                return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) if HAS_OPENCV else frame
-                
+                return frame  # Already RGB
             elif HAS_OPENCV and self.camera:
-                # OpenCV VideoCapture
+                # OpenCV VideoCapture returns BGR, convert to RGB for NCNN
                 ret, frame = self.camera.read()
+                if ret:
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 return frame if ret else None
-                
             else:
-                # Mock camera - return a blank frame
+                # Mock camera - return a blank frame in RGB
                 return self._get_mock_frame()
-                
         except Exception as e:
             logger.error(f"Error capturing frame: {e}")
             return None
@@ -149,24 +146,22 @@ class Camera:
     def _get_mock_frame(self):
         """
         Generate a mock frame for testing without camera
-        
         Returns:
-            numpy.ndarray: Mock frame with timestamp
+            numpy.ndarray: Mock frame in RGB format
         """
         import cv2
         from datetime import datetime
-        
         # Create blank frame
         frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        
-        # Add text
+        # Add text (OpenCV uses BGR, so convert to RGB before returning)
         text = f"Mock Camera - {datetime.now().strftime('%H:%M:%S')}"
         cv2.putText(frame, text, (50, self.height // 2),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        
         cv2.putText(frame, "No camera detected", (50, self.height // 2 + 50),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 1)
-        
+        # Convert BGR to RGB for NCNN
+        if HAS_OPENCV:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame
     
     def is_running(self):
