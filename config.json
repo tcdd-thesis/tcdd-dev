@@ -4,8 +4,8 @@
   "host": "0.0.0.0",
   
   "camera": {
-    "width": 640,
-    "height": 480,
+    "width": 1920,
+    "height": 1080,
     "fps": 30,
     "rotation": 0,
     "flip_horizontal": false,
