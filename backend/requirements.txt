@@ -11,6 +11,9 @@ numpy==2.2.6
 # YOLO Detection
 ultralytics==8.0.228
 
+# NCNN for optimized inference (ARM/Raspberry Pi)
+ncnn
+
 # Raspberry Pi Camera (only works on RPi)
 # picamera2==0.3.16
 

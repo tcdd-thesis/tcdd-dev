@@ -116,11 +116,13 @@ class Detector:
                 
         elif self.engine == 'ncnn':
             if not HAS_NCNN:
-                logger.warning("NCNN not available - using mock detector")
+                logger.error("❌ NCNN not available - using mock detector")
+                logger.error("Please install ncnn: python -m pip install ncnn")
                 self.loaded = False
                 return
             
             logger.info(f"Loading NCNN model: param={self.ncnn_param}, bin={self.ncnn_bin}")
+            logger.debug(f"Confidence threshold: {self.confidence}, IOU threshold: {self.iou_threshold}")
             
             try:
                 if not os.path.exists(self.ncnn_param):
@@ -204,6 +206,7 @@ class Detector:
     def _detect_ncnn(self, frame):
         try:
             h, w = frame.shape[:2]
+            logger.debug(f"Processing frame: {w}x{h}")
             
             # Preprocess: resize to model input size
             img = cv2.resize(frame, self.input_size)
@@ -225,56 +228,121 @@ class Detector:
                 logger.error(f"NCNN extraction failed with code {ret}")
                 return []
             
-            # Parse YOLO output format: [batch, num_predictions, 4+num_classes]
-            # For YOLOv8: output shape is typically (1, 84, 8400) -> needs transpose
-            # Each detection: [x_center, y_center, width, height, class0_conf, class1_conf, ...]
+            logger.debug(f"NCNN output shape: h={mat_out.h}, w={mat_out.w}, c={mat_out.c}")
+            
+            # Parse YOLO output format
+            # For YOLOv8 NCNN: output shape is typically (84, 8400) or (num_classes+4, num_predictions)
+            # Each column: [x_center, y_center, width, height, class0_conf, class1_conf, ...]
             
             detections = []
             num_classes = len(self.labels) if self.labels else 80
             
-            # Iterate through predictions
-            for i in range(mat_out.h):
-                # Get the detection data
-                x_center = mat_out[i * mat_out.w + 0]
-                y_center = mat_out[i * mat_out.w + 1]
-                width = mat_out[i * mat_out.w + 2]
-                height = mat_out[i * mat_out.w + 3]
+            # Convert NCNN Mat to numpy array for easier processing
+            import numpy as np
+            
+            # NCNN Mat format: try different interpretations based on output shape
+            if mat_out.w > mat_out.h:
+                # Format: (num_classes+4, num_predictions) - typical YOLOv8 NCNN output
+                num_predictions = mat_out.w
+                num_features = mat_out.h
+                logger.debug(f"Detected YOLOv8 format: {num_features} features x {num_predictions} predictions")
                 
-                # Find class with highest confidence
-                max_conf = 0.0
-                max_class = 0
+                # Process each prediction (column)
+                for i in range(num_predictions):
+                    # Extract bbox coordinates
+                    x_center = mat_out[0 * mat_out.w + i]
+                    y_center = mat_out[1 * mat_out.w + i]
+                    width = mat_out[2 * mat_out.w + i]
+                    height = mat_out[3 * mat_out.w + i]
+                    
+                    # Find class with highest confidence
+                    max_conf = 0.0
+                    max_class = 0
+                    
+                    for c in range(num_classes):
+                        conf = mat_out[(4 + c) * mat_out.w + i]
+                        if conf > max_conf:
+                            max_conf = conf
+                            max_class = c
+                    
+                    if max_conf < self.confidence:
+                        continue
+                    
+                    # Convert from center format to corner format and scale to original image size
+                    scale_x = w / self.input_size[0]
+                    scale_y = h / self.input_size[1]
+                    
+                    x1 = int((x_center - width / 2) * scale_x)
+                    y1 = int((y_center - height / 2) * scale_y)
+                    x2 = int((x_center + width / 2) * scale_x)
+                    y2 = int((y_center + height / 2) * scale_y)
+                    
+                    # Clip to image boundaries
+                    x1 = max(0, min(x1, w))
+                    y1 = max(0, min(y1, h))
+                    x2 = max(0, min(x2, w))
+                    y2 = max(0, min(y2, h))
+                    
+                    class_name = self.labels[max_class] if self.labels and max_class < len(self.labels) else str(max_class)
+                    
+                    logger.debug(f"Detection: {class_name} ({max_conf:.3f}) at [{x1}, {y1}, {x2}, {y2}]")
+                    
+                    detections.append({
+                        'class_name': class_name,
+                        'confidence': float(max_conf),
+                        'bbox': [x1, y1, x2, y2]
+                    })
+            else:
+                # Format: (num_predictions, num_classes+4) - row-based format
+                num_predictions = mat_out.h
+                logger.debug(f"Detected row-based format: {num_predictions} predictions")
                 
-                for c in range(num_classes):
-                    conf = mat_out[i * mat_out.w + 4 + c]
-                    if conf > max_conf:
-                        max_conf = conf
-                        max_class = c
-                
-                if max_conf < self.confidence:
-                    continue
-                
-                # Convert from center format to corner format and scale to original image size
-                scale_x = w / self.input_size[0]
-                scale_y = h / self.input_size[1]
-                
-                x1 = int((x_center - width / 2) * scale_x)
-                y1 = int((y_center - height / 2) * scale_y)
-                x2 = int((x_center + width / 2) * scale_x)
-                y2 = int((y_center + height / 2) * scale_y)
-                
-                # Clip to image boundaries
-                x1 = max(0, min(x1, w))
-                y1 = max(0, min(y1, h))
-                x2 = max(0, min(x2, w))
-                y2 = max(0, min(y2, h))
-                
-                class_name = self.labels[max_class] if self.labels and max_class < len(self.labels) else str(max_class)
-                
-                detections.append({
-                    'class_name': class_name,
-                    'confidence': float(max_conf),
-                    'bbox': [x1, y1, x2, y2]
-                })
+                for i in range(num_predictions):
+                    # Get the detection data
+                    x_center = mat_out[i * mat_out.w + 0]
+                    y_center = mat_out[i * mat_out.w + 1]
+                    width = mat_out[i * mat_out.w + 2]
+                    height = mat_out[i * mat_out.w + 3]
+                    
+                    # Find class with highest confidence
+                    max_conf = 0.0
+                    max_class = 0
+                    
+                    for c in range(num_classes):
+                        conf = mat_out[i * mat_out.w + 4 + c]
+                        if conf > max_conf:
+                            max_conf = conf
+                            max_class = c
+                    
+                    if max_conf < self.confidence:
+                        continue
+                    
+                    # Convert from center format to corner format and scale to original image size
+                    scale_x = w / self.input_size[0]
+                    scale_y = h / self.input_size[1]
+                    
+                    x1 = int((x_center - width / 2) * scale_x)
+                    y1 = int((y_center - height / 2) * scale_y)
+                    x2 = int((x_center + width / 2) * scale_x)
+                    y2 = int((y_center + height / 2) * scale_y)
+                    
+                    # Clip to image boundaries
+                    x1 = max(0, min(x1, w))
+                    y1 = max(0, min(y1, h))
+                    x2 = max(0, min(x2, w))
+                    y2 = max(0, min(y2, h))
+                    
+                    class_name = self.labels[max_class] if self.labels and max_class < len(self.labels) else str(max_class)
+                    
+                    logger.debug(f"Detection: {class_name} ({max_conf:.3f}) at [{x1}, {y1}, {x2}, {y2}]")
+                    
+                    detections.append({
+                        'class_name': class_name,
+                        'confidence': float(max_conf),
+                        'bbox': [x1, y1, x2, y2]
+                    })
+            
+            logger.debug(f"Found {len(detections)} detections above confidence threshold {self.confidence}")
             
             return detections
         
