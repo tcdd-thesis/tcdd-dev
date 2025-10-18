@@ -11,7 +11,11 @@ const state = {
     fps: 0,
     detectionCount: 0,
     config: null,
-    configAutoReload: true
+    configAutoReload: true,
+    status: {
+        wifi: false,
+        camera: false
+    }    
 };
 
 // API helper
@@ -92,12 +96,14 @@ async function startCamera() {
         
         state.streaming = true;
         document.getElementById('no-feed').style.display = 'none';
+        updateStatus('camera', true);
         
         showToast('Camera started!', 'success');
         
     } catch (error) {
         console.error('Failed to start camera:', error);
         showToast('Failed to start camera', 'error');
+        updateStatus('camera', false);        
     }
 }
 
@@ -108,6 +114,7 @@ async function stopCamera() {
         
         state.streaming = false;
         document.getElementById('no-feed').style.display = 'flex';
+        updateStatus('camera', false);        
         
         showToast('Camera stopped', 'success');
         
@@ -176,7 +183,7 @@ async function loadLogs() {
         } else {
             logsContainer.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">📋</span>
+                    <span class="icon">\u2630</span>
                     <div>No activity yet</div>
                 </div>
             `;
@@ -187,7 +194,7 @@ async function loadLogs() {
         const logsContainer = document.getElementById('logs-content-friendly');
         logsContainer.innerHTML = `
             <div class="log-empty">
-                <span class="icon">⚠️</span>
+                <span class="icon">\u26A0</span>
                 <div>Could not load activity log</div>
             </div>
         `;
@@ -625,21 +632,21 @@ function parseLogLine(logLine) {
 function formatMessage(message, level) {
     // Make messages more user-friendly
     const friendlyMessages = {
-        'Initializing camera': '📹 Starting camera...',
-        'Camera started': '✅ Camera ready',
-        'Camera stopped': '⏹️ Camera stopped',
-        'Initializing OpenCV VideoCapture': '📹 Setting up camera',
-        'Sign Detection System Starting': '🚀 System starting...',
-        'Registered config change callback': '⚙️ Configuration loaded',
-        'Config file reloaded': '🔄 Settings updated',
-        'Camera resolution changed': '📐 Resolution updated',
-        'Detection started': '🎯 Detection active',
-        'Detection stopped': '⏸️ Detection paused',
-        'Model loaded': '🤖 AI model ready',
-        'Frame captured': '📸 Image saved',
-        'Server starting': '🌐 Server starting...',
-        'WebSocket connected': '🔌 Connected',
-        'WebSocket disconnected': '🔌 Disconnected',
+        'Initializing camera': '\u25B6 Starting camera...',           // ▶ Play
+        'Camera started': '\u2713 Camera ready',                      // ✓ Check
+        'Camera stopped': '\u25A0 Camera stopped',                    // ■ Stop square
+        'Initializing OpenCV VideoCapture': '\u25B6 Setting up camera', // ▶ Play
+        'Sign Detection System Starting': '\u25B2 System starting...', // ▲ Up triangle
+        'Registered config change callback': '\u2699 Configuration loaded', // ⚙ Gear
+        'Config file reloaded': '\u21BB Settings updated',            // ↻ Reload
+        'Camera resolution changed': '\u25A1 Resolution updated',     // □ Square
+        'Detection started': '\u25CF Detection active',               // ● Bullet
+        'Detection stopped': '\u25A0 Detection paused',               // ■ Square
+        'Model loaded': '\u2713 AI model ready',                      // ✓ Check
+        'Frame captured': '\u25A0 Image saved',                       // ■ Square
+        'Server starting': '\u25CF Server starting...',               // ● Bullet
+        'WebSocket connected': '\u2713 Connected',                    // ✓ Check
+        'WebSocket disconnected': '\u2715 Disconnected',              // ✕ X mark
     };
     
     // Check for exact matches
@@ -650,11 +657,11 @@ function formatMessage(message, level) {
     }
     
     // Check for patterns
-    if (message.includes('FPS')) return `📊 ${message}`;
-    if (message.includes('detected')) return `🎯 ${message}`;
-    if (message.includes('error') || message.includes('Error')) return `❌ ${message}`;
-    if (message.includes('warning') || message.includes('Warning')) return `⚠️ ${message}`;
-    if (message.includes('success') || message.includes('Success')) return `✅ ${message}`;
+    if (message.includes('FPS')) return `\u25BA ${message}`;          // ▸ Small triangle
+    if (message.includes('detected')) return `\u25CF ${message}`;     // ● Bullet
+    if (message.includes('error') || message.includes('Error')) return `\u2715 ${message}`; // ✕ X
+    if (message.includes('warning') || message.includes('Warning')) return `\u26A0 ${message}`; // ⚠ Warning
+    if (message.includes('success') || message.includes('Success')) return `\u2713 ${message}`; // ✓ Check
     
     return message;
 }
@@ -679,7 +686,7 @@ function clearLogsDisplay() {
     const logsContainer = document.getElementById('logs-content-friendly');
     logsContainer.innerHTML = `
         <div class="log-empty">
-            <span class="icon">✨</span>
+            <span class="icon">\u2713</span>
             <div>Display cleared</div>
         </div>
     `;
@@ -771,15 +778,16 @@ function connectWebSocket() {
     
     state.socket.on('connect', () => {
         console.log('WebSocket connected');
-        document.getElementById('status-dot').className = 'dot online';
-        document.getElementById('status-text').textContent = 'Online';
+        updateStatus('backend', true);
         showToast('Connected to server', 'success');
+        // Check full system status
+        checkSystemStatus();        
     });
     
     state.socket.on('disconnect', () => {
         console.log('WebSocket disconnected');
-        document.getElementById('status-dot').className = 'dot offline';
-        document.getElementById('status-text').textContent = 'Offline';
+        updateStatus('backend', false);
+        updateStatus('camera', false);
         showToast('Disconnected from server', 'warning');
     });
     
@@ -795,7 +803,7 @@ function connectWebSocket() {
     
     // Listen for config updates from server
     state.socket.on('config_updated', (data) => {
-        console.log('🔄 Configuration updated from server:', data);
+        console.log('\u21BB Configuration updated from server:', data);
         
         if (state.configAutoReload) {
             state.config = data.config;
@@ -814,17 +822,78 @@ function connectWebSocket() {
 // SYSTEM STATUS
 // ============================================================================
 
-async function checkStatus() {
+function updateStatus(component, isOnline) {
+    state.status[component] = isOnline;
+    
+    const statusElement = document.getElementById(`status-${component}`);
+    if (!statusElement) return;
+    
+    const dot = statusElement.querySelector('.status-dot');
+    
+    if (isOnline) {
+        dot.className = 'status-dot dot online';
+        statusElement.classList.add('connected');
+    } else {
+        dot.className = 'status-dot dot offline';
+        statusElement.classList.remove('connected');
+    }
+}
+
+async function checkWiFiStatus() {
+    // Check WiFi by trying to reach the backend
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        
+        await fetch('/api/status', { 
+            signal: controller.signal,
+            cache: 'no-cache'
+        });
+        
+        clearTimeout(timeoutId);
+        updateStatus('wifi', true);
+        return true;
+    } catch (error) {
+        updateStatus('wifi', false);
+        return false;
+    }
+}
+
+async function checkSystemStatus() {
+    try {
+        // Check WiFi
+        const hasWiFi = await checkWiFiStatus();
+        
+        if (!hasWiFi) {
+            updateStatus('backend', false);
+            updateStatus('camera', false);
+            return;
+        }
+        
+        // Check backend and camera
         const status = await api.get('/status');
         
+        updateStatus('backend', true);
+        updateStatus('camera', status.camera || false);
+        
+        // Update model info if available        
         if (status.model) {
-            document.getElementById('model-name').textContent = status.model.split('/').pop();
+            const modelElement = document.getElementById('model-name');
+            if (modelElement) {
+                modelElement.textContent = status.model.split('/').pop();
+            }
         }
         
     } catch (error) {
         console.error('Failed to check status:', error);
+        updateStatus('backend', false);
+        updateStatus('camera', false);        
     }
+}
+
+// Legacy function for backward compatibility
+async function checkStatus() {
+    await checkSystemStatus();
 }
 
 // ============================================================================
@@ -895,13 +964,13 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     
     // Initial status check
-    checkStatus();
+    checkSystemStatus();
     
-    // Periodic status check
-    setInterval(checkStatus, 10000);
+    // Periodic status checks
+    setInterval(checkSystemStatus, 5000);  // Check every 5 seconds
     
     // Start on home page
     switchPage('home');
     
-    console.log('✓ Application ready!');
+    console.log('\u2713 Application ready!');
 });

@@ -11,10 +11,17 @@
     <div id="page-home" class="page active">
         <div class="home-container">
             <div class="home-header">
-                <h1>● Sign Detection</h1>
-                <div class="status-indicator">
-                    <span id="status-dot" class="dot offline"></span>
-                    <span id="status-text">Offline</span>
+                <div class="status-panel">
+                    <div class="status-item" id="status-wifi">
+                        <span class="status-icon">📶</span>
+                        <span class="status-label">WiFi</span>
+                        <span class="status-dot dot offline"></span>
+                    </div>
+                    <div class="status-item" id="status-camera">
+                        <span class="status-icon">⬤</span>
+                        <span class="status-label">Camera</span>
+                        <span class="status-dot dot offline"></span>
+                    </div>
                 </div>
             </div>
             
@@ -22,12 +29,7 @@
                 <button class="menu-btn" data-page="live">
                     <span class="icon">▶</span>
                     <span class="label">Live Feed</span>
-                </button>
-                
-                <button class="menu-btn" data-page="driving">
-                    <span class="icon">⚐</span>
-                    <span class="label">Driving Mode</span>
-                </button>
+                </button>                            
                 
                 <button class="menu-btn" data-page="settings">
                     <span class="icon">⚙</span>
