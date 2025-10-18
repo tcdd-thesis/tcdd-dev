@@ -176,7 +176,7 @@ async function loadLogs() {
         } else {
             logsContainer.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">📋</span>
+                    <span class="icon">\u2630</span>
                     <div>No activity yet</div>
                 </div>
             `;
@@ -187,7 +187,7 @@ async function loadLogs() {
         const logsContainer = document.getElementById('logs-content-friendly');
         logsContainer.innerHTML = `
             <div class="log-empty">
-                <span class="icon">⚠️</span>
+                <span class="icon">\u26A0</span>
                 <div>Could not load activity log</div>
             </div>
         `;
@@ -625,21 +625,21 @@ function parseLogLine(logLine) {
 function formatMessage(message, level) {
     // Make messages more user-friendly
     const friendlyMessages = {
-        'Initializing camera': '📹 Starting camera...',
-        'Camera started': '✅ Camera ready',
-        'Camera stopped': '⏹️ Camera stopped',
-        'Initializing OpenCV VideoCapture': '📹 Setting up camera',
-        'Sign Detection System Starting': '🚀 System starting...',
-        'Registered config change callback': '⚙️ Configuration loaded',
-        'Config file reloaded': '🔄 Settings updated',
-        'Camera resolution changed': '📐 Resolution updated',
-        'Detection started': '🎯 Detection active',
-        'Detection stopped': '⏸️ Detection paused',
-        'Model loaded': '🤖 AI model ready',
-        'Frame captured': '📸 Image saved',
-        'Server starting': '🌐 Server starting...',
-        'WebSocket connected': '🔌 Connected',
-        'WebSocket disconnected': '🔌 Disconnected',
+        'Initializing camera': '\u25B6 Starting camera...',           // ▶ Play
+        'Camera started': '\u2713 Camera ready',                      // ✓ Check
+        'Camera stopped': '\u25A0 Camera stopped',                    // ■ Stop square
+        'Initializing OpenCV VideoCapture': '\u25B6 Setting up camera', // ▶ Play
+        'Sign Detection System Starting': '\u25B2 System starting...', // ▲ Up triangle
+        'Registered config change callback': '\u2699 Configuration loaded', // ⚙ Gear
+        'Config file reloaded': '\u21BB Settings updated',            // ↻ Reload
+        'Camera resolution changed': '\u25A1 Resolution updated',     // □ Square
+        'Detection started': '\u25CF Detection active',               // ● Bullet
+        'Detection stopped': '\u25A0 Detection paused',               // ■ Square
+        'Model loaded': '\u2713 AI model ready',                      // ✓ Check
+        'Frame captured': '\u25A0 Image saved',                       // ■ Square
+        'Server starting': '\u25CF Server starting...',               // ● Bullet
+        'WebSocket connected': '\u2713 Connected',                    // ✓ Check
+        'WebSocket disconnected': '\u2715 Disconnected',              // ✕ X mark
     };
     
     // Check for exact matches
@@ -650,11 +650,11 @@ function formatMessage(message, level) {
     }
     
     // Check for patterns
-    if (message.includes('FPS')) return `📊 ${message}`;
-    if (message.includes('detected')) return `🎯 ${message}`;
-    if (message.includes('error') || message.includes('Error')) return `❌ ${message}`;
-    if (message.includes('warning') || message.includes('Warning')) return `⚠️ ${message}`;
-    if (message.includes('success') || message.includes('Success')) return `✅ ${message}`;
+    if (message.includes('FPS')) return `\u25BA ${message}`;          // ▸ Small triangle
+    if (message.includes('detected')) return `\u25CF ${message}`;     // ● Bullet
+    if (message.includes('error') || message.includes('Error')) return `\u2715 ${message}`; // ✕ X
+    if (message.includes('warning') || message.includes('Warning')) return `\u26A0 ${message}`; // ⚠ Warning
+    if (message.includes('success') || message.includes('Success')) return `\u2713 ${message}`; // ✓ Check
     
     return message;
 }
@@ -679,7 +679,7 @@ function clearLogsDisplay() {
     const logsContainer = document.getElementById('logs-content-friendly');
     logsContainer.innerHTML = `
         <div class="log-empty">
-            <span class="icon">✨</span>
+            <span class="icon">\u2713</span>
             <div>Display cleared</div>
         </div>
     `;
@@ -795,7 +795,7 @@ function connectWebSocket() {
     
     // Listen for config updates from server
     state.socket.on('config_updated', (data) => {
-        console.log('🔄 Configuration updated from server:', data);
+        console.log('\u21BB Configuration updated from server:', data);
         
         if (state.configAutoReload) {
             state.config = data.config;
@@ -903,5 +903,5 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start on home page
     switchPage('home');
     
-    console.log('✓ Application ready!');
+    console.log('\u2713 Application ready!');
 });
