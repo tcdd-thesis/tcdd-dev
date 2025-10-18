@@ -15,10 +15,10 @@ import logging
 
 from contextlib import contextmanager
 # Import detector abstraction
-from detector import DetectorFactory
+from detector import Detector
 
 # Import configuration loader
-from config_loader import get_config_loader
+from config import Config
 
 # Try importing picamera2 for Raspberry Pi camera, fall back to cv2
 try:
@@ -41,23 +41,21 @@ CORS(app)
 
 
 # Load configuration from shared/config.json (with environment variable override support)
-config = get_config_loader()
-model_config = config.get_model_config()
-CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', config.get_camera_width()))
-CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', config.get_camera_height()))
-CAMERA_FPS = int(os.getenv('CAMERA_FPS', config.get_camera_fps()))
-DETECTION_INTERVAL = int(os.getenv('DETECTION_INTERVAL', config.get_detection_interval()))
-JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', config.get_jpeg_quality()))
+config = Config()
+CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', config.get('camera.width', 640)))
+CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', config.get('camera.height', 480)))
+CAMERA_FPS = int(os.getenv('CAMERA_FPS', config.get('camera.fps', 30)))
+DETECTION_INTERVAL = int(os.getenv('DETECTION_INTERVAL', config.get('detection.interval', 1)))
+JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', config.get('camera.jpeg_quality', 80)))
 MAX_DETECTION_HISTORY = 10
 
 print(f"\n{'='*60}")
 print(f"Camera Server Configuration:")
 print(f"{'='*60}")
-print(f"Model Type:            {model_config.get('type', 'ncnn')}")
-print(f"NCNN Path:             {model_config.get('ncnnPath', '')}")
-print(f"Ultralytics Path:      {model_config.get('ptPath', '')}")
+print(f"Detection Engine:      {config.get('detection.engine', 'ultralytics')}")
+print(f"Detection Model:       {config.get('detection.model', 'N/A')}")
 print(f"Camera Resolution:     {CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS")
-print(f"Confidence Threshold:  {model_config.get('confidence', 0.15)}")
+print(f"Confidence Threshold:  {config.get('detection.confidence', 0.5)}")
 print(f"Detection Interval:    {DETECTION_INTERVAL} frame(s)")
 print(f"JPEG Quality:          {JPEG_QUALITY}")
 print(f"{'='*60}\n")
@@ -160,11 +158,11 @@ def initialize_detector():
     """Load detector (NCNN or Ultralytics) based on config."""
     global detector
     try:
-        detector = DetectorFactory.create_detector(model_config)
+        detector = Detector(config)
         # Warm up detector with dummy input
         dummy_frame = np.zeros((CAMERA_HEIGHT, CAMERA_WIDTH, 3), dtype=np.uint8)
         _ = detector.detect(dummy_frame)
-        logger.info("Detector loaded successfully (type: %s)" % model_config.get('type', 'ncnn'))
+        logger.info("Detector loaded successfully (engine: %s)" % config.get('detection.engine', 'ultralytics'))
         return True
     except Exception as e:
         logger.error(f"Failed to load detector: {e}")
@@ -462,7 +460,7 @@ def get_status():
         'config': {
             'resolution': f"{CAMERA_WIDTH}x{CAMERA_HEIGHT}",
             'target_fps': CAMERA_FPS,
-            'confidence': model_config.get('confidence', 0.15),
+            'confidence': config.get('detection.confidence', 0.5),
             'detection_interval': DETECTION_INTERVAL
         }
     })
