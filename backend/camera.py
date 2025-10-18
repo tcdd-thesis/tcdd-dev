@@ -98,6 +98,62 @@ def camera_resource():
             logger.info("Camera released")
 
 
+class Camera:
+    """
+    Camera wrapper class for compatibility with main.py
+    Provides a class-based interface to the camera functionality
+    """
+    
+    def __init__(self, config_obj):
+        """
+        Initialize Camera instance
+        
+        Args:
+            config_obj: Configuration object
+        """
+        self.config = config_obj
+        self._camera = None
+        self._running = False
+    
+    def start(self):
+        """Start the camera"""
+        global camera
+        if not self._running:
+            success = initialize_camera()
+            if success:
+                self._camera = camera
+                self._running = True
+                logger.info("Camera started")
+            return success
+        return True
+    
+    def stop(self):
+        """Stop the camera"""
+        global camera
+        if self._running and self._camera:
+            try:
+                if USE_PICAMERA and isinstance(self._camera, Picamera2):
+                    self._camera.stop()
+                elif hasattr(self._camera, 'release'):
+                    self._camera.release()
+                self._running = False
+                self._camera = None
+                camera = None
+                logger.info("Camera stopped")
+            except Exception as e:
+                logger.error(f"Error stopping camera: {e}")
+    
+    def is_running(self):
+        """Check if camera is running"""
+        return self._running and self._camera is not None
+    
+    def get_frame(self):
+        """Get a frame from the camera"""
+        if not self._running:
+            return None
+        return get_frame()
+
+
 def initialize_camera():
     """Initialize Raspberry Pi camera or fallback to USB camera."""
     global camera
