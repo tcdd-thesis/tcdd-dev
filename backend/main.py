@@ -162,11 +162,14 @@ def catch_all(path):
 def get_status():
     """Get system status"""
     try:
+        model_info = detector.get_info() if detector else {'engine': 'unknown', 'model': 'not loaded'}
+        
         status = {
             'camera': camera.is_running() if camera else False,
             'detector': detector.is_loaded() if detector else False,
             'streaming': is_streaming,
-            'model': config.get('detection.model', 'Unknown'),
+            'engine': model_info['engine'],
+            'model': model_info['model'],
             'timestamp': datetime.now().isoformat()
         }
         return jsonify(status), 200
