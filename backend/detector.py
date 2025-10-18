@@ -207,10 +207,8 @@ class Detector:
             
             # Preprocess: resize to model input size
             img = cv2.resize(frame, self.input_size)
-            # Convert RGB to BGR for NCNN input
-            img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            # Create NCNN Mat from numpy array (BGR format, uint8)
-            mat_in = ncnn.Mat.from_pixels(img_bgr, ncnn.Mat.PixelType.PIXEL_BGR, self.input_size[0], self.input_size[1])
+            # Create NCNN Mat from numpy array (use RGB format directly)
+            mat_in = ncnn.Mat.from_pixels(img, ncnn.Mat.PixelType.PIXEL_RGB, self.input_size[0], self.input_size[1])
             
             # Normalize to [0, 1] (standard YOLO preprocessing)
             mean_vals = [0.0, 0.0, 0.0]
