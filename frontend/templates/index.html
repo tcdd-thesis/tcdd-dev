@@ -11,7 +11,7 @@
     <div id="page-home" class="page active">
         <div class="home-container">
             <div class="home-header">
-                <h1>🚦 Sign Detection</h1>
+                <h1>● Sign Detection</h1>
                 <div class="status-indicator">
                     <span id="status-dot" class="dot offline"></span>
                     <span id="status-text">Offline</span>
@@ -20,22 +20,22 @@
             
             <div class="menu-buttons">
                 <button class="menu-btn" data-page="live">
-                    <span class="icon">📹</span>
+                    <span class="icon">▶</span>
                     <span class="label">Live Feed</span>
                 </button>
                 
                 <button class="menu-btn" data-page="driving">
-                    <span class="icon">🚗</span>
+                    <span class="icon">⚐</span>
                     <span class="label">Driving Mode</span>
                 </button>
                 
                 <button class="menu-btn" data-page="settings">
-                    <span class="icon">⚙️</span>
+                    <span class="icon">⚙</span>
                     <span class="label">Settings</span>
                 </button>
                 
                 <button class="menu-btn" data-page="logs">
-                    <span class="icon">📋</span>
+                    <span class="icon">☰</span>
                     <span class="label">Logs</span>
                 </button>
             </div>
@@ -50,18 +50,11 @@
                 <button class="btn-back" onclick="goHome()">← Back</button>
                 <h2>Live Feed</h2>
             </div>
-            
-            <div class="controls-compact">
-                <button id="btn-start" class="btn btn-success btn-touch">▶ Start</button>
-                <button id="btn-stop" class="btn btn-danger btn-touch" disabled>⏹ Stop</button>
-                <button id="btn-capture" class="btn btn-secondary btn-touch" disabled>📷</button>
-            </div>
 
             <div class="video-container-compact">
                 <canvas id="video-canvas"></canvas>
                 <div id="no-feed" class="no-feed">
-                    <p>📹 Camera Stopped</p>
-                    <p class="hint">Tap Start</p>
+                    <p>▶ Camera Stopped</p>
                 </div>
             </div>
 
@@ -86,13 +79,13 @@
             
             <div class="driving-mode-selector">
                 <button class="mode-btn mode-casual" id="btn-casual-mode">
-                    <span class="mode-icon">🚙</span>
+                    <span class="mode-icon">⚐</span>
                     <span class="mode-title">Casual Mode</span>
                     <span class="mode-desc">Simple detection display</span>
                 </button>
                 
                 <button class="mode-btn mode-gamified" id="btn-gamified-mode">
-                    <span class="mode-icon">🏆</span>
+                    <span class="mode-icon">★</span>
                     <span class="mode-title">Gamified Mode</span>
                     <span class="mode-desc">Score & achievements</span>
                 </button>
@@ -107,8 +100,8 @@
             </div>
             
             <div class="controls-compact">
-                <button id="btn-refresh-logs" class="btn btn-primary btn-touch">🔄 Refresh</button>
-                <button id="btn-clear-display" class="btn btn-secondary btn-touch">🗑️ Clear</button>
+                <button id="btn-refresh-logs" class="btn btn-primary btn-touch">↻ Refresh</button>
+                <button id="btn-clear-display" class="btn btn-secondary btn-touch">✕ Clear</button>
             </div>
 
             <div class="logs-container-friendly">
@@ -156,8 +149,8 @@
                 </div>
 
                 <div class="controls-compact">
-                    <button id="btn-save-settings" class="btn btn-success btn-touch">💾 Save</button>
-                    <button id="btn-load-settings" class="btn btn-primary btn-touch">� Reload</button>
+                    <button id="btn-save-settings" class="btn btn-success btn-touch">⊡ Save</button>
+                    <button id="btn-load-settings" class="btn btn-primary btn-touch">↻ Reload</button>
                 </div>
             </div>
         </div>

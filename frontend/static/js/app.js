@@ -91,9 +91,6 @@ async function startCamera() {
         await api.post('/camera/start');
         
         state.streaming = true;
-        document.getElementById('btn-start').disabled = true;
-        document.getElementById('btn-stop').disabled = false;
-        document.getElementById('btn-capture').disabled = false;
         document.getElementById('no-feed').style.display = 'none';
         
         showToast('Camera started!', 'success');
@@ -110,9 +107,6 @@ async function stopCamera() {
         await api.post('/camera/stop');
         
         state.streaming = false;
-        document.getElementById('btn-start').disabled = false;
-        document.getElementById('btn-stop').disabled = true;
-        document.getElementById('btn-capture').disabled = true;
         document.getElementById('no-feed').style.display = 'flex';
         
         showToast('Camera stopped', 'success');
@@ -443,11 +437,6 @@ document.addEventListener('DOMContentLoaded', () => {
             switchPage(page);
         });
     });
-    
-    // Live Feed controls
-    document.getElementById('btn-start').addEventListener('click', startCamera);
-    document.getElementById('btn-stop').addEventListener('click', stopCamera);
-    document.getElementById('btn-capture').addEventListener('click', captureFrame);
     
     // Driving Mode buttons
     document.getElementById('btn-casual-mode').addEventListener('click', () => {
