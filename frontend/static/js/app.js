@@ -12,6 +12,9 @@ const state = {
     detectionCount: 0,
     config: null,
     configAutoReload: true,
+    recording: false,
+    recordingStartTime: null,
+    recordingTimer: null,
     status: {
         wifi: false,
         camera: false
@@ -43,6 +46,14 @@ const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    },
+    
+    async delete(endpoint) {
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            method: 'DELETE'
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
@@ -131,6 +142,304 @@ function captureFrame() {
     link.href = canvas.toDataURL();
     link.click();
     showToast('Frame captured!', 'success');
+}
+
+// ============================================================================
+// RECORDING FUNCTIONS
+// ============================================================================
+
+async function startRecording() {
+    try {
+        showToast('Starting recording...', 'info');
+        const response = await api.post('/recording/start');
+        
+        state.recording = true;
+        state.recordingStartTime = Date.now();
+        
+        // Update UI
+        const btn = document.getElementById('btn-record');
+        btn.classList.add('recording');
+        btn.title = 'Stop Recording';
+        
+        // Show timer
+        document.getElementById('recording-timer').style.display = 'flex';
+        
+        // Start timer update
+        state.recordingTimer = setInterval(updateRecordingTimer, 1000);
+        
+        showToast(`Recording started: ${response.filename}`, 'success');
+        
+    } catch (error) {
+        console.error('Failed to start recording:', error);
+        showToast('Failed to start recording', 'error');
+    }
+}
+
+async function stopRecording() {
+    try {
+        showToast('Stopping recording...', 'info');
+        const response = await api.post('/recording/stop');
+        
+        state.recording = false;
+        state.recordingStartTime = null;
+        
+        // Clear timer
+        if (state.recordingTimer) {
+            clearInterval(state.recordingTimer);
+            state.recordingTimer = null;
+        }
+        
+        // Update UI
+        const btn = document.getElementById('btn-record');
+        btn.classList.remove('recording');
+        btn.title = 'Start Recording';
+        
+        // Hide timer
+        document.getElementById('recording-timer').style.display = 'none';
+        document.getElementById('recording-time').textContent = '00:00';
+        
+        showToast(`Recording saved: ${response.filename}`, 'success');
+        
+    } catch (error) {
+        console.error('Failed to stop recording:', error);
+        showToast('Failed to stop recording', 'error');
+    }
+}
+
+function toggleRecording() {
+    if (state.recording) {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+function updateRecordingTimer() {
+    if (!state.recordingStartTime) return;
+    
+    const elapsed = Math.floor((Date.now() - state.recordingStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    
+    document.getElementById('recording-time').textContent = 
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Check if approaching max duration (15 minutes = 900 seconds)
+    if (elapsed >= 900) {
+        // Recording will be auto-stopped by backend
+        state.recording = false;
+        state.recordingStartTime = null;
+        if (state.recordingTimer) {
+            clearInterval(state.recordingTimer);
+            state.recordingTimer = null;
+        }
+        
+        const btn = document.getElementById('btn-record');
+        btn.classList.remove('recording');
+        btn.title = 'Start Recording';
+        
+        document.getElementById('recording-timer').style.display = 'none';
+        document.getElementById('recording-time').textContent = '00:00';
+        
+        showToast('Recording auto-stopped (max duration)', 'info');
+    }
+}
+
+async function checkRecordingStatus() {
+    try {
+        const response = await api.get('/recording/status');
+        
+        if (response.recording && !state.recording) {
+            // Sync state with backend
+            state.recording = true;
+            state.recordingStartTime = Date.now() - (response.elapsed_seconds * 1000);
+            
+            const btn = document.getElementById('btn-record');
+            btn.classList.add('recording');
+            btn.title = 'Stop Recording';
+            
+            document.getElementById('recording-timer').style.display = 'flex';
+            
+            if (!state.recordingTimer) {
+                state.recordingTimer = setInterval(updateRecordingTimer, 1000);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to check recording status:', error);
+    }
+}
+
+// ============================================================================
+// RECORDINGS MANAGEMENT
+// ============================================================================
+
+async function loadRecordings() {
+    try {
+        const response = await api.get('/recordings');
+        const recordings = response.recordings || [];
+        
+        // Update header
+        document.getElementById('recordings-count').textContent = `${recordings.length} recording${recordings.length !== 1 ? 's' : ''}`;
+        document.getElementById('recordings-size').textContent = `${response.total_size_mb} MB`;
+        
+        const container = document.getElementById('recordings-list');
+        
+        if (recordings.length === 0) {
+            container.innerHTML = '<div class="recordings-empty">No recordings yet</div>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        for (const rec of recordings) {
+            const item = document.createElement('div');
+            item.className = 'recording-item';
+            
+            // Parse timestamp from filename
+            const timestamp = rec.filename.replace('recording_', '').replace('.mp4', '').replace('_', ' ');
+            
+            item.innerHTML = `
+                <div class="recording-info">
+                    <span class="recording-name">${rec.filename}</span>
+                    <span class="recording-meta">${rec.size_mb} MB</span>
+                </div>
+                <div class="recording-actions">
+                    <button class="btn btn-small btn-primary" onclick="playRecording('${rec.filename}')" title="Play">▶</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteRecording('${rec.filename}')" title="Delete">✕</button>
+                </div>
+            `;
+            
+            container.appendChild(item);
+        }
+        
+    } catch (error) {
+        console.error('Failed to load recordings:', error);
+        showToast('Failed to load recordings', 'error');
+    }
+}
+
+function playRecording(filename) {
+    const modal = document.getElementById('video-modal');
+    const video = document.getElementById('video-player');
+    const source = document.getElementById('video-source');
+    const title = document.getElementById('video-title');
+    
+    title.textContent = filename;
+    source.src = `/api/recordings/${filename}`;
+    video.load();
+    
+    modal.style.display = 'flex';
+    video.play();
+}
+
+function closeVideoModal() {
+    const modal = document.getElementById('video-modal');
+    const video = document.getElementById('video-player');
+    
+    video.pause();
+    modal.style.display = 'none';
+}
+
+async function deleteRecording(filename) {
+    showConfirm(
+        'Delete Recording',
+        `Are you sure you want to delete "${filename}"? This cannot be undone.`,
+        async () => {
+            try {
+                await api.delete(`/recordings/${filename}`);
+                showToast(`Deleted ${filename}`, 'success');
+                loadRecordings();
+            } catch (error) {
+                console.error('Failed to delete recording:', error);
+                showToast('Failed to delete recording', 'error');
+            }
+        }
+    );
+}
+
+// ============================================================================
+// SYSTEM CONTROL FUNCTIONS
+// ============================================================================
+
+function shutdownApp() {
+    showConfirm(
+        'Shutdown Application',
+        'Are you sure you want to shutdown the application? The camera will stop and you will need to manually restart the app.',
+        async () => {
+            try {
+                showToast('Shutting down application...', 'info');
+                await api.post('/system/shutdown-app');
+            } catch (error) {
+                // Expected - connection will be lost
+                console.log('App shutdown initiated');
+            }
+        }
+    );
+}
+
+function shutdownPi() {
+    showConfirm(
+        'Shutdown Raspberry Pi',
+        'Are you sure you want to shutdown the Raspberry Pi? You will need physical access to turn it back on.',
+        async () => {
+            try {
+                showToast('Shutting down Raspberry Pi...', 'warning');
+                await api.post('/system/shutdown-pi');
+            } catch (error) {
+                // Expected - connection will be lost
+                console.log('Pi shutdown initiated');
+            }
+        }
+    );
+}
+
+function rebootPi() {
+    showConfirm(
+        'Reboot Raspberry Pi',
+        'Are you sure you want to reboot the Raspberry Pi? The app will automatically restart after reboot.',
+        async () => {
+            try {
+                showToast('Rebooting Raspberry Pi...', 'warning');
+                await api.post('/system/reboot-pi');
+            } catch (error) {
+                // Expected - connection will be lost
+                console.log('Pi reboot initiated');
+            }
+        }
+    );
+}
+
+// ============================================================================
+// CONFIRMATION MODAL
+// ============================================================================
+
+function showConfirm(title, message, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const messageEl = document.getElementById('confirm-message');
+    const cancelBtn = document.getElementById('confirm-cancel');
+    const okBtn = document.getElementById('confirm-ok');
+    
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    
+    modal.style.display = 'flex';
+    
+    // Remove old listeners
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    const newOkBtn = okBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+    
+    // Add new listeners
+    newCancelBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+    
+    newOkBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+        if (onConfirm) onConfirm();
+    });
 }
 
 function handleVideoFrame(data) {
@@ -725,6 +1034,9 @@ async function loadSettings() {
             confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
         }
         
+        // Load recordings list
+        loadRecordings();
+        
         showToast('Settings loaded', 'success');
         
     } catch (error) {
@@ -815,6 +1127,33 @@ function connectWebSocket() {
             
             showToast('Configuration updated automatically', 'info');
         }
+    });
+    
+    // Listen for recording auto-stop
+    state.socket.on('recording_stopped', (data) => {
+        console.log('Recording auto-stopped:', data);
+        
+        state.recording = false;
+        state.recordingStartTime = null;
+        
+        if (state.recordingTimer) {
+            clearInterval(state.recordingTimer);
+            state.recordingTimer = null;
+        }
+        
+        const btn = document.getElementById('btn-record');
+        if (btn) {
+            btn.classList.remove('recording');
+            btn.title = 'Start Recording';
+        }
+        
+        const timer = document.getElementById('recording-timer');
+        if (timer) timer.style.display = 'none';
+        
+        const timeDisplay = document.getElementById('recording-time');
+        if (timeDisplay) timeDisplay.textContent = '00:00';
+        
+        showToast(`Recording saved: ${data.filename}`, 'success');
     });
 }
 
@@ -918,6 +1257,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
+    // System control buttons
+    document.getElementById('btn-shutdown-app').addEventListener('click', shutdownApp);
+    document.getElementById('btn-shutdown-pi').addEventListener('click', shutdownPi);
+    document.getElementById('btn-reboot-pi').addEventListener('click', rebootPi);
+    
+    // Recording button
+    document.getElementById('btn-record').addEventListener('click', toggleRecording);
+    
     // Driving Mode buttons
     document.getElementById('btn-casual-mode').addEventListener('click', () => {
         showToast('Casual Mode - Coming Soon!', 'info');
@@ -950,6 +1297,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Video modal close on outside click
+    const videoModal = document.getElementById('video-modal');
+    if (videoModal) {
+        videoModal.addEventListener('click', (e) => {
+            if (e.target === videoModal) {
+                closeVideoModal();
+            }
+        });
+    }
+    
+    // Confirm modal close on outside click
+    const confirmModal = document.getElementById('confirm-modal');
+    if (confirmModal) {
+        confirmModal.addEventListener('click', (e) => {
+            if (e.target === confirmModal) {
+                confirmModal.style.display = 'none';
+            }
+        });
+    }
+    
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
     document.getElementById('btn-load-settings').addEventListener('click', loadSettings);
@@ -965,6 +1332,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initial status check
     checkSystemStatus();
+    checkRecordingStatus();
     
     // Periodic status checks
     setInterval(checkSystemStatus, 5000);  // Check every 5 seconds

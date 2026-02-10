@@ -1,0 +1,37 @@
+[Unit]
+Description=TCDD Sign Detection System
+Documentation=https://github.com/yourusername/tcdd-dev
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/tcdd-dev
+Environment="PATH=/home/pi/tcdd-dev/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/pi/tcdd-dev/venv/bin/python /home/pi/tcdd-dev/backend/main.py
+ExecStop=/bin/kill -SIGTERM $MAINPID
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tcdd-detector
+
+# Security hardening (optional, can be removed if causing issues)
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/pi/tcdd-dev/data
+ReadWritePaths=/home/pi/tcdd-dev/backend/models
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

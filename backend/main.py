@@ -10,6 +10,9 @@ from flask_cors import CORS
 import os
 import sys
 import logging
+import subprocess
+import signal
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -43,6 +46,7 @@ config = Config()
 # Create necessary directories before logging setup
 os.makedirs('data/logs', exist_ok=True)
 os.makedirs('data/captures', exist_ok=True)
+os.makedirs('data/recordings', exist_ok=True)
 os.makedirs('backend/models', exist_ok=True)
 
 # Setup logging
@@ -62,6 +66,14 @@ detector = None
 is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
+
+# Recording state
+is_recording = False
+recording_writer = None
+recording_filename = None
+recording_start_time = None
+recording_lock = threading.Lock()
+RECORDING_MAX_DURATION = 15 * 60  # 15 minutes in seconds
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -270,6 +282,281 @@ def get_violations():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
+# RECORDING API
+# ============================================================================
+
+@app.route('/api/recording/start', methods=['POST'])
+def start_recording():
+    """Start recording the video feed to an MP4 file."""
+    global is_recording, recording_writer, recording_filename, recording_start_time
+    
+    try:
+        with recording_lock:
+            if is_recording:
+                return jsonify({'message': 'Already recording', 'filename': recording_filename}), 200
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+            recording_filename = f'recording_{timestamp}.mp4'
+            filepath = os.path.join('data', 'recordings', recording_filename)
+            
+            # Get video dimensions from config
+            width = config.get('camera.width', 640)
+            height = config.get('camera.height', 480)
+            fps = config.get('camera.fps', 30)
+            
+            # Initialize video writer with H.264 codec
+            import cv2
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            recording_writer = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
+            
+            if not recording_writer.isOpened():
+                recording_writer = None
+                recording_filename = None
+                return jsonify({'error': 'Failed to initialize video writer'}), 500
+            
+            is_recording = True
+            recording_start_time = datetime.now()
+            
+            logger.info(f"📹 Recording started: {recording_filename}")
+            
+            return jsonify({
+                'message': 'Recording started',
+                'filename': recording_filename,
+                'max_duration': RECORDING_MAX_DURATION
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error starting recording: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recording/stop', methods=['POST'])
+def stop_recording():
+    """Stop the current recording."""
+    global is_recording, recording_writer, recording_filename, recording_start_time
+    
+    try:
+        with recording_lock:
+            if not is_recording:
+                return jsonify({'message': 'Not recording'}), 200
+            
+            saved_filename = recording_filename
+            
+            if recording_writer:
+                recording_writer.release()
+                recording_writer = None
+            
+            is_recording = False
+            recording_filename = None
+            recording_start_time = None
+            
+            logger.info(f"📹 Recording stopped: {saved_filename}")
+            
+            return jsonify({
+                'message': 'Recording stopped',
+                'filename': saved_filename
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error stopping recording: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recording/status', methods=['GET'])
+def recording_status():
+    """Get current recording status."""
+    try:
+        elapsed = 0
+        remaining = RECORDING_MAX_DURATION
+        
+        if is_recording and recording_start_time:
+            elapsed = (datetime.now() - recording_start_time).total_seconds()
+            remaining = max(0, RECORDING_MAX_DURATION - elapsed)
+        
+        return jsonify({
+            'recording': is_recording,
+            'filename': recording_filename,
+            'elapsed_seconds': int(elapsed),
+            'remaining_seconds': int(remaining),
+            'max_duration': RECORDING_MAX_DURATION
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting recording status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recordings', methods=['GET'])
+def list_recordings():
+    """List all saved recordings with file info."""
+    try:
+        recordings_dir = os.path.join('data', 'recordings')
+        recordings = []
+        
+        if os.path.exists(recordings_dir):
+            for filename in os.listdir(recordings_dir):
+                if filename.endswith('.mp4'):
+                    filepath = os.path.join(recordings_dir, filename)
+                    stat = os.stat(filepath)
+                    recordings.append({
+                        'filename': filename,
+                        'size_mb': round(stat.st_size / (1024 * 1024), 2),
+                        'created': datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                    })
+        
+        # Sort by modified time, newest first
+        recordings.sort(key=lambda x: x['modified'], reverse=True)
+        
+        # Calculate total size
+        total_size_mb = sum(r['size_mb'] for r in recordings)
+        
+        return jsonify({
+            'count': len(recordings),
+            'total_size_mb': round(total_size_mb, 2),
+            'recordings': recordings
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error listing recordings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recordings/<filename>', methods=['GET'])
+def serve_recording(filename):
+    """Serve a recording file for playback/download."""
+    try:
+        recordings_dir = os.path.join(PROJECT_ROOT, 'data', 'recordings')
+        return send_from_directory(recordings_dir, filename, as_attachment=False)
+    except Exception as e:
+        logger.error(f"Error serving recording {filename}: {e}")
+        return jsonify({'error': 'Recording not found'}), 404
+
+@app.route('/api/recordings/<filename>', methods=['DELETE'])
+def delete_recording(filename):
+    """Delete a recording file."""
+    try:
+        # Security check - prevent path traversal
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+        
+        filepath = os.path.join('data', 'recordings', filename)
+        
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            logger.info(f"🗑️ Deleted recording: {filename}")
+            return jsonify({'message': f'Deleted {filename}'}), 200
+        else:
+            return jsonify({'error': 'Recording not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error deleting recording {filename}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# SYSTEM CONTROL API
+# ============================================================================
+
+@app.route('/api/system/shutdown-app', methods=['POST'])
+def shutdown_app():
+    """Gracefully shutdown the application."""
+    try:
+        logger.info("🛑 Application shutdown requested...")
+        
+        # Stop recording if active
+        global is_recording, recording_writer
+        with recording_lock:
+            if is_recording and recording_writer:
+                recording_writer.release()
+                is_recording = False
+        
+        # Stop camera
+        if camera:
+            camera.stop()
+            logger.info("📷 Camera stopped")
+        
+        # Send response before shutting down
+        response = jsonify({'message': 'Application shutting down...'})
+        
+        # Schedule shutdown after response is sent
+        def shutdown():
+            import time
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGTERM)
+        
+        threading.Thread(target=shutdown, daemon=True).start()
+        
+        return response, 200
+        
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/system/shutdown-pi', methods=['POST'])
+def shutdown_pi():
+    """Shutdown the Raspberry Pi."""
+    try:
+        logger.info("🔴 Raspberry Pi shutdown requested...")
+        
+        # Stop recording if active
+        global is_recording, recording_writer
+        with recording_lock:
+            if is_recording and recording_writer:
+                recording_writer.release()
+                is_recording = False
+        
+        # Stop camera
+        if camera:
+            camera.stop()
+        
+        # Send response before shutting down
+        response = jsonify({'message': 'Raspberry Pi shutting down...'})
+        
+        # Schedule Pi shutdown after response is sent
+        def pi_shutdown():
+            import time
+            time.sleep(2)
+            subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False)
+        
+        threading.Thread(target=pi_shutdown, daemon=True).start()
+        
+        return response, 200
+        
+    except Exception as e:
+        logger.error(f"Error during Pi shutdown: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/system/reboot-pi', methods=['POST'])
+def reboot_pi():
+    """Reboot the Raspberry Pi (app will auto-restart via systemd)."""
+    try:
+        logger.info("🔄 Raspberry Pi reboot requested...")
+        
+        # Stop recording if active
+        global is_recording, recording_writer
+        with recording_lock:
+            if is_recording and recording_writer:
+                recording_writer.release()
+                is_recording = False
+        
+        # Stop camera
+        if camera:
+            camera.stop()
+        
+        # Send response before rebooting
+        response = jsonify({'message': 'Raspberry Pi rebooting...'})
+        
+        # Schedule Pi reboot after response is sent
+        def pi_reboot():
+            import time
+            time.sleep(2)
+            subprocess.run(['sudo', 'reboot'], check=False)
+        
+        threading.Thread(target=pi_reboot, daemon=True).start()
+        
+        return response, 200
+        
+    except Exception as e:
+        logger.error(f"Error during Pi reboot: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
 # STREAMING LOOP WITH METRICS
 # ============================================================================
 
@@ -302,8 +589,29 @@ def stream_video():
 
             annotated_frame = detector.draw_detections(frame, detections)
 
-            # JPEG encode timing
+            # Write frame to recording if active
             import cv2
+            with recording_lock:
+                if is_recording and recording_writer:
+                    # Write the annotated frame (with detections) to recording
+                    recording_writer.write(annotated_frame)
+                    
+                    # Check if max duration reached
+                    if recording_start_time:
+                        elapsed = (datetime.now() - recording_start_time).total_seconds()
+                        if elapsed >= RECORDING_MAX_DURATION:
+                            recording_writer.release()
+                            logger.info(f"📹 Recording auto-stopped (max duration reached): {recording_filename}")
+                            socketio.emit('recording_stopped', {
+                                'filename': recording_filename,
+                                'reason': 'max_duration'
+                            })
+                            globals()['recording_writer'] = None
+                            globals()['is_recording'] = False
+                            globals()['recording_filename'] = None
+                            globals()['recording_start_time'] = None
+
+            # JPEG encode timing
             jpeg_start = datetime.now()
             _, buffer = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)])
             jpeg_end = datetime.now()
