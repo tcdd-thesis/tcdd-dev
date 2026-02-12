@@ -413,7 +413,7 @@ if __name__ == '__main__':
         logger.info("="*60)
         
         try:
-            socketio.run(app, host='0.0.0.0', port=port, debug=debug)
+            socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
         except KeyboardInterrupt:
             logger.info("\nShutting down...")
             if camera:

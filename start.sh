@@ -21,7 +21,7 @@ fi
 CONFIG=$(cat config.json)
 
 # Extract virtual environment path from config.json, exit if no value found
-if ! echo "$CONFIG" | grep -q '"venv_path":\s*"\K[^"]+'; then
+if echo "$CONFIG" | grep -q '"venv_path":\s*"\K[^"]+'; then
     echo "Error: 'venv_path' not found in config.json!"
     exit 1
 fi
@@ -42,6 +42,15 @@ mkdir -p data/logs
 mkdir -p data/captures
 mkdir -p backend/models
 
-python backend/main.py
-sleep 6
-chromium-browser --kiosk http://localhost:5000 --password-store=basic
+# Start Python backend in background
+python backend/main.py &
+BACKEND_PID=$!
+
+# Wait for server to be ready
+sleep 5
+
+# Start browser
+chromium-browser --kiosk http://localhost:5000 --password-store=basic &
+
+# Bring Python logs back to foreground
+wait $BACKEND_PID
