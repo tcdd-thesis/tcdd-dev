@@ -60,12 +60,58 @@ body.touchscreen {
 
 .home-header {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 2px solid rgba(255,255,255,0.1);
     flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+/* ========== System Control Buttons ========== */
+.system-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.system-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.1);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.system-btn:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.system-btn:active {
+    transform: scale(0.95);
+}
+
+.system-btn .system-icon {
+    font-size: 18px;
+    color: white;
+}
+
+#btn-shutdown-app .system-icon {
+    color: #f44336;
+}
+
+#btn-shutdown-pi .system-icon {
+    color: #ff9800;
+}
+
+#btn-reboot-pi .system-icon {
+    color: #4caf50;
 }
 
 .status-panel {
@@ -308,6 +354,7 @@ body.touchscreen {
     background: rgba(255,255,255,0.05);
     font-size: 14px;
     flex-shrink: 0;
+    align-items: center;
 }
 
 .stat {
@@ -322,6 +369,64 @@ body.touchscreen {
 .stat .value {
     color: white;
     font-weight: 600;
+}
+
+/* ========== Recording Button ========== */
+.btn-record {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.1);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    margin-left: auto;
+}
+
+.btn-record:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: rgba(255,255,255,0.5);
+}
+
+.btn-record:active {
+    transform: scale(0.95);
+}
+
+.btn-record .record-icon {
+    font-size: 20px;
+    color: rgba(255,255,255,0.7);
+    transition: all 0.2s;
+}
+
+.btn-record.recording {
+    border-color: #f44336;
+    background: rgba(244, 67, 54, 0.2);
+    animation: pulse-recording 1.5s infinite;
+}
+
+.btn-record.recording .record-icon {
+    color: #f44336;
+}
+
+@keyframes pulse-recording {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(244, 67, 54, 0);
+    }
+}
+
+.recording-stat {
+    color: #f44336;
+}
+
+.recording-time {
+    color: #f44336 !important;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ========== Driving Mode Styles ========== */
@@ -499,6 +604,87 @@ body.touchscreen {
     font-size: 16px;
     margin-bottom: 12px;
     color: var(--primary);
+}
+
+/* ========== Recordings Section ========== */
+.recordings-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+}
+
+.recordings-header #recordings-count {
+    flex: 1;
+}
+
+.recordings-header #recordings-size {
+    color: rgba(255,255,255,0.5);
+}
+
+.recordings-list {
+    max-height: 120px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.recordings-empty {
+    text-align: center;
+    color: rgba(255,255,255,0.4);
+    padding: 15px;
+    font-size: 13px;
+}
+
+.recording-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+    margin-bottom: 6px;
+}
+
+.recording-item:last-child {
+    margin-bottom: 0;
+}
+
+.recording-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.recording-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recording-meta {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+}
+
+.recording-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-small {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-width: auto;
+    min-height: auto;
 }
 
 .setting-row {
@@ -915,3 +1101,51 @@ body.touchscreen {
 .toast.error { border-left: 4px solid var(--danger); }
 .toast.warning { border-left: 4px solid var(--warning); }
 .toast.info { border-left: 4px solid var(--primary); }
+
+/* ========== Confirmation Modal ========== */
+.modal-confirm {
+    max-width: 400px;
+}
+
+.modal-confirm .modal-body {
+    padding: 20px;
+    text-align: center;
+}
+
+.modal-confirm .modal-body p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.5;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 15px 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    justify-content: flex-end;
+}
+
+.modal-footer .btn {
+    min-width: 80px;
+}
+
+/* ========== Video Modal ========== */
+.modal-video {
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.video-body {
+    padding: 0;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-body video {
+    max-width: 100%;
+    max-height: 60vh;
+    width: 100%;
+}

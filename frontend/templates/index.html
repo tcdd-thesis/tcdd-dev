@@ -11,6 +11,19 @@
     <div id="page-home" class="page active">
         <div class="home-container">
             <div class="home-header">
+                <!-- System Control Buttons (Top Left) -->
+                <div class="system-controls">
+                    <button class="system-btn" id="btn-shutdown-app" title="Shutdown App">
+                        <span class="system-icon">⏻</span>
+                    </button>
+                    <button class="system-btn" id="btn-shutdown-pi" title="Shutdown Pi">
+                        <span class="system-icon">⏼</span>
+                    </button>
+                    <button class="system-btn" id="btn-reboot-pi" title="Reboot Pi">
+                        <span class="system-icon">↻</span>
+                    </button>
+                </div>
+                
                 <div class="status-panel">
                     <div class="status-item" id="status-wifi">
                         <span class="status-icon">📶</span>
@@ -68,6 +81,13 @@
                     <span class="label">Detected:</span>
                     <span id="detection-count" class="value">0</span>
                 </div>
+                <div class="stat recording-stat" id="recording-timer" style="display: none;">
+                    <span class="label">REC:</span>
+                    <span id="recording-time" class="value recording-time">00:00</span>
+                </div>
+                <button id="btn-record" class="btn-record" title="Start Recording">
+                    <span class="record-icon">●</span>
+                </button>
             </div>
         </div>
         
@@ -129,6 +149,19 @@
             </div>
             
             <div class="settings-container-compact">
+                <!-- Recordings Section -->
+                <div class="settings-group">
+                    <h3>📹 Recordings</h3>
+                    <div class="recordings-header">
+                        <span id="recordings-count">0 recordings</span>
+                        <span id="recordings-size">0 MB</span>
+                        <button id="btn-refresh-recordings" class="btn btn-small btn-primary" onclick="loadRecordings()">↻</button>
+                    </div>
+                    <div id="recordings-list" class="recordings-list">
+                        <div class="recordings-empty">No recordings yet</div>
+                    </div>
+                </div>
+
                 <div class="settings-group">
                     <h3>Camera</h3>
                     <div class="setting-row">
@@ -170,6 +203,38 @@
 
     <!-- Toast Notifications -->
     <div id="toast-container"></div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-confirm">
+            <div class="modal-header">
+                <h3 id="confirm-title">Confirm Action</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="confirm-ok" class="btn btn-danger">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Playback Modal -->
+    <div id="video-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-video">
+            <div class="modal-header">
+                <h3 id="video-title">Recording</h3>
+                <button class="btn-close" onclick="closeVideoModal()">✕</button>
+            </div>
+            <div class="modal-body video-body">
+                <video id="video-player" controls>
+                    <source id="video-source" src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        </div>
+    </div>
 
     <!-- Load SocketIO from CDN -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
