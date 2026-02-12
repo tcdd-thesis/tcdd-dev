@@ -49,7 +49,7 @@
                                             // For PyTorch: .pt or .pth
                                             // For NCNN: .param and .bin
                                             // For HEF: .hef
-    ]
+    ],
     
     "labels": "backend/models/labels.txt", // Class labels file (one label per line)
     
