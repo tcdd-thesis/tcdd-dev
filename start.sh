@@ -43,5 +43,5 @@ mkdir -p data/captures
 mkdir -p backend/models
 
 python backend/main.py
-sleep 2
+sleep 6
 chromium-browser --kiosk http://localhost:5000 --password-store=basic
