@@ -5,8 +5,8 @@
   
   "port": 5000,                    // Web server port (requires restart)
   "debug": false,                  // Enable debug mode (requires restart)
-  "host": "0.0.0.0",              // Bind address (0.0.0.0 = all interfaces)
-  
+  "host": "0.0.0.0",               // Bind address (0.0.0.0 = all interfaces)
+  "venv_path": "backend/.venv",    // Path to Python virtual environment (requires restart)
   
   // =============================================================================
   // CAMERA SETTINGS
@@ -15,8 +15,8 @@
   
   "camera": {
     // Resolution
-    "width": 640,                  // 320, 640, 1280, 1920
-    "height": 480,                 // 240, 480, 720, 1080
+    "width": 1920,                  // 320, 640, 1280, 1920
+    "height": 1080,                 // 240, 480, 720, 1080
     "fps": 30,                     // Target frames per second (1-60)
     
     // Image Adjustments
@@ -32,28 +32,35 @@
     "use_mock": false              // Force mock camera (for testing)
   },
   
-  
   // =============================================================================
   // DETECTION SETTINGS
   // Changes here will reload the detector automatically (~1 second)
   // =============================================================================
   
   "detection": {
+    "enabled": true,                        // Enable object detection
+    "device": "cpu",                        // Device for inference: "cpu", "hailo"
+    "engine": "ncnn",                       // Detection engine: "pt" (PyTorch)
+                                            //                   "ncnn" (Tencent NCNN)
+                                            //                   "hef" (Hailo Executable Format)
     // Model Configuration
-    "model": "backend/models/yolov8n.pt",  // YOLO model path
-                                            // Options: yolov8n.pt (fastest)
-                                            //          yolov8s.pt (balanced)
-                                            //          yolov8m.pt (accurate)
-                                            //          yolov8l.pt (most accurate)
+    "model_files": [
+      "backend/models/model.pt"             // Model file path(s)
+                                            // For PyTorch: .pt or .pth
+                                            // For NCNN: .param and .bin
+                                            // For HEF: .hef
+    ]
+    
+    "labels": "backend/models/labels.txt", // Class labels file (one label per line)
     
     // Detection Parameters
-    "confidence": 0.5,             // Min confidence: 0.0-1.0
+    "confidence": 0.6,              // Min confidence: 0.0-1.0
                                     // 0.3 = catch everything (more false positives)
                                     // 0.5 = balanced (default)
                                     // 0.7 = high precision (fewer false positives)
     
     "iou_threshold": 0.45,         // Non-max suppression IoU: 0.0-1.0
-    "max_detections": 100,         // Max detections per frame
+    "max_detections": 50,         // Max detections per frame
     "classes": [],                 // Filter classes (empty = all)
                                     // Example: [0, 1, 2] for specific classes
     
@@ -107,8 +114,7 @@
     "console_output": true,        // Print to console
     "log_detections": false        // Log every detection (verbose!)
   },
-  
-  
+
   // =============================================================================
   // PERFORMANCE SETTINGS
   // Changes will reload the detector
