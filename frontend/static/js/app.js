@@ -62,6 +62,51 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// ============================================================================
+// SHUTDOWN FUNCTIONS
+// ============================================================================
+
+function showShutdownConfirm() {
+    const modal = document.getElementById('shutdown-confirm-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function cancelShutdown() {
+    const modal = document.getElementById('shutdown-confirm-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function confirmShutdown() {
+    // Hide confirmation modal
+    const confirmModal = document.getElementById('shutdown-confirm-modal');
+    if (confirmModal) {
+        confirmModal.style.display = 'none';
+    }
+    
+    // Show progress modal
+    const progressModal = document.getElementById('shutdown-progress-modal');
+    if (progressModal) {
+        progressModal.style.display = 'flex';
+    }
+    
+    try {
+        await api.post('/shutdown');
+        // The system will shut down after 2 seconds
+        // Keep the progress modal visible
+    } catch (error) {
+        console.error('Shutdown request failed:', error);
+        // Hide progress modal on error
+        if (progressModal) {
+            progressModal.style.display = 'none';
+        }
+        showToast('Shutdown failed: ' + error.message, 'error');
+    }
+}
+
 // Navigation
 function goHome() {
     // Stop camera if streaming

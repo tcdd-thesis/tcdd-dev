@@ -179,6 +179,22 @@ def get_status():
         logger.error(f"Error getting status: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown_system():
+    """Shutdown the Raspberry Pi with a 2-second delay for UI feedback"""
+    import subprocess
+    import threading
+    
+    def delayed_shutdown():
+        import time
+        time.sleep(2)  # Allow UI to show shutdown message
+        logger.info("Executing system shutdown...")
+        subprocess.run(['sudo', 'shutdown', 'now'])
+    
+    logger.info("Shutdown requested via API")
+    threading.Thread(target=delayed_shutdown, daemon=True).start()
+    return jsonify({'message': 'Shutting down...'}), 200
+
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
     """Start camera and detection (no-op, always running)"""
