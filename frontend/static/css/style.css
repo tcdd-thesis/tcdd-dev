@@ -105,24 +105,23 @@ body.touchscreen {
 }
 
 .closeapp-btn {
+    background: var(--secondary);
+    border-color: var(--secondary);
+}
+
+.closeapp-btn:hover {
+    background: #616161;
+    border-color: #616161;
+}
+
+.reboot-btn {
     background: var(--warning);
     border-color: var(--warning);
 }
 
-.closeapp-btn:hover {
+.reboot-btn:hover {
     background: #e68a00;
     border-color: #e68a00;
-}
-
-.reboot-btn {
-    background: #FFC107;
-    border-color: #FFC107;
-    color: #000;
-}
-
-.reboot-btn:hover {
-    background: #e0a800;
-    border-color: #e0a800;
 }
 
 /* Reboot Modals */
@@ -169,13 +168,13 @@ body.touchscreen {
 }
 
 .btn-reboot {
-    background: #FFC107;
-    border-color: #FFC107;
-    color: #000;
+    background: var(--warning);
+    border-color: var(--warning);
+    color: #fff;
 }
 
 .btn-reboot:hover {
-    background: #e0a800;
+    background: #e68a00;
 }
 
 .reboot-progress-content {
@@ -188,7 +187,7 @@ body.touchscreen {
 
 .reboot-progress-icon {
     font-size: 64px;
-    color: #FFC107;
+    color: var(--warning);
     margin-bottom: 20px;
     animation: pulse-reboot 1.5s ease-in-out infinite;
 }
@@ -316,8 +315,13 @@ body.touchscreen {
     min-width: 120px;
 }
 
-.btn-warning {
-    background: var(--warning);
+.btn-closeapp {
+    background: #424242;
+    border-color: #424242;
+}
+
+.btn-closeapp:hover {
+    background: #616161;
 }
 
 .closeapp-progress-content {
@@ -330,7 +334,7 @@ body.touchscreen {
 
 .closeapp-progress-icon {
     font-size: 64px;
-    color: var(--warning);
+    color: var(--secondary);
     margin-bottom: 20px;
     animation: pulse-shutdown 1.5s ease-in-out infinite;
 }

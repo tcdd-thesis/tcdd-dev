@@ -15,11 +15,11 @@
                     <button class="action-btn closeapp-btn" onclick="showCloseAppConfirm()" title="Close App">
                         ✕
                     </button>
-                    <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
-                        ⏻
-                    </button>
                     <button class="action-btn reboot-btn" onclick="showRebootConfirm()" title="Reboot">
                         ↻
+                    </button>
+                    <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
+                        ⏻
                     </button>
                 </div>
                 <div class="status-panel">
@@ -240,7 +240,7 @@
                 <p>This will stop the detection system and close the browser.</p>
                 <div class="closeapp-confirm-buttons">
                     <button class="btn btn-secondary btn-touch" onclick="cancelCloseApp()">Cancel</button>
-                    <button class="btn btn-warning btn-touch" onclick="confirmCloseApp()">Close</button>
+                    <button class="btn btn-closeapp btn-touch" onclick="confirmCloseApp()">Close</button>
                 </div>
             </div>
         </div>
