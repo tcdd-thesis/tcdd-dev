@@ -108,6 +108,51 @@ async function confirmShutdown() {
 }
 
 // ============================================================================
+// REBOOT FUNCTIONS
+// ============================================================================
+
+function showRebootConfirm() {
+    const modal = document.getElementById('reboot-confirm-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function cancelReboot() {
+    const modal = document.getElementById('reboot-confirm-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function confirmReboot() {
+    // Hide confirmation modal
+    const confirmModal = document.getElementById('reboot-confirm-modal');
+    if (confirmModal) {
+        confirmModal.style.display = 'none';
+    }
+    
+    // Show progress modal
+    const progressModal = document.getElementById('reboot-progress-modal');
+    if (progressModal) {
+        progressModal.style.display = 'flex';
+    }
+    
+    try {
+        await api.post('/reboot');
+        // The system will reboot after 2 seconds
+        // Keep the progress modal visible
+    } catch (error) {
+        console.error('Reboot request failed:', error);
+        // Hide progress modal on error
+        if (progressModal) {
+            progressModal.style.display = 'none';
+        }
+        showToast('Reboot failed: ' + error.message, 'error');
+    }
+}
+
+// ============================================================================
 // CLOSE APP FUNCTIONS
 // ============================================================================
 

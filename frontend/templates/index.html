@@ -18,6 +18,9 @@
                     <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
                         ⏻
                     </button>
+                    <button class="action-btn reboot-btn" onclick="showRebootConfirm()" title="Reboot">
+                        ↻
+                    </button>
                 </div>
                 <div class="status-panel">
                     <div class="status-item" id="status-wifi">
@@ -200,6 +203,30 @@
         <div class="modal-content shutdown-progress-content">
             <div class="shutdown-progress-icon">⏻</div>
             <div class="shutdown-progress-text">Shutting down...</div>
+        </div>
+    </div>
+
+    <!-- Reboot Confirmation Modal -->
+    <div id="reboot-confirm-modal" class="modal reboot-modal">
+        <div class="modal-content reboot-confirm-content">
+            <div class="modal-header">
+                <h3>Restart System?</h3>
+            </div>
+            <div class="modal-body reboot-confirm-body">
+                <p>Are you sure you want to restart the Raspberry Pi?</p>
+                <div class="reboot-confirm-buttons">
+                    <button class="btn btn-secondary btn-touch" onclick="cancelReboot()">Cancel</button>
+                    <button class="btn btn-reboot btn-touch" onclick="confirmReboot()">Restart</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reboot In Progress Modal -->
+    <div id="reboot-progress-modal" class="modal reboot-modal">
+        <div class="modal-content reboot-progress-content">
+            <div class="reboot-progress-icon">↻</div>
+            <div class="reboot-progress-text">Restarting...</div>
         </div>
     </div>
 

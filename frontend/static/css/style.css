@@ -114,6 +114,96 @@ body.touchscreen {
     border-color: #e68a00;
 }
 
+.reboot-btn {
+    background: #FFC107;
+    border-color: #FFC107;
+    color: #000;
+}
+
+.reboot-btn:hover {
+    background: #e0a800;
+    border-color: #e0a800;
+}
+
+/* Reboot Modals */
+.reboot-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+}
+
+.reboot-confirm-content {
+    background: #1a1a1a;
+    border-radius: 16px;
+    max-width: 350px;
+    width: 90%;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.reboot-confirm-body {
+    padding: 20px;
+    text-align: center;
+}
+
+.reboot-confirm-body p {
+    margin-bottom: 24px;
+    font-size: 16px;
+    color: rgba(255,255,255,0.8);
+}
+
+.reboot-confirm-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.reboot-confirm-buttons .btn {
+    min-width: 120px;
+}
+
+.btn-reboot {
+    background: #FFC107;
+    border-color: #FFC107;
+    color: #000;
+}
+
+.btn-reboot:hover {
+    background: #e0a800;
+}
+
+.reboot-progress-content {
+    background: #1a1a1a;
+    border-radius: 16px;
+    padding: 40px;
+    text-align: center;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.reboot-progress-icon {
+    font-size: 64px;
+    color: #FFC107;
+    margin-bottom: 20px;
+    animation: pulse-reboot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-reboot {
+    0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    50% { opacity: 0.5; transform: scale(0.95) rotate(180deg); }
+}
+
+.reboot-progress-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: white;
+}
+
 /* Shutdown Modals */
 .shutdown-modal {
     display: none;
