@@ -15,7 +15,10 @@ const state = {
     status: {
         wifi: false,
         camera: false
-    }    
+    },
+    recording: false,
+    recordingStartTime: null,
+    recordingTimerInterval: null
 };
 
 // API helper
@@ -203,6 +206,12 @@ function goHome() {
         stopCamera();
     }
     
+    // Pause recording timer (recording continues in backend)
+    if (state.recordingTimerInterval) {
+        clearInterval(state.recordingTimerInterval);
+        state.recordingTimerInterval = null;
+    }
+    
     switchPage('home');
 }
 
@@ -217,6 +226,7 @@ function switchPage(pageName) {
     // Load page-specific content
     if (pageName === 'logs') { loadViolations(); }
     if (pageName === 'settings') loadSettings();
+    if (pageName === 'live') checkRecordingStatus();
 }
 
 // ============================================================================
@@ -900,6 +910,121 @@ async function saveSettings() {
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
+    }
+}
+
+// ============================================================================
+// RECORDING FUNCTIONS
+// ============================================================================
+
+async function toggleRecording() {
+    if (state.recording) {
+        await stopRecording();
+    } else {
+        await startRecording();
+    }
+}
+
+async function startRecording() {
+    try {
+        const response = await api.post('/recording/start');
+        
+        if (response.recording) {
+            state.recording = true;
+            state.recordingStartTime = new Date();
+            
+            // Update UI
+            const btn = document.getElementById('btn-record');
+            const indicator = document.getElementById('recording-indicator');
+            
+            if (btn) btn.classList.add('recording');
+            if (indicator) indicator.style.display = 'flex';
+            
+            // Start duration timer
+            updateRecordingDuration();
+            state.recordingTimerInterval = setInterval(updateRecordingDuration, 1000);
+            
+            showToast('Recording started', 'success');
+        }
+    } catch (error) {
+        console.error('Failed to start recording:', error);
+        showToast('Failed to start recording', 'error');
+    }
+}
+
+async function stopRecording() {
+    try {
+        const response = await api.post('/recording/stop');
+        
+        state.recording = false;
+        state.recordingStartTime = null;
+        
+        // Stop timer
+        if (state.recordingTimerInterval) {
+            clearInterval(state.recordingTimerInterval);
+            state.recordingTimerInterval = null;
+        }
+        
+        // Update UI
+        const btn = document.getElementById('btn-record');
+        const indicator = document.getElementById('recording-indicator');
+        const duration = document.getElementById('recording-duration');
+        
+        if (btn) btn.classList.remove('recording');
+        if (indicator) indicator.style.display = 'none';
+        if (duration) duration.textContent = '00:00:00';
+        
+        if (response.filename) {
+            showToast(`Recording saved: ${response.filename.split('/').pop()}`, 'success');
+        } else {
+            showToast('Recording stopped', 'success');
+        }
+    } catch (error) {
+        console.error('Failed to stop recording:', error);
+        showToast('Failed to stop recording', 'error');
+    }
+}
+
+function updateRecordingDuration() {
+    if (!state.recordingStartTime) return;
+    
+    const now = new Date();
+    const elapsed = Math.floor((now - state.recordingStartTime) / 1000);
+    
+    const hours = Math.floor(elapsed / 3600);
+    const minutes = Math.floor((elapsed % 3600) / 60);
+    const seconds = elapsed % 60;
+    
+    const formatted = [
+        hours.toString().padStart(2, '0'),
+        minutes.toString().padStart(2, '0'),
+        seconds.toString().padStart(2, '0')
+    ].join(':');
+    
+    const duration = document.getElementById('recording-duration');
+    if (duration) duration.textContent = formatted;
+}
+
+async function checkRecordingStatus() {
+    try {
+        const response = await api.get('/recording/status');
+        
+        if (response.recording && !state.recording) {
+            // Recording was started elsewhere, sync state
+            state.recording = true;
+            state.recordingStartTime = new Date(Date.now() - (response.duration * 1000));
+            
+            const btn = document.getElementById('btn-record');
+            const indicator = document.getElementById('recording-indicator');
+            
+            if (btn) btn.classList.add('recording');
+            if (indicator) indicator.style.display = 'flex';
+            
+            updateRecordingDuration();
+            state.recordingTimerInterval = setInterval(updateRecordingDuration, 1000);
+        }
+    } catch (error) {
+        console.error('Failed to check recording status:', error);
     }
 }
 

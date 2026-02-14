@@ -63,6 +63,12 @@ is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
 
+# Recording state
+is_recording = False
+recording_start_time = None
+video_writer = None
+recording_filename = None
+
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
 # ============================================================================
@@ -308,6 +314,99 @@ def reload_config():
         return jsonify({'error': str(e)}), 500
 
 # ----------------------------------------------------------------------------
+# RECORDING API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/recording/start', methods=['POST'])
+def start_recording():
+    """Start recording video to MP4 file"""
+    global is_recording, recording_start_time, video_writer, recording_filename
+    import cv2
+    
+    if is_recording:
+        return jsonify({'error': 'Already recording', 'recording': True}), 400
+    
+    try:
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        recording_filename = f'data/captures/rec_{timestamp}.mp4'
+        
+        # Get video dimensions from config
+        width = config.get('camera.width', 640)
+        height = config.get('camera.height', 480)
+        fps = config.get('camera.fps', 30)
+        
+        # Initialize video writer with MP4V codec
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(recording_filename, fourcc, fps, (width, height))
+        
+        if not video_writer.isOpened():
+            return jsonify({'error': 'Failed to create video writer'}), 500
+        
+        is_recording = True
+        recording_start_time = datetime.now()
+        
+        logger.info(f"🎬 Recording started: {recording_filename}")
+        return jsonify({
+            'message': 'Recording started',
+            'recording': True,
+            'filename': recording_filename,
+            'start_time': recording_start_time.isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error starting recording: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recording/stop', methods=['POST'])
+def stop_recording():
+    """Stop recording and save the video file"""
+    global is_recording, recording_start_time, video_writer, recording_filename
+    
+    if not is_recording:
+        return jsonify({'error': 'Not recording', 'recording': False}), 400
+    
+    try:
+        is_recording = False
+        duration = (datetime.now() - recording_start_time).total_seconds() if recording_start_time else 0
+        
+        if video_writer:
+            video_writer.release()
+            video_writer = None
+        
+        saved_filename = recording_filename
+        recording_filename = None
+        recording_start_time = None
+        
+        logger.info(f"🎬 Recording stopped: {saved_filename} (duration: {duration:.1f}s)")
+        return jsonify({
+            'message': 'Recording stopped',
+            'recording': False,
+            'filename': saved_filename,
+            'duration': duration
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error stopping recording: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recording/status', methods=['GET'])
+def get_recording_status():
+    """Get current recording status"""
+    global is_recording, recording_start_time, recording_filename
+    
+    duration = 0
+    if is_recording and recording_start_time:
+        duration = (datetime.now() - recording_start_time).total_seconds()
+    
+    return jsonify({
+        'recording': is_recording,
+        'filename': recording_filename,
+        'duration': duration,
+        'start_time': recording_start_time.isoformat() if recording_start_time else None
+    }), 200
+
+# ----------------------------------------------------------------------------
 # VIOLATIONS API
 # ----------------------------------------------------------------------------
 
@@ -357,6 +456,13 @@ def stream_video():
             inference_end = datetime.now()
 
             annotated_frame = detector.draw_detections(frame, detections)
+
+            # Write frame to video if recording
+            if is_recording and video_writer is not None:
+                try:
+                    video_writer.write(annotated_frame)
+                except Exception as e:
+                    logger.error(f"Error writing frame to video: {e}")
 
             # JPEG encode timing
             import cv2

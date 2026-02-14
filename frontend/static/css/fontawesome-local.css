@@ -32,3 +32,5 @@
 .fa-bars:before { content: "\f0c9"; }
 .fa-arrow-left:before { content: "\f060"; }
 .fa-refresh:before, .fa-sync:before { content: "\f021"; }
+.fa-circle:before { content: "\f111"; }
+.fa-stop:before { content: "\f04d"; }

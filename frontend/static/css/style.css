@@ -585,6 +585,8 @@ body.touchscreen {
     background: rgba(255,255,255,0.05);
     font-size: 14px;
     flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .stat {
@@ -599,6 +601,74 @@ body.touchscreen {
 .stat .value {
     color: white;
     font-weight: 600;
+}
+
+/* Recording Controls */
+.recording-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.btn-record {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-record:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: rgba(255,255,255,0.5);
+}
+
+.btn-record:active {
+    transform: scale(0.95);
+}
+
+.btn-record.recording {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+    animation: pulse-record 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-record {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4); }
+    50% { opacity: 0.9; box-shadow: 0 0 0 8px rgba(244, 67, 54, 0); }
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--danger);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.recording-dot {
+    font-size: 10px;
+    animation: blink-dot 1s ease-in-out infinite;
+}
+
+@keyframes blink-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+#recording-duration {
+    font-variant-numeric: tabular-nums;
+    min-width: 60px;
 }
 
 /* ========== Driving Mode Styles ========== */

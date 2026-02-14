@@ -80,6 +80,15 @@
                     <span class="label">Detected:</span>
                     <span id="detection-count" class="value">0</span>
                 </div>
+                <div class="recording-controls">
+                    <span id="recording-indicator" class="recording-indicator" style="display: none;">
+                        <i class="fa-solid fa-circle recording-dot"></i>
+                        <span id="recording-duration">00:00:00</span>
+                    </span>
+                    <button id="btn-record" class="btn-record" onclick="toggleRecording()" title="Record">
+                        <i class="fa-solid fa-circle"></i>
+                    </button>
+                </div>
             </div>
         </div>
         
