@@ -3,7 +3,8 @@
     font-family: 'Material Icons';
     font-style: normal;
     font-weight: 400;
-    src: url('/static/fonts/material-icons.woff2') format('woff2');
+    src: url('/static/fonts/MaterialIcons-Regular.ttf') format('truetype'),
+         url('/static/fonts/material-icons.woff2') format('woff2');
 }
 
 .material-icons {
@@ -19,7 +20,9 @@
     word-wrap: normal;
     direction: ltr;
     -webkit-font-feature-settings: 'liga';
+    -moz-font-feature-settings: 'liga';
     font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
 }
