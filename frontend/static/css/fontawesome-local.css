@@ -1,0 +1,34 @@
+/* Font Awesome 6 Free - Solid Icons Only (Self-hosted) */
+@font-face {
+    font-family: 'Font Awesome 6 Free';
+    font-style: normal;
+    font-weight: 900;
+    font-display: block;
+    src: url('/static/webfonts/fa-solid-900.woff2') format('woff2'),
+         url('/static/webfonts/fa-solid-900.ttf') format('truetype');
+}
+
+.fa, .fas, .fa-solid {
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    line-height: 1;
+    display: inline-block;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Icon definitions */
+.fa-xmark:before { content: "\f00d"; }
+.fa-rotate:before, .fa-rotate-right:before { content: "\f2f1"; }
+.fa-power-off:before { content: "\f011"; }
+.fa-wifi:before { content: "\f1eb"; }
+.fa-video:before { content: "\f03d"; }
+.fa-camera:before { content: "\f030"; }
+.fa-play:before { content: "\f04b"; }
+.fa-gear:before, .fa-cog:before { content: "\f013"; }
+.fa-bars:before { content: "\f0c9"; }
+.fa-arrow-left:before { content: "\f060"; }
+.fa-refresh:before, .fa-sync:before { content: "\f021"; }
