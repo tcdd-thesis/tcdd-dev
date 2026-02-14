@@ -68,6 +68,10 @@ is_recording = False
 recording_start_time = None
 video_writer = None
 recording_filename = None
+recording_frame_count = 0
+
+# Actual streaming FPS (updated in stream loop)
+actual_streaming_fps = 10.0  # Default estimate, will be updated dynamically
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -334,7 +338,11 @@ def start_recording():
         # Get video dimensions from config
         width = config.get('camera.width', 640)
         height = config.get('camera.height', 480)
-        fps = config.get('camera.fps', 30)
+        
+        # Use actual streaming FPS (not configured FPS) to match real frame rate
+        # This ensures video duration matches recording time
+        fps = max(1.0, actual_streaming_fps)
+        logger.info(f"Using actual streaming FPS for recording: {fps:.1f}")
         
         # Initialize video writer with MP4V codec
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -345,6 +353,8 @@ def start_recording():
         
         is_recording = True
         recording_start_time = datetime.now()
+        global recording_frame_count
+        recording_frame_count = 0
         
         logger.info(f"🎬 Recording started: {recording_filename}")
         return jsonify({
@@ -361,7 +371,7 @@ def start_recording():
 @app.route('/api/recording/stop', methods=['POST'])
 def stop_recording():
     """Stop recording and save the video file"""
-    global is_recording, recording_start_time, video_writer, recording_filename
+    global is_recording, recording_start_time, video_writer, recording_filename, recording_frame_count
     
     if not is_recording:
         return jsonify({'error': 'Not recording', 'recording': False}), 400
@@ -369,6 +379,7 @@ def stop_recording():
     try:
         is_recording = False
         duration = (datetime.now() - recording_start_time).total_seconds() if recording_start_time else 0
+        frames_written = recording_frame_count
         
         if video_writer:
             video_writer.release()
@@ -377,13 +388,16 @@ def stop_recording():
         saved_filename = recording_filename
         recording_filename = None
         recording_start_time = None
+        recording_frame_count = 0
         
-        logger.info(f"🎬 Recording stopped: {saved_filename} (duration: {duration:.1f}s)")
+        effective_fps = frames_written / duration if duration > 0 else 0
+        logger.info(f"🎬 Recording stopped: {saved_filename} (duration: {duration:.1f}s, frames: {frames_written}, effective fps: {effective_fps:.1f})")
         return jsonify({
             'message': 'Recording stopped',
             'recording': False,
             'filename': saved_filename,
-            'duration': duration
+            'duration': duration,
+            'frames': frames_written
         }), 200
         
     except Exception as e:
@@ -459,8 +473,10 @@ def stream_video():
 
             # Write frame to video if recording
             if is_recording and video_writer is not None:
+                global recording_frame_count
                 try:
                     video_writer.write(annotated_frame)
+                    recording_frame_count += 1
                 except Exception as e:
                     logger.error(f"Error writing frame to video: {e}")
 
@@ -521,6 +537,11 @@ def stream_video():
             now = datetime.now()
             elapsed = (now - last_fps_time).total_seconds()
             fps = (frame_count / elapsed) if elapsed > 0 else 0.0
+            
+            # Update actual streaming FPS (used for video recording)
+            global actual_streaming_fps
+            if elapsed > 2.0:  # Update after at least 2 seconds for stability
+                actual_streaming_fps = fps
             camera_frame_time_ms = (frame_capture_end - frame_capture_start).total_seconds() * 1000.0
             inference_time_ms = (inference_end - inference_start).total_seconds() * 1000.0
             jpeg_encode_time_ms = (jpeg_end - jpeg_start).total_seconds() * 1000.0
