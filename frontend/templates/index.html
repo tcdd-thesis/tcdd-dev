@@ -12,10 +12,12 @@
         <div class="home-container">
             <div class="home-header">
                 <div class="header-actions">
+                    <button class="action-btn closeapp-btn" onclick="showCloseAppConfirm()" title="Close App">
+                        ✕
+                    </button>
                     <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
                         ⏻
                     </button>
-                    <!-- Future action buttons can be added here -->
                 </div>
                 <div class="status-panel">
                     <div class="status-item" id="status-wifi">
@@ -198,6 +200,30 @@
         <div class="modal-content shutdown-progress-content">
             <div class="shutdown-progress-icon">⏻</div>
             <div class="shutdown-progress-text">Shutting down...</div>
+        </div>
+    </div>
+
+    <!-- Close App Confirmation Modal -->
+    <div id="closeapp-confirm-modal" class="modal closeapp-modal">
+        <div class="modal-content closeapp-confirm-content">
+            <div class="modal-header">
+                <h3>Close the application?</h3>
+            </div>
+            <div class="modal-body closeapp-confirm-body">
+                <p>This will stop the detection system and close the browser.</p>
+                <div class="closeapp-confirm-buttons">
+                    <button class="btn btn-secondary btn-touch" onclick="cancelCloseApp()">Cancel</button>
+                    <button class="btn btn-warning btn-touch" onclick="confirmCloseApp()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close App In Progress Modal -->
+    <div id="closeapp-progress-modal" class="modal closeapp-modal">
+        <div class="modal-content closeapp-progress-content">
+            <div class="closeapp-progress-icon">✕</div>
+            <div class="closeapp-progress-text">Closing application...</div>
         </div>
     </div>
 

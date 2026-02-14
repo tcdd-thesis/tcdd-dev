@@ -104,6 +104,16 @@ body.touchscreen {
     border-color: #d32f2f;
 }
 
+.closeapp-btn {
+    background: var(--warning);
+    border-color: var(--warning);
+}
+
+.closeapp-btn:hover {
+    background: #e68a00;
+    border-color: #e68a00;
+}
+
 /* Shutdown Modals */
 .shutdown-modal {
     display: none;
@@ -168,6 +178,74 @@ body.touchscreen {
 }
 
 .shutdown-progress-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: white;
+}
+
+/* Close App Modals */
+.closeapp-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+}
+
+.closeapp-confirm-content {
+    background: #1a1a1a;
+    border-radius: 16px;
+    max-width: 350px;
+    width: 90%;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.closeapp-confirm-body {
+    padding: 20px;
+    text-align: center;
+}
+
+.closeapp-confirm-body p {
+    margin-bottom: 24px;
+    font-size: 16px;
+    color: rgba(255,255,255,0.8);
+}
+
+.closeapp-confirm-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.closeapp-confirm-buttons .btn {
+    min-width: 120px;
+}
+
+.btn-warning {
+    background: var(--warning);
+}
+
+.closeapp-progress-content {
+    background: #1a1a1a;
+    border-radius: 16px;
+    padding: 40px;
+    text-align: center;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.closeapp-progress-icon {
+    font-size: 64px;
+    color: var(--warning);
+    margin-bottom: 20px;
+    animation: pulse-shutdown 1.5s ease-in-out infinite;
+}
+
+.closeapp-progress-text {
     font-size: 20px;
     font-weight: 600;
     color: white;
