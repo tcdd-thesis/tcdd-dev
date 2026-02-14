@@ -195,6 +195,30 @@ def shutdown_system():
     threading.Thread(target=delayed_shutdown, daemon=True).start()
     return jsonify({'message': 'Shutting down...'}), 200
 
+@app.route('/api/close-app', methods=['POST'])
+def close_app():
+    """Close the application: kill Chromium browser then stop the Flask server"""
+    import subprocess
+    import threading
+    import signal
+    
+    def delayed_close():
+        import time
+        time.sleep(1)  # Allow response to reach the client
+        logger.info("Killing Chromium browser...")
+        try:
+            subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
+        except Exception as e:
+            logger.warning(f"Could not kill Chromium: {e}")
+        
+        logger.info("Stopping Flask server...")
+        time.sleep(0.5)
+        os.kill(os.getpid(), signal.SIGTERM)
+    
+    logger.info("Close app requested via API")
+    threading.Thread(target=delayed_close, daemon=True).start()
+    return jsonify({'message': 'Closing application...'}), 200
+
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
     """Start camera and detection (no-op, always running)"""

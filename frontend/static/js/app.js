@@ -107,6 +107,50 @@ async function confirmShutdown() {
     }
 }
 
+// ============================================================================
+// CLOSE APP FUNCTIONS
+// ============================================================================
+
+function showCloseAppConfirm() {
+    const modal = document.getElementById('closeapp-confirm-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function cancelCloseApp() {
+    const modal = document.getElementById('closeapp-confirm-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function confirmCloseApp() {
+    // Hide confirmation modal
+    const confirmModal = document.getElementById('closeapp-confirm-modal');
+    if (confirmModal) {
+        confirmModal.style.display = 'none';
+    }
+    
+    // Show progress modal
+    const progressModal = document.getElementById('closeapp-progress-modal');
+    if (progressModal) {
+        progressModal.style.display = 'flex';
+    }
+    
+    try {
+        await api.post('/close-app');
+        // Server will kill Chromium and itself
+    } catch (error) {
+        console.error('Close app request failed:', error);
+        // Hide progress modal on error
+        if (progressModal) {
+            progressModal.style.display = 'none';
+        }
+        showToast('Close app failed: ' + error.message, 'error');
+    }
+}
+
 // Navigation
 function goHome() {
     // Stop camera if streaming
