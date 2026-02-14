@@ -104,6 +104,11 @@ body.touchscreen {
     border-color: #d32f2f;
 }
 
+.shutdown-btn .power-icon {
+    width: 28px;
+    height: 28px;
+}
+
 /* Shutdown Modals */
 .shutdown-modal {
     display: none;
@@ -156,10 +161,14 @@ body.touchscreen {
 }
 
 .shutdown-progress-icon {
-    font-size: 64px;
     color: var(--danger);
     margin-bottom: 20px;
     animation: pulse-shutdown 1.5s ease-in-out infinite;
+}
+
+.shutdown-progress-icon svg {
+    width: 64px;
+    height: 64px;
 }
 
 @keyframes pulse-shutdown {
