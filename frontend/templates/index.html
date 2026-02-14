@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=640, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sign Detection System</title>
+    <link rel="stylesheet" href="/static/css/fontawesome-local.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="touchscreen">
@@ -13,20 +14,23 @@
             <div class="home-header">
                 <div class="header-actions">
                     <button class="action-btn closeapp-btn" onclick="showCloseAppConfirm()" title="Close App">
-                        ✕
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    <button class="action-btn reboot-btn" onclick="showRebootConfirm()" title="Reboot">
+                        <i class="fa-solid fa-rotate"></i>
                     </button>
                     <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
-                        ⏻
+                        <i class="fa-solid fa-power-off"></i>
                     </button>
                 </div>
                 <div class="status-panel">
                     <div class="status-item" id="status-wifi">
-                        <span class="status-icon">📶</span>
+                        <span class="status-icon"><i class="fa-solid fa-wifi"></i></span>
                         <span class="status-label">WiFi</span>
                         <span class="status-dot dot offline"></span>
                     </div>
                     <div class="status-item" id="status-camera">
-                        <span class="status-icon">⬤</span>
+                        <span class="status-icon"><i class="fa-solid fa-video"></i></span>
                         <span class="status-label">Camera</span>
                         <span class="status-dot dot offline"></span>
                     </div>
@@ -198,8 +202,32 @@
     <!-- Shutdown In Progress Modal -->
     <div id="shutdown-progress-modal" class="modal shutdown-modal">
         <div class="modal-content shutdown-progress-content">
-            <div class="shutdown-progress-icon">⏻</div>
+            <div class="shutdown-progress-icon"><i class="fa-solid fa-power-off"></i></div>
             <div class="shutdown-progress-text">Shutting down...</div>
+        </div>
+    </div>
+
+    <!-- Reboot Confirmation Modal -->
+    <div id="reboot-confirm-modal" class="modal reboot-modal">
+        <div class="modal-content reboot-confirm-content">
+            <div class="modal-header">
+                <h3>Restart System?</h3>
+            </div>
+            <div class="modal-body reboot-confirm-body">
+                <p>Are you sure you want to restart the Raspberry Pi?</p>
+                <div class="reboot-confirm-buttons">
+                    <button class="btn btn-secondary btn-touch" onclick="cancelReboot()">Cancel</button>
+                    <button class="btn btn-reboot btn-touch" onclick="confirmReboot()">Restart</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reboot In Progress Modal -->
+    <div id="reboot-progress-modal" class="modal reboot-modal">
+        <div class="modal-content reboot-progress-content">
+            <div class="reboot-progress-icon"><i class="fa-solid fa-rotate"></i></div>
+            <div class="reboot-progress-text">Restarting...</div>
         </div>
     </div>
 
@@ -213,7 +241,7 @@
                 <p>This will stop the detection system and close the browser.</p>
                 <div class="closeapp-confirm-buttons">
                     <button class="btn btn-secondary btn-touch" onclick="cancelCloseApp()">Cancel</button>
-                    <button class="btn btn-warning btn-touch" onclick="confirmCloseApp()">Close</button>
+                    <button class="btn btn-closeapp btn-touch" onclick="confirmCloseApp()">Close</button>
                 </div>
             </div>
         </div>
@@ -222,7 +250,7 @@
     <!-- Close App In Progress Modal -->
     <div id="closeapp-progress-modal" class="modal closeapp-modal">
         <div class="modal-content closeapp-progress-content">
-            <div class="closeapp-progress-icon">✕</div>
+            <div class="closeapp-progress-icon"><i class="fa-solid fa-xmark"></i></div>
             <div class="closeapp-progress-text">Closing application...</div>
         </div>
     </div>

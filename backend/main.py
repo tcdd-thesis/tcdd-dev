@@ -195,6 +195,22 @@ def shutdown_system():
     threading.Thread(target=delayed_shutdown, daemon=True).start()
     return jsonify({'message': 'Shutting down...'}), 200
 
+@app.route('/api/reboot', methods=['POST'])
+def reboot_system():
+    """Reboot the Raspberry Pi with a 2-second delay for UI feedback"""
+    import subprocess
+    import threading
+    
+    def delayed_reboot():
+        import time
+        time.sleep(2)  # Allow UI to show reboot message
+        logger.info("Executing system reboot...")
+        subprocess.run(['sudo', 'reboot'])
+    
+    logger.info("Reboot requested via API")
+    threading.Thread(target=delayed_reboot, daemon=True).start()
+    return jsonify({'message': 'Rebooting...'}), 200
+
 @app.route('/api/close-app', methods=['POST'])
 def close_app():
     """Close the application: kill Chromium browser then stop the Flask server"""
