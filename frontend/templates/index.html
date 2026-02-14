@@ -11,6 +11,12 @@
     <div id="page-home" class="page active">
         <div class="home-container">
             <div class="home-header">
+                <div class="header-actions">
+                    <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
+                        ⏻
+                    </button>
+                    <!-- Future action buttons can be added here -->
+                </div>
                 <div class="status-panel">
                     <div class="status-item" id="status-wifi">
                         <span class="status-icon">📶</span>
@@ -170,6 +176,30 @@
 
     <!-- Toast Notifications -->
     <div id="toast-container"></div>
+
+    <!-- Shutdown Confirmation Modal -->
+    <div id="shutdown-confirm-modal" class="modal shutdown-modal">
+        <div class="modal-content shutdown-confirm-content">
+            <div class="modal-header">
+                <h3>Shutdown System?</h3>
+            </div>
+            <div class="modal-body shutdown-confirm-body">
+                <p>Are you sure you want to shut down the Raspberry Pi?</p>
+                <div class="shutdown-confirm-buttons">
+                    <button class="btn btn-secondary btn-touch" onclick="cancelShutdown()">Cancel</button>
+                    <button class="btn btn-danger btn-touch" onclick="confirmShutdown()">Shutdown</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shutdown In Progress Modal -->
+    <div id="shutdown-progress-modal" class="modal shutdown-modal">
+        <div class="modal-content shutdown-progress-content">
+            <div class="shutdown-progress-icon">⏻</div>
+            <div class="shutdown-progress-text">Shutting down...</div>
+        </div>
+    </div>
 
     <!-- Load SocketIO from CDN -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>

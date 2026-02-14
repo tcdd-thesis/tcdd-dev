@@ -60,12 +60,117 @@ body.touchscreen {
 
 .home-header {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 2px solid rgba(255,255,255,0.1);
     flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+/* Header Actions (left side - shutdown, future buttons) */
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.action-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    border: 2px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.1);
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.action-btn:active {
+    transform: scale(0.95);
+}
+
+.shutdown-btn {
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.shutdown-btn:hover {
+    background: #d32f2f;
+    border-color: #d32f2f;
+}
+
+/* Shutdown Modals */
+.shutdown-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+}
+
+.shutdown-confirm-content {
+    background: #1a1a1a;
+    border-radius: 16px;
+    max-width: 350px;
+    width: 90%;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.shutdown-confirm-body {
+    padding: 20px;
+    text-align: center;
+}
+
+.shutdown-confirm-body p {
+    margin-bottom: 24px;
+    font-size: 16px;
+    color: rgba(255,255,255,0.8);
+}
+
+.shutdown-confirm-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.shutdown-confirm-buttons .btn {
+    min-width: 120px;
+}
+
+.shutdown-progress-content {
+    background: #1a1a1a;
+    border-radius: 16px;
+    padding: 40px;
+    text-align: center;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.shutdown-progress-icon {
+    font-size: 64px;
+    color: var(--danger);
+    margin-bottom: 20px;
+    animation: pulse-shutdown 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-shutdown {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.95); }
+}
+
+.shutdown-progress-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: white;
 }
 
 .status-panel {
