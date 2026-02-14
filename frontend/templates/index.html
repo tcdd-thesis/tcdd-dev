@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=640, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sign Detection System</title>
-    <link rel="stylesheet" href="/static/css/material-icons.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="touchscreen">
@@ -14,7 +13,7 @@
             <div class="home-header">
                 <div class="header-actions">
                     <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
-                        <span class="material-icons">power_settings_new</span>
+                        ⏻
                     </button>
                     <!-- Future action buttons can be added here -->
                 </div>
@@ -197,7 +196,7 @@
     <!-- Shutdown In Progress Modal -->
     <div id="shutdown-progress-modal" class="modal shutdown-modal">
         <div class="modal-content shutdown-progress-content">
-            <div class="shutdown-progress-icon"><span class="material-icons">power_settings_new</span></div>
+            <div class="shutdown-progress-icon">⏻</div>
             <div class="shutdown-progress-text">Shutting down...</div>
         </div>
     </div>
