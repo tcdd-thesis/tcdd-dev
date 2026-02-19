@@ -215,45 +215,53 @@ def shutdown_system():
 
 @app.route('/api/reboot', methods=['POST'])
 def reboot_system():
-    """Reboot the Raspberry Pi with a 2-second delay for UI feedback"""
+    """Reboot the Raspberry Pi using detached process"""
     import subprocess
-    import threading
-    
-    def delayed_reboot():
-        import time
-        time.sleep(2)  # Allow UI to show reboot message
-        logger.info("Executing system reboot...")
-        subprocess.run(['sudo', 'reboot'])
     
     logger.info("Reboot requested via API")
-    threading.Thread(target=delayed_reboot, daemon=True).start()
+    
+    # Spawn detached process to reboot after brief delay
+    reboot_script = '''
+        sleep 1
+        sudo reboot
+    '''
+    
+    try:
+        subprocess.Popen(
+            ['bash', '-c', reboot_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to initiate reboot: {e}")
+        return jsonify({'error': str(e)}), 500
+    
     return jsonify({'message': 'Rebooting...'}), 200
 
 @app.route('/api/close-app', methods=['POST'])
 def close_app():
-    """Close the application immediately"""
+    """Close the application: kill Chromium browser then stop the Flask server"""
     import subprocess
     import threading
+    import signal
     
-    def force_close():
+    def delayed_close():
         import time
-        time.sleep(0.3)  # Brief delay for response to send
-        
-        logger.info("Force closing application...")
-        
-        # Kill Chromium browser first
+        time.sleep(1)  # Allow response to reach the client
+        logger.info("Killing Chromium browser...")
         try:
-            subprocess.run(['pkill', '-9', 'chromium'], timeout=2)
-        except:
-            pass
+            subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
+        except Exception as e:
+            logger.warning(f"Could not kill Chromium: {e}")
         
-        # Force exit immediately - no cleanup, just die
-        logger.info("Exiting now!")
-        os._exit(0)
+        logger.info("Stopping Flask server...")
+        time.sleep(0.5)
+        os.kill(os.getpid(), signal.SIGTERM)
     
-    logger.info("Close app requested - forcing immediate exit")
-    threading.Thread(target=force_close, daemon=True).start()
-    return jsonify({'message': 'Closing...'}), 200
+    logger.info("Close app requested via API")
+    threading.Thread(target=delayed_close, daemon=True).start()
+    return jsonify({'message': 'Closing application...'}), 200
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
