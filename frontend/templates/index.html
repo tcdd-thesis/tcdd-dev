@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="touchscreen">
+    <!-- Brightness Overlay (CSS-based screen dimming) -->
+    <div id="brightness-overlay"></div>
     <!-- Main Menu (Home Page) -->
     <div id="page-home" class="page active">
         <div class="home-container">
@@ -141,6 +143,17 @@
             </div>
             
             <div class="settings-container-compact">
+                <div class="settings-group">
+                    <h3>Display</h3>
+                    <div class="setting-row">
+                        <label>Screen Brightness</label>
+                        <div class="slider-container">
+                            <input type="range" id="setting-brightness" class="slider-touch" min="10" max="100" value="50" step="5">
+                            <span id="brightness-display" class="slider-value">50%</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="settings-group">
                     <h3>Camera</h3>
                     <div class="setting-row">
