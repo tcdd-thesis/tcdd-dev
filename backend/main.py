@@ -231,27 +231,29 @@ def reboot_system():
 
 @app.route('/api/close-app', methods=['POST'])
 def close_app():
-    """Close the application: kill Chromium browser then stop the Flask server"""
+    """Close the application immediately"""
     import subprocess
     import threading
-    import signal
     
-    def delayed_close():
+    def force_close():
         import time
-        time.sleep(1)  # Allow response to reach the client
-        logger.info("Killing Chromium browser...")
-        try:
-            subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
-        except Exception as e:
-            logger.warning(f"Could not kill Chromium: {e}")
+        time.sleep(0.3)  # Brief delay for response to send
         
-        logger.info("Stopping Flask server...")
-        time.sleep(0.5)
-        os.kill(os.getpid(), signal.SIGTERM)
+        logger.info("Force closing application...")
+        
+        # Kill Chromium browser first
+        try:
+            subprocess.run(['pkill', '-9', 'chromium'], timeout=2)
+        except:
+            pass
+        
+        # Force exit immediately - no cleanup, just die
+        logger.info("Exiting now!")
+        os._exit(0)
     
-    logger.info("Close app requested via API")
-    threading.Thread(target=delayed_close, daemon=True).start()
-    return jsonify({'message': 'Closing application...'}), 200
+    logger.info("Close app requested - forcing immediate exit")
+    threading.Thread(target=force_close, daemon=True).start()
+    return jsonify({'message': 'Closing...'}), 200
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():

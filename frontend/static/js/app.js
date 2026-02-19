@@ -12,11 +12,45 @@ const state = {
     detectionCount: 0,
     config: null,
     configAutoReload: true,
+    brightness: 50, // Default brightness (0-100)
     status: {
         wifi: false,
         camera: false
     }    
 };
+
+// ============================================================================
+// SCREEN BRIGHTNESS CONTROL (CSS Overlay Dimming)
+// ============================================================================
+
+/**
+ * Set screen brightness using CSS overlay dimming
+ * @param {number} brightness - Brightness level 0-100
+ *   0 = darkest (90% black overlay)
+ *   50 = default (comfortable viewing)
+ *   100 = maximum (no overlay)
+ */
+function setScreenBrightness(brightness) {
+    brightness = Math.max(0, Math.min(100, brightness));
+    state.brightness = brightness;
+    
+    const overlay = document.getElementById('brightness-overlay');
+    if (overlay) {
+        // Convert brightness to overlay opacity
+        // 100% brightness = 0 opacity (no dimming)
+        // 0% brightness = 0.9 opacity (90% black, still slightly visible)
+        const opacity = (100 - brightness) / 100 * 0.9;
+        overlay.style.opacity = opacity;
+    }
+}
+
+/**
+ * Get current screen brightness
+ * @returns {number} Current brightness level 0-100
+ */
+function getScreenBrightness() {
+    return state.brightness;
+}
 
 // API helper
 const api = {
@@ -838,12 +872,14 @@ async function loadSettings() {
         const config = state.config;
         
         // Display brightness slider
-        const brightness = config.display?.brightness ?? 100;
+        const brightness = config.display?.brightness ?? 50;
         const brightnessSlider = document.getElementById('setting-brightness');
         const brightnessDisplay = document.getElementById('brightness-display');
         if (brightnessSlider && brightnessDisplay) {
             brightnessSlider.value = brightness;
             brightnessDisplay.textContent = brightness + '%';
+            // Apply brightness to screen
+            setScreenBrightness(brightness);
         }
         
         // Resolution dropdown
@@ -873,6 +909,23 @@ async function loadSettings() {
     } catch (error) {
         console.error('Failed to load settings:', error);
         showToast('Failed to load settings', 'error');
+    }
+}
+
+/**
+ * Load and apply brightness on app startup (without showing toast)
+ */
+async function loadInitialBrightness() {
+    try {
+        const response = await api.get('/config');
+        const config = response.config || response;
+        const brightness = config.display?.brightness ?? 50;
+        setScreenBrightness(brightness);
+        console.log(`Initial brightness set to ${brightness}%`);
+    } catch (error) {
+        console.error('Failed to load initial brightness:', error);
+        // Apply default brightness on error
+        setScreenBrightness(50);
     }
 }
 
@@ -1103,22 +1156,25 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
     document.getElementById('btn-load-settings').addEventListener('click', loadSettings);
     
-    // Brightness slider - real-time update with debounce
+    // Brightness slider - real-time screen dimming
     const brightnessSlider = document.getElementById('setting-brightness');
     let brightnessTimeout = null;
     brightnessSlider.addEventListener('input', (e) => {
-        const value = e.target.value;
+        const value = parseInt(e.target.value);
         document.getElementById('brightness-display').textContent = value + '%';
         
-        // Debounce the API call for real-time brightness update
+        // Apply screen brightness immediately via CSS overlay
+        setScreenBrightness(value);
+        
+        // Debounce saving to config (don't need to save on every tiny change)
         if (brightnessTimeout) clearTimeout(brightnessTimeout);
         brightnessTimeout = setTimeout(async () => {
             try {
-                await api.post('/display/brightness', { brightness: parseInt(value) });
+                await api.post('/display/brightness', { brightness: value });
             } catch (error) {
-                console.error('Failed to update brightness:', error);
+                console.error('Failed to save brightness:', error);
             }
-        }, 100);
+        }, 500);
     });
     
     // Confidence slider update
@@ -1130,8 +1186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Connect WebSocket
     connectWebSocket();
     
-    // Initial status check
+    // Initial status check and load brightness
     checkSystemStatus();
+    loadInitialBrightness();
     
     // Periodic status checks
     setInterval(checkSystemStatus, 5000);  // Check every 5 seconds

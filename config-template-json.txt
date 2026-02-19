@@ -107,8 +107,8 @@
   // =============================================================================
   
   "display": {
-    "brightness": 100,             // Backlight brightness: 0-100 (percentage)
-                                   // 0 = off, 100 = maximum brightness
+    "brightness": 50,              // Screen brightness: 0-100 (percentage)
+                                   // 0 = darkest, 50 = default, 100 = maximum
     "backlight_pin": 18,           // GPIO pin for backlight (BCM numbering)
                                    // Default: GPIO 18 (PWM0 capable)
     "pwm_frequency": 1000          // PWM frequency in Hz (1000 = smooth dimming)

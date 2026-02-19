@@ -77,7 +77,7 @@ class Config:
                 "confidence": 0.5
             },
             "display": {
-                "brightness": 100,
+                "brightness": 50,
                 "backlight_pin": 18,
                 "pwm_frequency": 1000
             },
