@@ -199,60 +199,86 @@ def get_status():
 
 @app.route('/api/shutdown', methods=['POST'])
 def shutdown_system():
-    """Shutdown the Raspberry Pi with a 2-second delay for UI feedback"""
+    """Shutdown the Raspberry Pi using detached process"""
     import subprocess
-    import threading
-    
-    def delayed_shutdown():
-        import time
-        time.sleep(2)  # Allow UI to show shutdown message
-        logger.info("Executing system shutdown...")
-        subprocess.run(['sudo', 'shutdown', 'now'])
     
     logger.info("Shutdown requested via API")
-    threading.Thread(target=delayed_shutdown, daemon=True).start()
+    
+    # Spawn detached process to shutdown after brief delay
+    shutdown_script = '''
+        sleep 1
+        sudo shutdown now
+    '''
+    
+    try:
+        subprocess.Popen(
+            ['bash', '-c', shutdown_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to initiate shutdown: {e}")
+        return jsonify({'error': str(e)}), 500
+    
     return jsonify({'message': 'Shutting down...'}), 200
 
 @app.route('/api/reboot', methods=['POST'])
 def reboot_system():
-    """Reboot the Raspberry Pi with a 2-second delay for UI feedback"""
+    """Reboot the Raspberry Pi using detached process"""
     import subprocess
-    import threading
-    
-    def delayed_reboot():
-        import time
-        time.sleep(2)  # Allow UI to show reboot message
-        logger.info("Executing system reboot...")
-        subprocess.run(['sudo', 'reboot'])
     
     logger.info("Reboot requested via API")
-    threading.Thread(target=delayed_reboot, daemon=True).start()
+    
+    # Spawn detached process to reboot after brief delay
+    reboot_script = '''
+        sleep 1
+        sudo reboot
+    '''
+    
+    try:
+        subprocess.Popen(
+            ['bash', '-c', reboot_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to initiate reboot: {e}")
+        return jsonify({'error': str(e)}), 500
+    
     return jsonify({'message': 'Rebooting...'}), 200
 
 @app.route('/api/close-app', methods=['POST'])
 def close_app():
-    """Close the application immediately"""
+    """Close the application immediately using external process"""
     import subprocess
-    import threading
     
-    def force_close():
-        import time
-        time.sleep(0.3)  # Brief delay for response to send
-        
-        logger.info("Force closing application...")
-        
-        # Kill Chromium browser first
-        try:
-            subprocess.run(['pkill', '-9', 'chromium'], timeout=2)
-        except:
-            pass
-        
-        # Force exit immediately - no cleanup, just die
-        logger.info("Exiting now!")
-        os._exit(0)
+    # Get our own PID
+    my_pid = os.getpid()
     
-    logger.info("Close app requested - forcing immediate exit")
-    threading.Thread(target=force_close, daemon=True).start()
+    logger.info(f"Close app requested - PID {my_pid} will be killed")
+    
+    # Spawn a detached shell process that waits briefly then kills everything
+    # This runs OUTSIDE of Python's control so SocketIO can't block it
+    kill_script = f'''
+        sleep 0.5
+        killall -9 chromium-browser 2>/dev/null
+        killall -9 chromium 2>/dev/null
+        kill -9 {my_pid} 2>/dev/null
+    '''
+    
+    try:
+        # Use Popen with shell=True and start_new_session to fully detach
+        subprocess.Popen(
+            ['bash', '-c', kill_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True  # Detach from parent process
+        )
+    except Exception as e:
+        logger.error(f"Failed to spawn kill process: {e}")
+    
     return jsonify({'message': 'Closing...'}), 200
 
 @app.route('/api/camera/start', methods=['POST'])
