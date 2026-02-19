@@ -199,28 +199,18 @@ def get_status():
 
 @app.route('/api/shutdown', methods=['POST'])
 def shutdown_system():
-    """Shutdown the Raspberry Pi using detached process"""
+    """Shutdown the Raspberry Pi with a 2-second delay for UI feedback"""
     import subprocess
+    import threading
+    
+    def delayed_shutdown():
+        import time
+        time.sleep(2)  # Allow UI to show shutdown message
+        logger.info("Executing system shutdown...")
+        subprocess.run(['sudo', 'shutdown', 'now'])
     
     logger.info("Shutdown requested via API")
-    
-    # Spawn detached process to shutdown after brief delay
-    shutdown_script = '''
-        sleep 1
-        sudo shutdown now
-    '''
-    
-    try:
-        subprocess.Popen(
-            ['bash', '-c', shutdown_script],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
-    except Exception as e:
-        logger.error(f"Failed to initiate shutdown: {e}")
-        return jsonify({'error': str(e)}), 500
-    
+    threading.Thread(target=delayed_shutdown, daemon=True).start()
     return jsonify({'message': 'Shutting down...'}), 200
 
 @app.route('/api/reboot', methods=['POST'])
