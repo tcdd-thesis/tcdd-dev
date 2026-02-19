@@ -251,35 +251,27 @@ def reboot_system():
 
 @app.route('/api/close-app', methods=['POST'])
 def close_app():
-    """Close the application immediately using external process"""
+    """Close the application: kill Chromium browser then stop the Flask server"""
     import subprocess
+    import threading
+    import signal
     
-    # Get our own PID
-    my_pid = os.getpid()
+    def delayed_close():
+        import time
+        time.sleep(1)  # Allow response to reach the client
+        logger.info("Killing Chromium browser...")
+        try:
+            subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
+        except Exception as e:
+            logger.warning(f"Could not kill Chromium: {e}")
+        
+        logger.info("Stopping Flask server...")
+        time.sleep(0.5)
+        os.kill(os.getpid(), signal.SIGTERM)
     
-    logger.info(f"Close app requested - PID {my_pid} will be killed")
-    
-    # Spawn a detached shell process that waits briefly then kills everything
-    # This runs OUTSIDE of Python's control so SocketIO can't block it
-    kill_script = f'''
-        sleep 0.5
-        killall -9 chromium-browser 2>/dev/null
-        killall -9 chromium 2>/dev/null
-        kill -9 {my_pid} 2>/dev/null
-    '''
-    
-    try:
-        # Use Popen with shell=True and start_new_session to fully detach
-        subprocess.Popen(
-            ['bash', '-c', kill_script],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True  # Detach from parent process
-        )
-    except Exception as e:
-        logger.error(f"Failed to spawn kill process: {e}")
-    
-    return jsonify({'message': 'Closing...'}), 200
+    logger.info("Close app requested via API")
+    threading.Thread(target=delayed_close, daemon=True).start()
+    return jsonify({'message': 'Closing application...'}), 200
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
