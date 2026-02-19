@@ -1,48 +1,54 @@
+import smbus2
 import time
 import sys
-from mpu9250_jmdev.registers import *
-from mpu9250_jmdev.mpu_9250 import MPU9250
 
-# 1. Initialize the Sensor
-# We use 0x68 based on your successful i2cdetect output
-mpu = MPU9250(
-    address_ak=AK8963_ADDRESS,
-    address_mpu_master=MPU9050_ADDRESS_68,
-    bus=1,
-    gfs=GFS_250,
-    afs=AFS_2G,
-    mfs=AK8963_BIT_16,
-    mode=AK8963_MODE_C100HZ
-)
+# Constants for MPU9250
+ADDR = 0x68
+ACCEL_XOUT_H = 0x3B
+GYRO_XOUT_H  = 0x43
+PWR_MGMT_1   = 0x6B
 
-print("Initializing HW-046...")
-mpu.configure()
+bus = smbus2.SMBus(1)
 
-# 2. Calibration (Optional but Highly Recommended)
-# This takes about 5-10 seconds. Keep the sensor perfectly still!
-print("Calibrating... Keep the sensor still and level.")
-mpu.calibrate() 
-print("Calibration Complete!\n")
+def read_raw_data(addr):
+    # Accel/Gyro data is 16-bit (two 8-bit registers)
+    high = bus.read_byte_data(ADDR, addr)
+    low = bus.read_byte_data(ADDR, addr + 1)
+    # Combine high and low for a signed 16-bit value
+    value = ((high << 8) | low)
+    if value > 32768:
+        value = value - 65536
+    return value
 
-print(f"{'ACCEL (g)':^25} | {'GYRO (d/s)':^25}")
-print(f"{'X':^7} {'Y':^7} {'Z':^7} | {'X':^7} {'Y':^7} {'Z':^7}")
-print("-" * 55)
+def init_mpu():
+    # Wake up the sensor
+    bus.write_byte_data(ADDR, PWR_MGMT_1, 0)
+    time.sleep(0.1)
 
 try:
-    while True:
-        # Read Master (Accel + Gyro)
-        accel = mpu.readAccelerometerMaster()
-        gyro = mpu.readGyroscopeMaster()
+    init_mpu()
+    print("✅ MPU9250 Active. Reading Accelerometer & Gyro...")
+    print("-" * 50)
 
-        # Format output to overwrite the same line for a "live" feel
-        output = (
-            f"{accel[0]:7.2f} {accel[1]:7.2f} {accel[2]:7.2f} | "
-            f"{gyro[0]:7.2f} {gyro[1]:7.2f} {gyro[2]:7.2f}"
-        )
+    while True:
+        # 16384 is the sensitivity scale factor for +/- 2g (default)
+        ax = read_raw_data(ACCEL_XOUT_H) / 16384.0
+        ay = read_raw_data(ACCEL_XOUT_H + 2) / 16384.0
+        az = read_raw_data(ACCEL_XOUT_H + 4) / 16384.0
+
+        # 131 is the sensitivity scale factor for +/- 250 deg/s (default)
+        gx = read_raw_data(GYRO_XOUT_H) / 131.0
+        gy = read_raw_data(GYRO_XOUT_H + 2) / 131.0
+        gz = read_raw_data(GYRO_XOUT_H + 4) / 131.0
+
+        output = (f"ACCEL [g]: X:{ax:6.2f} Y:{ay:6.2f} Z:{az:6.2f} | "
+                  f"GYRO [d/s]: X:{gx:6.2f} Y:{gy:6.2f} Z:{gz:6.2f}")
+        
         sys.stdout.write(f"\r{output}")
         sys.stdout.flush()
-
-        time.sleep(0.05) # ~20Hz update rate
+        time.sleep(0.1)
 
 except KeyboardInterrupt:
-    print("\n\nSession ended by user.")
+    print("\nStopped.")
+except Exception as e:
+    print(f"\nError: {e}")
