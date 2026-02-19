@@ -24,27 +24,41 @@ const state = {
 // ============================================================================
 
 /**
- * Set screen brightness using CSS overlay dimming
+ * Set screen brightness using CSS overlay dimming and brightness filter
  * @param {number} brightness - Brightness level 0-100
- *   0 = darkest (90% black overlay)
- *   50 = default (comfortable viewing)
- *   100 = maximum (no overlay)
+ *   0 = darkest (heavy black overlay)
+ *   50 = normal (no effect, native screen brightness)
+ *   100 = brightest (200% brightness boost via CSS filter)
  */
 function setScreenBrightness(brightness) {
     brightness = Math.max(0, Math.min(100, brightness));
     state.brightness = brightness;
     
     const overlay = document.getElementById('brightness-overlay');
-    if (overlay) {
-        // Convert brightness to overlay opacity
-        // 100% brightness = 0 opacity (no dimming)
-        // 0% brightness = 0.9 opacity (90% black, still slightly visible)
-        const opacity = (100 - brightness) / 100 * 0.9;
-        overlay.style.opacity = opacity.toString();
-        console.log(`Brightness: ${brightness}%, Overlay opacity: ${opacity}`);
+    const body = document.body;
+    
+    if (brightness <= 50) {
+        // 0-50%: Use black overlay for dimming
+        // 0% = 0.9 opacity (very dark), 50% = 0 opacity (no dimming)
+        const opacity = (50 - brightness) / 50 * 0.9;
+        if (overlay) {
+            overlay.style.opacity = opacity.toString();
+            overlay.style.backgroundColor = '#000000';
+        }
+        // Remove brightness filter
+        body.style.filter = '';
     } else {
-        console.error('Brightness overlay element not found!');
+        // 50-100%: Use CSS brightness filter for boosting
+        // 50% = 1.0 (normal), 100% = 2.0 (double brightness)
+        const filterValue = 1 + ((brightness - 50) / 50);
+        body.style.filter = `brightness(${filterValue})`;
+        // Hide overlay
+        if (overlay) {
+            overlay.style.opacity = '0';
+        }
     }
+    
+    console.log(`Brightness: ${brightness}%`);
 }
 
 /**
@@ -919,21 +933,6 @@ async function loadSettings() {
  * Load and apply brightness on app startup (without showing toast)
  */
 async function loadInitialBrightness() {
-    // Quick visual test - briefly show overlay to confirm it works
-    const overlay = document.getElementById('brightness-overlay');
-    if (overlay) {
-        // Flash dark briefly to confirm overlay is working
-        overlay.style.opacity = '0.5';
-        setTimeout(() => {
-            // Then apply the actual saved brightness
-            loadBrightnessFromConfig();
-        }, 300);
-    } else {
-        console.error('Brightness overlay not found in DOM!');
-    }
-}
-
-async function loadBrightnessFromConfig() {
     try {
         const response = await api.get('/config');
         const config = response.config || response;
@@ -942,7 +941,7 @@ async function loadBrightnessFromConfig() {
         console.log(`Brightness loaded from config: ${brightness}%`);
     } catch (error) {
         console.error('Failed to load brightness from config:', error);
-        // Apply default brightness on error
+        // Apply default brightness on error (50% = normal)
         setScreenBrightness(50);
     }
 }

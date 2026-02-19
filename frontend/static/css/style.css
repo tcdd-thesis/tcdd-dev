@@ -33,6 +33,8 @@
     z-index: 9998; /* Below modals (9999) but above everything else */
     transition: opacity 0.15s ease;
     will-change: opacity;
+    /* Prevent brightness filter from affecting overlay */
+    filter: brightness(1) !important;
 }
 
 /* ========== Reset & Base ========== */
