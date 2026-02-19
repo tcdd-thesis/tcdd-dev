@@ -40,7 +40,10 @@ function setScreenBrightness(brightness) {
         // 100% brightness = 0 opacity (no dimming)
         // 0% brightness = 0.9 opacity (90% black, still slightly visible)
         const opacity = (100 - brightness) / 100 * 0.9;
-        overlay.style.opacity = opacity;
+        overlay.style.opacity = opacity.toString();
+        console.log(`Brightness: ${brightness}%, Overlay opacity: ${opacity}`);
+    } else {
+        console.error('Brightness overlay element not found!');
     }
 }
 
@@ -916,14 +919,29 @@ async function loadSettings() {
  * Load and apply brightness on app startup (without showing toast)
  */
 async function loadInitialBrightness() {
+    // Quick visual test - briefly show overlay to confirm it works
+    const overlay = document.getElementById('brightness-overlay');
+    if (overlay) {
+        // Flash dark briefly to confirm overlay is working
+        overlay.style.opacity = '0.5';
+        setTimeout(() => {
+            // Then apply the actual saved brightness
+            loadBrightnessFromConfig();
+        }, 300);
+    } else {
+        console.error('Brightness overlay not found in DOM!');
+    }
+}
+
+async function loadBrightnessFromConfig() {
     try {
         const response = await api.get('/config');
         const config = response.config || response;
         const brightness = config.display?.brightness ?? 50;
         setScreenBrightness(brightness);
-        console.log(`Initial brightness set to ${brightness}%`);
+        console.log(`Brightness loaded from config: ${brightness}%`);
     } catch (error) {
-        console.error('Failed to load initial brightness:', error);
+        console.error('Failed to load brightness from config:', error);
         // Apply default brightness on error
         setScreenBrightness(50);
     }
