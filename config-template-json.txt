@@ -101,6 +101,21 @@
   
   
   // =============================================================================
+  // DISPLAY SETTINGS (Waveshare 2.8" LCD)
+  // Controls the LCD backlight brightness via GPIO PWM
+  // Changes take effect immediately
+  // =============================================================================
+  
+  "display": {
+    "brightness": 100,             // Backlight brightness: 0-100 (percentage)
+                                   // 0 = off, 100 = maximum brightness
+    "backlight_pin": 18,           // GPIO pin for backlight (BCM numbering)
+                                   // Default: GPIO 18 (PWM0 capable)
+    "pwm_frequency": 1000          // PWM frequency in Hz (1000 = smooth dimming)
+  },
+  
+  
+  // =============================================================================
   // LOGGING SETTINGS
   // Level changes take effect immediately
   // File path changes require restart

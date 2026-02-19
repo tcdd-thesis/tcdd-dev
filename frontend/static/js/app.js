@@ -837,6 +837,15 @@ async function loadSettings() {
         state.config = response.config || response;
         const config = state.config;
         
+        // Display brightness slider
+        const brightness = config.display?.brightness ?? 100;
+        const brightnessSlider = document.getElementById('setting-brightness');
+        const brightnessDisplay = document.getElementById('brightness-display');
+        if (brightnessSlider && brightnessDisplay) {
+            brightnessSlider.value = brightness;
+            brightnessDisplay.textContent = brightness + '%';
+        }
+        
         // Resolution dropdown
         const resolution = `${config.camera?.width || 640}x${config.camera?.height || 480}`;
         const resolutionSelect = document.getElementById('setting-resolution');
@@ -869,6 +878,9 @@ async function loadSettings() {
 
 async function saveSettings() {
     try {
+        // Get display brightness
+        const brightness = parseInt(document.getElementById('setting-brightness').value);
+        
         // Parse resolution
         const resolution = document.getElementById('setting-resolution').value.split('x');
         const width = parseInt(resolution[0]);
@@ -881,6 +893,9 @@ async function saveSettings() {
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
         
         const config = {
+            display: {
+                brightness: brightness
+            },
             camera: {
                 width: width,
                 height: height,
@@ -1087,6 +1102,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
     document.getElementById('btn-load-settings').addEventListener('click', loadSettings);
+    
+    // Brightness slider - real-time update with debounce
+    const brightnessSlider = document.getElementById('setting-brightness');
+    let brightnessTimeout = null;
+    brightnessSlider.addEventListener('input', (e) => {
+        const value = e.target.value;
+        document.getElementById('brightness-display').textContent = value + '%';
+        
+        // Debounce the API call for real-time brightness update
+        if (brightnessTimeout) clearTimeout(brightnessTimeout);
+        brightnessTimeout = setTimeout(async () => {
+            try {
+                await api.post('/display/brightness', { brightness: parseInt(value) });
+            } catch (error) {
+                console.error('Failed to update brightness:', error);
+            }
+        }, 100);
+    });
     
     // Confidence slider update
     document.getElementById('setting-confidence').addEventListener('input', (e) => {

@@ -76,6 +76,11 @@ class Config:
                 "model": "backend/models/yolov8n.pt",
                 "confidence": 0.5
             },
+            "display": {
+                "brightness": 100,
+                "backlight_pin": 18,
+                "pwm_frequency": 1000
+            },
             "logging": {
                 "level": "INFO",
                 "file": "data/logs/app.log"

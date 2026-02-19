@@ -23,6 +23,7 @@ from detector import Detector
 from config import Config
 from metrics_logger import MetricsLogger
 from violations_logger import ViolationsLogger
+from display import DisplayController
 import psutil
 
 # Initialize Flask app
@@ -59,6 +60,7 @@ logger = logging.getLogger(__name__)
 # Global instances
 camera = None
 detector = None
+display_controller = None
 is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
@@ -72,7 +74,7 @@ def on_config_change(old_config, new_config):
     Handle configuration changes and update running components
     This is called automatically when config.json is modified
     """
-    global camera, detector
+    global camera, detector, display_controller
     
     logger.info("🔄 Configuration changed, updating components...")
     
@@ -85,6 +87,11 @@ def on_config_change(old_config, new_config):
         # Check detector settings changes
         detector_changed = (
             old_config.get('detection') != new_config.get('detection')
+        )
+        
+        # Check display settings changes
+        display_changed = (
+            old_config.get('display') != new_config.get('display')
         )
         
         # Restart camera if settings changed
@@ -100,6 +107,14 @@ def on_config_change(old_config, new_config):
             logger.info("🔍 Detector settings changed, reloading detector...")
             detector = Detector(config)
             logger.info("✅ Detector reloaded with new settings")
+        
+        # Update display brightness if changed
+        if display_changed and display_controller:
+            new_brightness = new_config.get('display', {}).get('brightness', 100)
+            old_brightness = old_config.get('display', {}).get('brightness', 100)
+            if new_brightness != old_brightness:
+                logger.info(f"🔆 Display brightness changed: {old_brightness}% → {new_brightness}%")
+                display_controller.set_brightness(new_brightness)
         
         # Broadcast changes to all connected clients
         socketio.emit('config_updated', {
@@ -121,8 +136,11 @@ config.register_change_callback(on_config_change)
 
 def initialize():
     """Initialize camera and detector and start background streaming"""
-    global camera, detector, is_streaming
+    global camera, detector, display_controller, is_streaming
     try:
+        logger.info("Initializing display controller...")
+        display_controller = DisplayController(config)
+        
         logger.info("Initializing camera...")
         camera = Camera(config)
         
@@ -305,6 +323,75 @@ def reload_config():
 
     except Exception as e:
         logger.error(f"❌ Error reloading config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ----------------------------------------------------------------------------
+# DISPLAY BRIGHTNESS API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/display/brightness', methods=['GET'])
+def get_display_brightness():
+    """Get current display brightness level"""
+    try:
+        if display_controller:
+            return jsonify({
+                'brightness': display_controller.get_brightness(),
+                'available': display_controller.is_available(),
+                'initialized': display_controller.is_initialized()
+            }), 200
+        else:
+            return jsonify({
+                'brightness': 100,
+                'available': False,
+                'initialized': False,
+                'message': 'Display controller not initialized'
+            }), 200
+    except Exception as e:
+        logger.error(f"Error getting display brightness: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/display/brightness', methods=['POST'])
+def set_display_brightness():
+    """
+    Set display brightness level
+    
+    Request body:
+        { "brightness": 0-100 }
+    """
+    try:
+        data = request.get_json()
+        brightness = data.get('brightness', 100)
+        
+        # Validate brightness value
+        brightness = max(0, min(100, int(brightness)))
+        
+        if display_controller:
+            success = display_controller.set_brightness(brightness)
+            
+            if success:
+                # Also update config
+                config.set('display.brightness', brightness, save=True)
+                
+                return jsonify({
+                    'message': f'Brightness set to {brightness}%',
+                    'brightness': brightness
+                }), 200
+            else:
+                return jsonify({
+                    'error': 'Failed to set brightness',
+                    'brightness': display_controller.get_brightness()
+                }), 500
+        else:
+            # Still save to config even if controller not available
+            config.set('display.brightness', brightness, save=True)
+            return jsonify({
+                'message': f'Brightness saved to config (controller not available)',
+                'brightness': brightness,
+                'available': False
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error setting display brightness: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ----------------------------------------------------------------------------
