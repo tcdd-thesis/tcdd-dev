@@ -405,6 +405,214 @@ def set_display_brightness():
         return jsonify({'error': str(e)}), 500
 
 # ----------------------------------------------------------------------------
+# WIFI API
+# ----------------------------------------------------------------------------
+
+def run_nmcli(args, timeout=10):
+    """Run nmcli command and return output"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['nmcli'] + args,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        return result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired:
+        return '', 'Command timed out', -1
+    except FileNotFoundError:
+        return '', 'nmcli not found (NetworkManager not installed)', -2
+    except Exception as e:
+        return '', str(e), -3
+
+@app.route('/api/wifi/status', methods=['GET'])
+def get_wifi_status():
+    """Get current WiFi connection status"""
+    try:
+        # Get connection status
+        stdout, stderr, code = run_nmcli(['-t', '-f', 'ACTIVE,SSID,SIGNAL,SECURITY', 'dev', 'wifi'])
+        
+        if code != 0:
+            # Try alternative: check if we have any network connectivity
+            import socket
+            try:
+                socket.create_connection(("8.8.8.8", 53), timeout=2)
+                connected = True
+            except OSError:
+                connected = False
+            
+            return jsonify({
+                'connected': connected,
+                'ssid': None,
+                'signal': 0,
+                'error': stderr if code != 0 else None
+            }), 200
+        
+        # Parse nmcli output
+        connected = False
+        current_ssid = None
+        signal = 0
+        
+        for line in stdout.strip().split('\n'):
+            if line:
+                parts = line.split(':')
+                if len(parts) >= 3 and parts[0] == 'yes':
+                    connected = True
+                    current_ssid = parts[1]
+                    signal = int(parts[2]) if parts[2].isdigit() else 0
+                    break
+        
+        return jsonify({
+            'connected': connected,
+            'ssid': current_ssid,
+            'signal': signal
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting WiFi status: {e}")
+        return jsonify({'error': str(e), 'connected': False}), 500
+
+@app.route('/api/wifi/scan', methods=['GET'])
+def scan_wifi():
+    """Scan for available WiFi networks"""
+    try:
+        # Rescan networks
+        run_nmcli(['dev', 'wifi', 'rescan'], timeout=5)
+        
+        # Get list of networks
+        stdout, stderr, code = run_nmcli(['-t', '-f', 'SSID,SIGNAL,SECURITY,IN-USE', 'dev', 'wifi', 'list'])
+        
+        if code != 0:
+            return jsonify({'error': stderr, 'networks': []}), 500
+        
+        networks = []
+        seen_ssids = set()
+        
+        for line in stdout.strip().split('\n'):
+            if line:
+                parts = line.split(':')
+                if len(parts) >= 3:
+                    ssid = parts[0]
+                    if ssid and ssid not in seen_ssids:
+                        seen_ssids.add(ssid)
+                        networks.append({
+                            'ssid': ssid,
+                            'signal': int(parts[1]) if parts[1].isdigit() else 0,
+                            'security': parts[2] if len(parts) > 2 else 'Open',
+                            'connected': parts[3] == '*' if len(parts) > 3 else False
+                        })
+        
+        # Sort by signal strength
+        networks.sort(key=lambda x: x['signal'], reverse=True)
+        
+        return jsonify({'networks': networks}), 200
+        
+    except Exception as e:
+        logger.error(f"Error scanning WiFi: {e}")
+        return jsonify({'error': str(e), 'networks': []}), 500
+
+@app.route('/api/wifi/connect', methods=['POST'])
+def connect_wifi():
+    """Connect to a WiFi network"""
+    try:
+        data = request.get_json()
+        ssid = data.get('ssid')
+        password = data.get('password', '')
+        
+        if not ssid:
+            return jsonify({'error': 'SSID is required'}), 400
+        
+        logger.info(f"Connecting to WiFi: {ssid}")
+        
+        # Try to connect
+        if password:
+            stdout, stderr, code = run_nmcli(['dev', 'wifi', 'connect', ssid, 'password', password], timeout=30)
+        else:
+            stdout, stderr, code = run_nmcli(['dev', 'wifi', 'connect', ssid], timeout=30)
+        
+        if code == 0:
+            logger.info(f"✅ Connected to WiFi: {ssid}")
+            return jsonify({'message': f'Connected to {ssid}', 'connected': True}), 200
+        else:
+            logger.error(f"❌ Failed to connect to WiFi: {stderr}")
+            return jsonify({'error': stderr or 'Connection failed', 'connected': False}), 400
+        
+    except Exception as e:
+        logger.error(f"Error connecting to WiFi: {e}")
+        return jsonify({'error': str(e), 'connected': False}), 500
+
+@app.route('/api/wifi/disconnect', methods=['POST'])
+def disconnect_wifi():
+    """Disconnect from current WiFi network"""
+    try:
+        # Get the WiFi device name (usually wlan0)
+        stdout, stderr, code = run_nmcli(['-t', '-f', 'DEVICE,TYPE', 'device'])
+        
+        wifi_device = 'wlan0'  # default
+        for line in stdout.strip().split('\n'):
+            if ':wifi' in line:
+                wifi_device = line.split(':')[0]
+                break
+        
+        # Disconnect
+        stdout, stderr, code = run_nmcli(['dev', 'disconnect', wifi_device], timeout=10)
+        
+        if code == 0:
+            logger.info("✅ Disconnected from WiFi")
+            return jsonify({'message': 'Disconnected', 'connected': False}), 200
+        else:
+            return jsonify({'error': stderr or 'Disconnect failed'}), 400
+        
+    except Exception as e:
+        logger.error(f"Error disconnecting WiFi: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wifi/saved', methods=['GET'])
+def get_saved_networks():
+    """Get list of saved WiFi networks"""
+    try:
+        stdout, stderr, code = run_nmcli(['-t', '-f', 'NAME,TYPE', 'connection', 'show'])
+        
+        if code != 0:
+            return jsonify({'error': stderr, 'networks': []}), 500
+        
+        networks = []
+        for line in stdout.strip().split('\n'):
+            if line and ':802-11-wireless' in line:
+                name = line.split(':')[0]
+                if name:
+                    networks.append({'name': name})
+        
+        return jsonify({'networks': networks}), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting saved networks: {e}")
+        return jsonify({'error': str(e), 'networks': []}), 500
+
+@app.route('/api/wifi/forget', methods=['POST'])
+def forget_network():
+    """Forget/delete a saved WiFi network"""
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        
+        if not name:
+            return jsonify({'error': 'Network name is required'}), 400
+        
+        stdout, stderr, code = run_nmcli(['connection', 'delete', name], timeout=10)
+        
+        if code == 0:
+            logger.info(f"✅ Forgot network: {name}")
+            return jsonify({'message': f'Forgot network: {name}'}), 200
+        else:
+            return jsonify({'error': stderr or 'Failed to forget network'}), 400
+        
+    except Exception as e:
+        logger.error(f"Error forgetting network: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ----------------------------------------------------------------------------
 # VIOLATIONS API
 # ----------------------------------------------------------------------------
 

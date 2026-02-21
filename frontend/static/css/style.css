@@ -857,6 +857,249 @@ body.touchscreen {
     text-align: right;
 }
 
+/* ========== WiFi Settings ========== */
+.wifi-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    margin-bottom: 10px;
+}
+
+.wifi-status-row .wifi-label {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.wifi-connected {
+    color: #4ade80;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.wifi-disconnected {
+    color: #f87171;
+}
+
+.wifi-error {
+    color: #fbbf24;
+}
+
+/* WiFi Signal Bars (Phone-style) */
+.signal-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 16px;
+    margin-left: 6px;
+}
+
+.signal-bar {
+    width: 4px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 1px;
+}
+
+.signal-bar.bar-1 { height: 4px; }
+.signal-bar.bar-2 { height: 8px; }
+.signal-bar.bar-3 { height: 12px; }
+.signal-bar.bar-4 { height: 16px; }
+
+/* Active bar colors based on strength */
+.signal-bars.signal-strong .signal-bar.active {
+    background: #4ade80;
+}
+
+.signal-bars.signal-medium .signal-bar.active {
+    background: #fbbf24;
+}
+
+.signal-bars.signal-weak .signal-bar.active {
+    background: #f87171;
+}
+
+.wifi-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.btn-wifi {
+    padding: 10px 15px;
+    border-radius: 6px;
+    border: none;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-wifi.primary {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-wifi.secondary {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.btn-wifi:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#wifi-networks-list {
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.wifi-network-item {
+    padding: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.wifi-network-item:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.wifi-network-item:last-child {
+    border-bottom: none;
+}
+
+.wifi-network-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.wifi-network-name {
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.wifi-network-signal {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.wifi-loading, .wifi-empty, .wifi-error {
+    padding: 20px;
+    text-align: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 13px;
+}
+
+.wifi-loading i {
+    margin-right: 8px;
+}
+
+#wifi-saved-list {
+    display: none;
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.wifi-saved-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.wifi-saved-item:last-child {
+    border-bottom: none;
+}
+
+.wifi-saved-name {
+    font-size: 13px;
+}
+
+.btn-forget {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-forget:hover {
+    background: rgba(239, 68, 68, 0.4);
+}
+
+.btn-toggle-saved {
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px dashed rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.6);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+.btn-toggle-saved:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+/* WiFi Password Modal */
+#wifi-password-modal .modal-content {
+    max-width: 320px;
+}
+
+#wifi-password-modal .modal-title {
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+#wifi-password-modal .modal-ssid {
+    font-size: 14px;
+    color: var(--primary);
+    margin-bottom: 15px;
+}
+
+#wifi-password-modal input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.3);
+    color: white;
+    font-size: 14px;
+    margin-bottom: 15px;
+    box-sizing: border-box;
+}
+
+#wifi-password-modal input[type="password"]:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+#wifi-password-modal .modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
 /* ========== Scrollbar ========== */
 ::-webkit-scrollbar {
     width: 8px;

@@ -155,22 +155,30 @@
                 </div>
 
                 <div class="settings-group">
-                    <h3>Camera</h3>
-                    <div class="setting-row">
-                        <label>Resolution</label>
-                        <select id="setting-resolution" class="select select-touch">
-                            <option value="640x480">640x480</option>
-                            <option value="800x600">800x600</option>
-                            <option value="1280x720">1280x720</option>
-                        </select>
+                    <h3>WiFi</h3>
+                    <div class="setting-row wifi-status-row">
+                        <label>Status</label>
+                        <span id="wifi-status-text" class="wifi-status">Checking...</span>
                     </div>
-                    <div class="setting-row">
-                        <label>FPS</label>
-                        <select id="setting-fps" class="select select-touch">
-                            <option value="15">15</option>
-                            <option value="30">30</option>
-                            <option value="60">60</option>
-                        </select>
+                    <div class="wifi-controls">
+                        <button id="btn-scan-wifi" class="btn btn-primary btn-touch btn-small" onclick="scanWifi()">
+                            <i class="fa-solid fa-magnifying-glass"></i> Scan
+                        </button>
+                        <button id="btn-disconnect-wifi" class="btn btn-secondary btn-touch btn-small" onclick="disconnectWifi()" style="display:none;">
+                            Disconnect
+                        </button>
+                    </div>
+                    <div id="wifi-networks-list" class="wifi-networks-list" style="display:none;">
+                        <!-- Networks will be populated by JavaScript -->
+                    </div>
+                    <div id="wifi-saved-section" style="margin-top: 10px;">
+                        <div class="setting-row" style="cursor: pointer;" onclick="toggleSavedNetworks()">
+                            <label>Saved Networks</label>
+                            <span id="saved-networks-toggle">▼</span>
+                        </div>
+                        <div id="wifi-saved-list" class="wifi-saved-list" style="display:none;">
+                            <!-- Saved networks will be populated by JavaScript -->
+                        </div>
                     </div>
                 </div>
 
@@ -192,6 +200,24 @@
             </div>
         </div>
     </main>
+
+    <!-- WiFi Password Modal -->
+    <div id="wifi-password-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Connect to WiFi</h3>
+                <button class="btn-close" onclick="closeWifiModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p id="wifi-connect-ssid" style="margin-bottom: 10px; font-weight: bold;"></p>
+                <input type="password" id="wifi-password-input" class="input-touch" placeholder="Enter password" autocomplete="off">
+                <div class="wifi-modal-buttons" style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn btn-secondary btn-touch" onclick="closeWifiModal()">Cancel</button>
+                    <button class="btn btn-success btn-touch" onclick="submitWifiPassword()">Connect</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notifications -->
     <div id="toast-container"></div>

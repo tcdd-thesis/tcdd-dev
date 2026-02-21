@@ -899,19 +899,6 @@ async function loadSettings() {
             setScreenBrightness(brightness);
         }
         
-        // Resolution dropdown
-        const resolution = `${config.camera?.width || 640}x${config.camera?.height || 480}`;
-        const resolutionSelect = document.getElementById('setting-resolution');
-        if (resolutionSelect) {
-            resolutionSelect.value = resolution;
-        }
-        
-        // FPS dropdown
-        const fpsSelect = document.getElementById('setting-fps');
-        if (fpsSelect) {
-            fpsSelect.value = config.camera?.fps || 30;
-        }
-        
         // Confidence slider
         const confidence = config.detection?.confidence || 0.5;
         const confidenceSlider = document.getElementById('setting-confidence');
@@ -920,6 +907,9 @@ async function loadSettings() {
             confidenceSlider.value = Math.round(confidence * 100);
             confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
         }
+        
+        // Load WiFi status
+        await loadWifiStatus();
         
         showToast('Settings loaded', 'success');
         
@@ -951,25 +941,12 @@ async function saveSettings() {
         // Get display brightness
         const brightness = parseInt(document.getElementById('setting-brightness').value);
         
-        // Parse resolution
-        const resolution = document.getElementById('setting-resolution').value.split('x');
-        const width = parseInt(resolution[0]);
-        const height = parseInt(resolution[1]);
-        
-        // Get FPS
-        const fps = parseInt(document.getElementById('setting-fps').value);
-        
         // Get confidence
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
         
         const config = {
             display: {
                 brightness: brightness
-            },
-            camera: {
-                width: width,
-                height: height,
-                fps: fps
             },
             detection: {
                 confidence: confidence
@@ -985,6 +962,286 @@ async function saveSettings() {
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
+    }
+}
+
+// ============================================================================
+// WIFI MANAGEMENT
+// ============================================================================
+
+// WiFi state for connection handling
+let wifiConnectingSsid = null;
+
+/**
+ * Get signal strength bars based on signal percentage
+ * @param {number} signal - Signal strength 0-100
+ * @returns {number} - Number of active bars (1-4)
+ */
+function getSignalBars(signal) {
+    if (signal >= 70) return 4;      // Excellent
+    if (signal >= 50) return 3;      // Good
+    if (signal >= 30) return 2;      // Fair
+    return 1;                         // Weak
+}
+
+/**
+ * Generate signal bars HTML
+ * @param {number} signal - Signal strength 0-100
+ * @returns {string} - HTML for signal bars
+ */
+function renderSignalBars(signal) {
+    const activeBars = getSignalBars(signal);
+    const colorClass = activeBars >= 3 ? 'signal-strong' : (activeBars === 2 ? 'signal-medium' : 'signal-weak');
+    
+    let barsHtml = '';
+    for (let i = 1; i <= 4; i++) {
+        const isActive = i <= activeBars;
+        barsHtml += `<span class="signal-bar bar-${i} ${isActive ? 'active' : ''}"></span>`;
+    }
+    
+    return `<span class="signal-bars ${colorClass}" title="${signal}%">${barsHtml}</span>`;
+}
+
+/**
+ * Load and display current WiFi connection status
+ */
+async function loadWifiStatus() {
+    const statusText = document.getElementById('wifi-status-text');
+    const disconnectBtn = document.getElementById('btn-wifi-disconnect');
+    
+    try {
+        const response = await api.get('/wifi/status');
+        
+        if (response.connected && response.ssid) {
+            const signal = response.signal || 0;
+            statusText.innerHTML = `
+                <span class="wifi-connected">
+                    <i class="fa fa-wifi"></i> ${escapeHtml(response.ssid)}
+                    ${renderSignalBars(signal)}
+                </span>`;
+            if (disconnectBtn) disconnectBtn.style.display = 'inline-block';
+            updateStatus('wifi', true);
+        } else {
+            statusText.innerHTML = '<span class="wifi-disconnected"><i class="fa fa-wifi"></i> Not Connected</span>';
+            if (disconnectBtn) disconnectBtn.style.display = 'none';
+            updateStatus('wifi', false);
+        }
+    } catch (error) {
+        console.error('Failed to load WiFi status:', error);
+        statusText.innerHTML = '<span class="wifi-error"><i class="fa fa-exclamation-triangle"></i> Error</span>';
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+    }
+}
+
+/**
+ * Scan for available WiFi networks
+ */
+async function scanWifiNetworks() {
+    const listContainer = document.getElementById('wifi-networks-list');
+    const scanBtn = document.getElementById('btn-wifi-scan');
+    
+    // Show loading state
+    if (scanBtn) {
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Scanning...';
+    }
+    listContainer.innerHTML = '<div class="wifi-loading"><i class="fa fa-spinner fa-spin"></i> Scanning for networks...</div>';
+    
+    try {
+        const response = await api.get('/wifi/scan');
+        const networks = response.networks || [];
+        
+        if (networks.length === 0) {
+            listContainer.innerHTML = '<div class="wifi-empty">No networks found</div>';
+        } else {
+            listContainer.innerHTML = networks.map(net => `
+                <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${net.security})">
+                    <div class="wifi-network-info">
+                        <span class="wifi-network-name">${escapeHtml(net.ssid)}</span>
+                        <span class="wifi-network-signal">
+                            <i class="fa fa-signal"></i> ${net.signal}%
+                            ${net.security ? '<i class="fa fa-lock"></i>' : ''}
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('WiFi scan failed:', error);
+        listContainer.innerHTML = '<div class="wifi-error">Scan failed. Try again.</div>';
+        showToast('WiFi scan failed', 'error');
+    } finally {
+        if (scanBtn) {
+            scanBtn.disabled = false;
+            scanBtn.innerHTML = '<i class="fa fa-search"></i> Scan';
+        }
+    }
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Prompt for WiFi connection (show password modal if secured)
+ */
+function promptWifiConnect(ssid, hasPassword) {
+    wifiConnectingSsid = ssid;
+    
+    if (hasPassword) {
+        // Show password modal
+        const modal = document.getElementById('wifi-password-modal');
+        const ssidDisplay = document.getElementById('wifi-connect-ssid');
+        const passwordInput = document.getElementById('wifi-password-input');
+        
+        if (ssidDisplay) ssidDisplay.textContent = ssid;
+        if (passwordInput) passwordInput.value = '';
+        if (modal) modal.style.display = 'flex';
+        
+        // Focus password input
+        setTimeout(() => passwordInput?.focus(), 100);
+    } else {
+        // Connect directly without password
+        connectToWifi(ssid, '');
+    }
+}
+
+/**
+ * Submit WiFi password and connect
+ */
+async function submitWifiPassword() {
+    const passwordInput = document.getElementById('wifi-password-input');
+    const password = passwordInput?.value || '';
+    
+    if (!wifiConnectingSsid) {
+        showToast('No network selected', 'error');
+        return;
+    }
+    
+    closeWifiModal();
+    await connectToWifi(wifiConnectingSsid, password);
+}
+
+/**
+ * Close WiFi password modal
+ */
+function closeWifiModal() {
+    const modal = document.getElementById('wifi-password-modal');
+    if (modal) modal.style.display = 'none';
+    wifiConnectingSsid = null;
+}
+
+/**
+ * Connect to a WiFi network
+ */
+async function connectToWifi(ssid, password) {
+    showToast(`Connecting to ${ssid}...`, 'info');
+    
+    try {
+        const response = await api.post('/wifi/connect', { ssid, password });
+        
+        if (response.success) {
+            showToast(`Connected to ${ssid}!`, 'success');
+            await loadWifiStatus();
+        } else {
+            showToast(response.error || 'Connection failed', 'error');
+        }
+    } catch (error) {
+        console.error('WiFi connect failed:', error);
+        showToast('Connection failed', 'error');
+    }
+}
+
+/**
+ * Disconnect from current WiFi network
+ */
+async function disconnectWifi() {
+    showToast('Disconnecting...', 'info');
+    
+    try {
+        const response = await api.post('/wifi/disconnect');
+        
+        if (response.success) {
+            showToast('Disconnected', 'success');
+            await loadWifiStatus();
+        } else {
+            showToast(response.error || 'Disconnect failed', 'error');
+        }
+    } catch (error) {
+        console.error('WiFi disconnect failed:', error);
+        showToast('Disconnect failed', 'error');
+    }
+}
+
+/**
+ * Toggle saved networks visibility
+ */
+function toggleSavedNetworks() {
+    const container = document.getElementById('wifi-saved-list');
+    const toggleBtn = document.getElementById('btn-toggle-saved');
+    
+    if (container.style.display === 'none' || !container.style.display) {
+        container.style.display = 'block';
+        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa fa-chevron-up"></i> Hide Saved Networks';
+        loadSavedNetworks();
+    } else {
+        container.style.display = 'none';
+        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa fa-chevron-down"></i> Show Saved Networks';
+    }
+}
+
+/**
+ * Load saved WiFi networks
+ */
+async function loadSavedNetworks() {
+    const container = document.getElementById('wifi-saved-list');
+    container.innerHTML = '<div class="wifi-loading"><i class="fa fa-spinner fa-spin"></i> Loading...</div>';
+    
+    try {
+        const response = await api.get('/wifi/saved');
+        const networks = response.networks || [];
+        
+        if (networks.length === 0) {
+            container.innerHTML = '<div class="wifi-empty">No saved networks</div>';
+        } else {
+            container.innerHTML = networks.map(net => `
+                <div class="wifi-saved-item">
+                    <span class="wifi-saved-name">${escapeHtml(net.name)}</span>
+                    <button class="btn-forget" onclick="forgetWifi('${escapeHtml(net.uuid)}')" title="Forget">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load saved networks:', error);
+        container.innerHTML = '<div class="wifi-error">Failed to load</div>';
+    }
+}
+
+/**
+ * Forget a saved WiFi network
+ */
+async function forgetWifi(uuid) {
+    if (!confirm('Forget this network?')) return;
+    
+    try {
+        const response = await api.post('/wifi/forget', { uuid });
+        
+        if (response.success) {
+            showToast('Network forgotten', 'success');
+            await loadSavedNetworks();
+        } else {
+            showToast(response.error || 'Failed to forget', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to forget network:', error);
+        showToast('Failed to forget network', 'error');
     }
 }
 
@@ -1059,20 +1316,14 @@ function updateStatus(component, isOnline) {
 }
 
 async function checkWiFiStatus() {
-    // Check WiFi by trying to reach the backend
+    // Check actual WiFi connection status via API
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        
-        await fetch('/api/status', { 
-            signal: controller.signal,
-            cache: 'no-cache'
-        });
-        
-        clearTimeout(timeoutId);
-        updateStatus('wifi', true);
-        return true;
+        const response = await api.get('/wifi/status');
+        const isConnected = response.connected === true;
+        updateStatus('wifi', isConnected);
+        return isConnected;
     } catch (error) {
+        // If API fails, assume no WiFi
         updateStatus('wifi', false);
         return false;
     }
