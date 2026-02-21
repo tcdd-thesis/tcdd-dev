@@ -1148,7 +1148,7 @@ async function connectToWifi(ssid, password) {
     try {
         const response = await api.post('/wifi/connect', { ssid, password });
         
-        if (response.success) {
+        if (response.connected) {
             showToast(`Connected to ${ssid}!`, 'success');
             await loadWifiStatus();
         } else {
@@ -1169,7 +1169,7 @@ async function disconnectWifi() {
     try {
         const response = await api.post('/wifi/disconnect');
         
-        if (response.success) {
+        if (!response.error) {
             showToast('Disconnected', 'success');
             await loadWifiStatus();
         } else {
@@ -1186,15 +1186,15 @@ async function disconnectWifi() {
  */
 function toggleSavedNetworks() {
     const container = document.getElementById('wifi-saved-list');
-    const toggleBtn = document.getElementById('btn-toggle-saved');
+    const toggleIcon = document.getElementById('saved-networks-toggle');
     
     if (container.style.display === 'none' || !container.style.display) {
         container.style.display = 'block';
-        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa fa-chevron-up"></i> Hide Saved Networks';
+        if (toggleIcon) toggleIcon.textContent = '▲';
         loadSavedNetworks();
     } else {
         container.style.display = 'none';
-        if (toggleBtn) toggleBtn.innerHTML = '<i class="fa fa-chevron-down"></i> Show Saved Networks';
+        if (toggleIcon) toggleIcon.textContent = '▼';
     }
 }
 
@@ -1215,7 +1215,7 @@ async function loadSavedNetworks() {
             container.innerHTML = networks.map(net => `
                 <div class="wifi-saved-item">
                     <span class="wifi-saved-name">${escapeHtml(net.name)}</span>
-                    <button class="btn-forget" onclick="forgetWifi('${escapeHtml(net.uuid)}')" title="Forget">
+                    <button class="btn-forget" onclick="forgetWifi('${escapeHtml(net.name)}')" title="Forget">
                         <i class="fa fa-trash"></i>
                     </button>
                 </div>
@@ -1230,13 +1230,13 @@ async function loadSavedNetworks() {
 /**
  * Forget a saved WiFi network
  */
-async function forgetWifi(uuid) {
+async function forgetWifi(name) {
     if (!confirm('Forget this network?')) return;
     
     try {
-        const response = await api.post('/wifi/forget', { uuid });
+        const response = await api.post('/wifi/forget', { name });
         
-        if (response.success) {
+        if (!response.error) {
             showToast('Network forgotten', 'success');
             await loadSavedNetworks();
         } else {
