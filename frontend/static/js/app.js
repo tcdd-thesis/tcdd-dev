@@ -1306,11 +1306,17 @@ function updateStatus(component, isOnline) {
     
     const dot = statusElement.querySelector('.status-dot');
     
+    if (dot) {
+        if (isOnline) {
+            dot.className = 'status-dot dot online';
+        } else {
+            dot.className = 'status-dot dot offline';
+        }
+    }
+    
     if (isOnline) {
-        dot.className = 'status-dot dot online';
         statusElement.classList.add('connected');
     } else {
-        dot.className = 'status-dot dot offline';
         statusElement.classList.remove('connected');
     }
 }
