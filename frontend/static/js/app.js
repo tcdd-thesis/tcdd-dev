@@ -1330,22 +1330,31 @@ async function checkWiFiStatus() {
         
         updateStatus('wifi', isConnected);
         
-        // Update home page signal bars
+        // Update home page signal bars and fallback icon
         const homeSignal = document.getElementById('home-wifi-signal');
-        if (homeSignal) {
-            if (isConnected) {
+        const homeFallback = document.getElementById('home-wifi-fallback');
+        
+        if (isConnected) {
+            // Show signal bars, hide fallback icon
+            if (homeSignal) {
                 homeSignal.innerHTML = renderSignalBars(signal);
-            } else {
-                homeSignal.innerHTML = '';
+                homeSignal.style.display = '';
             }
+            if (homeFallback) homeFallback.style.display = 'none';
+        } else {
+            // Hide signal bars, show fallback icon (dimmed)
+            if (homeSignal) homeSignal.style.display = 'none';
+            if (homeFallback) homeFallback.style.display = '';
         }
         
         return isConnected;
     } catch (error) {
-        // If API fails, assume no WiFi
+        // If API fails, show fallback icon
         updateStatus('wifi', false);
         const homeSignal = document.getElementById('home-wifi-signal');
-        if (homeSignal) homeSignal.innerHTML = '';
+        const homeFallback = document.getElementById('home-wifi-fallback');
+        if (homeSignal) homeSignal.style.display = 'none';
+        if (homeFallback) homeFallback.style.display = '';
         return false;
     }
 }
