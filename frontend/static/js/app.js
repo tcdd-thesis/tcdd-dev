@@ -1038,7 +1038,10 @@ async function loadWifiStatus() {
  */
 async function scanWifiNetworks() {
     const listContainer = document.getElementById('wifi-networks-list');
-    const scanBtn = document.getElementById('btn-wifi-scan');
+    const scanBtn = document.getElementById('btn-scan-wifi');
+    
+    // Show the list container
+    if (listContainer) listContainer.style.display = 'block';
     
     // Show loading state
     if (scanBtn) {
@@ -1073,7 +1076,7 @@ async function scanWifiNetworks() {
     } finally {
         if (scanBtn) {
             scanBtn.disabled = false;
-            scanBtn.innerHTML = '<i class="fa fa-search"></i> Scan';
+            scanBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Scan';
         }
     }
 }
