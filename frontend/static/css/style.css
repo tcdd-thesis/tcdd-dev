@@ -382,6 +382,23 @@ body.touchscreen {
     line-height: 1;
 }
 
+.status-icon-indicator {
+    font-size: 14px;
+    line-height: 1;
+    color: rgba(255,255,255,0.4);
+    transition: color 0.3s ease;
+}
+
+.status-item.connected .status-icon-indicator {
+    color: var(--success);
+    animation: pulse-icon 2s infinite;
+}
+
+@keyframes pulse-icon {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 .status-label {
     font-size: 12px;
     font-weight: 500;
