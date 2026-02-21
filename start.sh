@@ -49,8 +49,16 @@ BACKEND_PID=$!
 # Wait for server to be ready
 sleep 5
 
-# Start browser
-chromium-browser --kiosk http://localhost:5000 --password-store=basic &
+# Start browser with touch support enabled
+chromium-browser \
+    --kiosk \
+    --touch-events=enabled \
+    --enable-pinch \
+    --enable-features=TouchpadOverscrollHistoryNavigation \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --password-store=basic \
+    http://localhost:5000 &
 
 # Bring Python logs back to foreground
 wait $BACKEND_PID

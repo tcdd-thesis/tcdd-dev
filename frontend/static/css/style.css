@@ -56,7 +56,7 @@ body {
     max-width: 640px;
     max-height: 480px;
     margin: 0 auto;
-    touch-action: manipulation;
+    touch-action: auto;
     position: relative;
 }
 
@@ -494,11 +494,13 @@ body.touchscreen {
     max-height: 480px;
     background: #1a1a1a;
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 .page.active {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 /* ========== Page Header ========== */
@@ -802,11 +804,31 @@ body.touchscreen {
     overflow-y: scroll !important;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    touch-action: pan-y !important;
     overscroll-behavior-y: contain;
     box-sizing: border-box;
-    /* Force scrollbar to always show for touch targets */
     scrollbar-width: thin;
+    position: relative;
+    min-height: 0; /* Important for flex scroll */
+}
+
+/* Visible scrollbar for touch devices */
+.settings-container-compact::-webkit-scrollbar {
+    width: 6px;
+}
+
+.settings-container-compact::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+}
+
+.settings-container-compact::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
+}
+
+.settings-container-compact::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.5);
 }
 
 .settings-group {
@@ -837,6 +859,11 @@ body.touchscreen {
 .setting-row label {
     font-size: 14px;
     font-weight: 500;
+}
+
+.setting-value {
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
 }
 
 .slider-container {
@@ -1190,11 +1217,28 @@ body.touchscreen {
     overflow-y: scroll !important;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    touch-action: pan-y !important;
     overscroll-behavior-y: contain;
     padding: 12px;
     background: #0a0a0a;
     scrollbar-width: thin;
+    position: relative;
+    min-height: 0; /* Important for flex scroll */
+}
+
+/* Visible scrollbar for touch devices */
+.violations-log-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.violations-log-container::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+}
+
+.violations-log-container::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
 }
 
 .violations-list {
