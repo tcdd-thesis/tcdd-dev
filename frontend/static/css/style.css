@@ -799,6 +799,9 @@ body.touchscreen {
     padding: 15px;
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
     box-sizing: border-box;
 }
 
@@ -982,6 +985,9 @@ body.touchscreen {
     border-radius: 6px;
     max-height: 150px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
     margin-bottom: 10px;
 }
 
@@ -1036,6 +1042,9 @@ body.touchscreen {
     border-radius: 6px;
     max-height: 120px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
 }
 
 .wifi-saved-item {
@@ -1164,6 +1173,9 @@ body.touchscreen {
 .violations-log-container {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
     padding: 12px;
     background: #0a0a0a;
 }
