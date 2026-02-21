@@ -544,23 +544,26 @@ def connect_wifi():
 
 @app.route('/api/wifi/disconnect', methods=['POST'])
 def disconnect_wifi():
-    """Disconnect from current WiFi network"""
+    """Disconnect from current WiFi network (connection only, not the device)"""
     try:
-        # Get the WiFi device name (usually wlan0)
-        stdout, stderr, code = run_nmcli(['-t', '-f', 'DEVICE,TYPE', 'device'])
+        # Get the active WiFi connection name
+        stdout, stderr, code = run_nmcli(['-t', '-f', 'NAME,TYPE,DEVICE', 'connection', 'show', '--active'])
         
-        wifi_device = 'wlan0'  # default
+        active_connection = None
         for line in stdout.strip().split('\n'):
-            if ':wifi' in line:
-                wifi_device = line.split(':')[0]
+            if line and ':802-11-wireless:' in line:
+                active_connection = line.split(':')[0]
                 break
         
-        # Disconnect
-        stdout, stderr, code = run_nmcli(['dev', 'disconnect', wifi_device], timeout=10)
+        if not active_connection:
+            return jsonify({'message': 'No active WiFi connection', 'connected': False}), 200
+        
+        # Disconnect the connection (not the device)
+        stdout, stderr, code = run_nmcli(['connection', 'down', active_connection], timeout=10)
         
         if code == 0:
-            logger.info("✅ Disconnected from WiFi")
-            return jsonify({'message': 'Disconnected', 'connected': False}), 200
+            logger.info(f"✅ Disconnected from WiFi: {active_connection}")
+            return jsonify({'message': f'Disconnected from {active_connection}', 'connected': False}), 200
         else:
             return jsonify({'error': stderr or 'Disconnect failed'}), 400
         
