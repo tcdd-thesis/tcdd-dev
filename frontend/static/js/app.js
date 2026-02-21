@@ -1024,12 +1024,45 @@ async function saveSettings() {
         const response = await api.put('/config', config);
         
         state.config = response.config;
+        
+        // Update original settings after successful save
+        state.originalSettings.brightness = brightness;
+        state.originalSettings.confidence = Math.round(confidence * 100);
+        
         showToast('Settings saved!', 'success');
         
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
     }
+}
+
+/**
+ * Reset settings to default values
+ */
+function resetToDefaults() {
+    // Default values
+    const defaultBrightness = 50;
+    const defaultConfidence = 50;
+    
+    // Update sliders
+    const brightnessSlider = document.getElementById('setting-brightness');
+    const brightnessDisplay = document.getElementById('brightness-display');
+    const confidenceSlider = document.getElementById('setting-confidence');
+    const confidenceDisplay = document.getElementById('confidence-display');
+    
+    if (brightnessSlider && brightnessDisplay) {
+        brightnessSlider.value = defaultBrightness;
+        brightnessDisplay.textContent = defaultBrightness + '%';
+        setScreenBrightness(defaultBrightness);
+    }
+    
+    if (confidenceSlider && confidenceDisplay) {
+        confidenceSlider.value = defaultConfidence;
+        confidenceDisplay.textContent = defaultConfidence + '%';
+    }
+    
+    showToast('Reset to defaults', 'info');
 }
 
 // ============================================================================
@@ -1524,7 +1557,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
-    document.getElementById('btn-load-settings').addEventListener('click', loadSettings);
+    document.getElementById('btn-reset-settings').addEventListener('click', resetToDefaults);
     
     // Brightness slider - real-time screen dimming
     const brightnessSlider = document.getElementById('setting-brightness');

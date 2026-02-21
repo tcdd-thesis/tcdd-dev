@@ -573,6 +573,7 @@ body.touchscreen {
     gap: 8px;
     background: rgba(255,255,255,0.05);
     flex-shrink: 0;
+    justify-content: flex-end;
 }
 
 /* ========== Live Feed Styles ========== */
@@ -950,6 +951,13 @@ body.touchscreen {
 .wifi-actions {
     display: flex;
     gap: 10px;
+    margin-bottom: 10px;
+}
+
+.wifi-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
     margin-bottom: 10px;
 }
 

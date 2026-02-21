@@ -160,11 +160,11 @@
                         <span id="wifi-status-text" class="wifi-status">Checking...</span>
                     </div>
                     <div class="wifi-controls">
-                        <button id="btn-scan-wifi" class="btn btn-primary btn-touch btn-small" onclick="scanWifiNetworks()">
-                            <i class="fa-solid fa-magnifying-glass"></i> Scan
-                        </button>
                         <button id="btn-wifi-disconnect" class="btn btn-danger btn-touch btn-small" onclick="disconnectWifi()" style="display:none;">
                             <i class="fa-solid fa-link-slash"></i> Disconnect
+                        </button>
+                        <button id="btn-scan-wifi" class="btn btn-primary btn-touch btn-small" onclick="scanWifiNetworks()">
+                            <i class="fa-solid fa-magnifying-glass"></i> Scan
                         </button>
                     </div>
                     <div id="wifi-networks-list" class="wifi-networks-list" style="display:none;">
@@ -193,8 +193,8 @@
                 </div>
 
                 <div class="controls-compact">
+                    <button id="btn-reset-settings" class="btn btn-secondary btn-touch">↺ Reset</button>
                     <button id="btn-save-settings" class="btn btn-success btn-touch">⊡ Save</button>
-                    <button id="btn-load-settings" class="btn btn-primary btn-touch">↻ Reload</button>
                 </div>
             </div>
         </div>
