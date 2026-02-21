@@ -32,3 +32,34 @@
 .fa-bars:before { content: "\f0c9"; }
 .fa-arrow-left:before { content: "\f060"; }
 .fa-refresh:before, .fa-sync:before { content: "\f021"; }
+
+/* Menu and Navigation */
+.fa-list:before { content: "\f03a"; }
+.fa-rotate-left:before, .fa-undo:before { content: "\f2ea"; }
+.fa-floppy-disk:before, .fa-save:before { content: "\f0c7"; }
+.fa-flag:before { content: "\f024"; }
+.fa-star:before { content: "\f005"; }
+.fa-chevron-down:before { content: "\f078"; }
+.fa-chevron-up:before { content: "\f077"; }
+.fa-link-slash:before { content: "\f127"; }
+.fa-check:before { content: "\f00c"; }
+
+/* Status and Alerts */
+.fa-triangle-exclamation:before, .fa-exclamation-triangle:before { content: "\f071"; }
+.fa-shield-halved:before, .fa-shield-alt:before { content: "\f3ed"; }
+.fa-circle:before { content: "\f111"; }
+.fa-question:before { content: "\f128"; }
+
+/* Violation Type Icons */
+.fa-gauge-high:before, .fa-tachometer-alt:before { content: "\f625"; }
+.fa-hand:before { content: "\f256"; }
+.fa-arrow-turn-up:before { content: "\f148"; }
+.fa-arrows-left-right:before { content: "\f07e"; }
+.fa-car-rear:before, .fa-car-alt:before { content: "\f5de"; }
+
+/* Log Message Icons */
+.fa-stop:before { content: "\f04d"; }
+.fa-arrow-up:before { content: "\f062"; }
+.fa-display:before, .fa-desktop:before { content: "\f390"; }
+.fa-image:before { content: "\f03e"; }
+.fa-caret-right:before { content: "\f0da"; }
