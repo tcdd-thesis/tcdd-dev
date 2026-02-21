@@ -1320,11 +1320,26 @@ async function checkWiFiStatus() {
     try {
         const response = await api.get('/wifi/status');
         const isConnected = response.connected === true;
+        const signal = response.signal || 0;
+        
         updateStatus('wifi', isConnected);
+        
+        // Update home page signal bars
+        const homeSignal = document.getElementById('home-wifi-signal');
+        if (homeSignal) {
+            if (isConnected) {
+                homeSignal.innerHTML = renderSignalBars(signal);
+            } else {
+                homeSignal.innerHTML = '';
+            }
+        }
+        
         return isConnected;
     } catch (error) {
         // If API fails, assume no WiFi
         updateStatus('wifi', false);
+        const homeSignal = document.getElementById('home-wifi-signal');
+        if (homeSignal) homeSignal.innerHTML = '';
         return false;
     }
 }

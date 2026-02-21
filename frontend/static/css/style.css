@@ -921,6 +921,12 @@ body.touchscreen {
     background: #f87171;
 }
 
+/* Home page signal bars container */
+.home-signal-bars {
+    display: inline-flex;
+    margin-left: 4px;
+}
+
 .wifi-actions {
     display: flex;
     gap: 10px;
