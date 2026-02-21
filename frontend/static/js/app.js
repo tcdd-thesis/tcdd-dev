@@ -1057,17 +1057,19 @@ async function scanWifiNetworks() {
         if (networks.length === 0) {
             listContainer.innerHTML = '<div class="wifi-empty">No networks found</div>';
         } else {
-            listContainer.innerHTML = networks.map(net => `
-                <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${net.security})">
+            listContainer.innerHTML = networks.map(net => {
+                const hasPassword = !!(net.security && net.security !== '' && net.security !== '--');
+                return `
+                <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${hasPassword})">
                     <div class="wifi-network-info">
                         <span class="wifi-network-name">${escapeHtml(net.ssid)}</span>
                         <span class="wifi-network-signal">
                             <i class="fa fa-signal"></i> ${net.signal}%
-                            ${net.security ? '<i class="fa fa-lock"></i>' : ''}
+                            ${hasPassword ? '<i class="fa fa-lock"></i>' : ''}
                         </span>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
     } catch (error) {
         console.error('WiFi scan failed:', error);

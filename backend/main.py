@@ -695,9 +695,10 @@ def stream_video():
                 if stop_dets:
                     top = max(stop_dets, key=lambda d: d.get('confidence', 0))
                     if top.get('confidence', 0) >= max(0.85, config.get('detection.confidence', 0.5)):
+                        event_time = datetime.now()
                         event = {
-                            'id': f"evt_{now.strftime('%Y%m%d_%H%M%S')}_{frame_count:06d}",
-                            'timestamp': now.isoformat(),
+                            'id': f"evt_{event_time.strftime('%Y%m%d_%H%M%S')}_{frame_count:06d}",
+                            'timestamp': event_time.isoformat(),
                             'violation_type': 'stop_sign',
                             'confidence': float(top['confidence']),
                             'driver_action': 'unknown',
