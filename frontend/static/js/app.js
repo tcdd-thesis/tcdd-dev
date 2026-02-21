@@ -16,7 +16,12 @@ const state = {
     status: {
         wifi: false,
         camera: false
-    }    
+    },
+    // Track original settings for unsaved changes detection
+    originalSettings: {
+        brightness: 50,
+        confidence: 50
+    }
 };
 
 // ============================================================================
@@ -254,7 +259,67 @@ function goHome() {
         stopCamera();
     }
     
+    // Check for unsaved settings changes
+    if (state.currentPage === 'settings' && hasSettingsChanged()) {
+        showUnsavedSettingsModal();
+        return;
+    }
+    
     switchPage('home');
+}
+
+/**
+ * Check if settings have been modified
+ */
+function hasSettingsChanged() {
+    const brightnessSlider = document.getElementById('setting-brightness');
+    const confidenceSlider = document.getElementById('setting-confidence');
+    
+    const currentBrightness = brightnessSlider ? parseInt(brightnessSlider.value) : state.originalSettings.brightness;
+    const currentConfidence = confidenceSlider ? parseInt(confidenceSlider.value) : state.originalSettings.confidence;
+    
+    return currentBrightness !== state.originalSettings.brightness ||
+           currentConfidence !== state.originalSettings.confidence;
+}
+
+/**
+ * Show unsaved settings confirmation modal
+ */
+function showUnsavedSettingsModal() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+/**
+ * Save settings and go home
+ */
+async function saveSettingsAndGoHome() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'none';
+    
+    await saveSettings();
+    switchPage('home');
+}
+
+/**
+ * Discard settings changes and go home
+ */
+function discardSettingsAndGoHome() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'none';
+    
+    // Restore original brightness visually
+    setScreenBrightness(state.originalSettings.brightness);
+    
+    switchPage('home');
+}
+
+/**
+ * Cancel and stay on settings page
+ */
+function cancelUnsavedSettings() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 function switchPage(pageName) {
@@ -908,10 +973,12 @@ async function loadSettings() {
             confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
         }
         
+        // Store original settings for change detection
+        state.originalSettings.brightness = brightness;
+        state.originalSettings.confidence = Math.round(confidence * 100);
+        
         // Load WiFi status
         await loadWifiStatus();
-        
-        showToast('Settings loaded', 'success');
         
     } catch (error) {
         console.error('Failed to load settings:', error);

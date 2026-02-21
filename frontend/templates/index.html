@@ -293,6 +293,29 @@
         </div>
     </div>
 
+    <!-- Unsaved Settings Modal -->
+    <div id="unsaved-settings-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Unsaved Changes</h3>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">You have unsaved settings changes. What would you like to do?</p>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-success btn-touch" onclick="saveSettingsAndGoHome()">
+                        <i class="fa-solid fa-check"></i> Save
+                    </button>
+                    <button class="btn btn-danger btn-touch" onclick="discardSettingsAndGoHome()">
+                        <i class="fa-solid fa-trash"></i> Discard
+                    </button>
+                    <button class="btn btn-secondary btn-touch" onclick="cancelUnsavedSettings()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Load SocketIO from CDN -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <!-- Load our app -->
