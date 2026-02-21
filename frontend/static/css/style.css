@@ -799,11 +799,14 @@ body.touchscreen {
 .settings-container-compact {
     padding: 15px;
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll !important;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
     box-sizing: border-box;
+    /* Force scrollbar to always show for touch targets */
+    scrollbar-width: thin;
 }
 
 .settings-group {
@@ -992,11 +995,13 @@ body.touchscreen {
     background: rgba(0,0,0,0.2);
     border-radius: 6px;
     max-height: 150px;
-    overflow-y: auto;
+    overflow-y: scroll !important;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
     margin-bottom: 10px;
+    scrollbar-width: thin;
 }
 
 .wifi-network-item {
@@ -1049,10 +1054,12 @@ body.touchscreen {
     background: rgba(0,0,0,0.2);
     border-radius: 6px;
     max-height: 120px;
-    overflow-y: auto;
+    overflow-y: scroll !important;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
 }
 
 .wifi-saved-item {
@@ -1180,12 +1187,14 @@ body.touchscreen {
 /* Violations list */
 .violations-log-container {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll !important;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
     padding: 12px;
     background: #0a0a0a;
+    scrollbar-width: thin;
 }
 
 .violations-list {

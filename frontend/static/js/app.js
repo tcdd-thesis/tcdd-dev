@@ -25,6 +25,141 @@ const state = {
 };
 
 // ============================================================================
+// TOUCH SCROLL IMPLEMENTATION
+// ============================================================================
+
+/**
+ * Initialize touch scrolling for an element
+ * This provides reliable scrolling on embedded Chromium/touchscreens
+ */
+function initTouchScroll(element) {
+    if (!element) return;
+    
+    // Prevent double initialization
+    if (element.dataset.touchScrollInit) return;
+    element.dataset.touchScrollInit = 'true';
+    
+    let startY = 0;
+    let startScrollTop = 0;
+    let isScrolling = false;
+    let velocity = 0;
+    let lastY = 0;
+    let lastTime = 0;
+    let momentumId = null;
+    
+    element.addEventListener('touchstart', (e) => {
+        // Only handle single touch
+        if (e.touches.length !== 1) return;
+        
+        // Stop any ongoing momentum scroll
+        if (momentumId) {
+            cancelAnimationFrame(momentumId);
+            momentumId = null;
+        }
+        
+        startY = e.touches[0].pageY;
+        lastY = startY;
+        startScrollTop = element.scrollTop;
+        lastTime = Date.now();
+        isScrolling = true;
+        velocity = 0;
+    }, { passive: true });
+    
+    element.addEventListener('touchmove', (e) => {
+        if (!isScrolling || e.touches.length !== 1) return;
+        
+        const currentY = e.touches[0].pageY;
+        const currentTime = Date.now();
+        const deltaY = startY - currentY;
+        const timeDelta = currentTime - lastTime;
+        
+        // Calculate velocity for momentum
+        if (timeDelta > 0) {
+            velocity = (lastY - currentY) / timeDelta;
+        }
+        
+        lastY = currentY;
+        lastTime = currentTime;
+        
+        element.scrollTop = startScrollTop + deltaY;
+        
+        // Prevent page bounce/overscroll only when actually scrolling content
+        const canScrollUp = element.scrollTop > 0;
+        const canScrollDown = element.scrollTop < element.scrollHeight - element.clientHeight;
+        
+        if ((deltaY > 0 && canScrollDown) || (deltaY < 0 && canScrollUp)) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+    
+    element.addEventListener('touchend', () => {
+        if (!isScrolling) return;
+        isScrolling = false;
+        
+        // Apply momentum scrolling
+        if (Math.abs(velocity) > 0.1) {
+            applyMomentum(element, velocity);
+        }
+    }, { passive: true });
+    
+    element.addEventListener('touchcancel', () => {
+        isScrolling = false;
+        if (momentumId) {
+            cancelAnimationFrame(momentumId);
+            momentumId = null;
+        }
+    }, { passive: true });
+    
+    function applyMomentum(el, v) {
+        const friction = 0.95;
+        const minVelocity = 0.1;
+        
+        function step() {
+            if (Math.abs(v) < minVelocity) {
+                momentumId = null;
+                return;
+            }
+            
+            el.scrollTop += v * 16; // ~16ms per frame
+            v *= friction;
+            
+            // Stop at boundaries
+            if (el.scrollTop <= 0 || el.scrollTop >= el.scrollHeight - el.clientHeight) {
+                momentumId = null;
+                return;
+            }
+            
+            momentumId = requestAnimationFrame(step);
+        }
+        
+        momentumId = requestAnimationFrame(step);
+    }
+}
+
+/**
+ * Initialize all scrollable containers
+ */
+function initAllTouchScrolling() {
+    // List of scrollable container selectors
+    const scrollableSelectors = [
+        '.settings-container-compact',
+        '.violations-log-container',
+        '#wifi-networks-list',
+        '#wifi-saved-list',
+        '#logs-content-friendly',
+        '#violations-list',
+        '.modal-content'
+    ];
+    
+    scrollableSelectors.forEach(selector => {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => initTouchScroll(el));
+    });
+    
+    console.log('Touch scrolling initialized');
+}
+
+// ============================================================================
 // SCREEN BRIGHTNESS CONTROL (CSS Overlay Dimming)
 // ============================================================================
 
@@ -333,6 +468,9 @@ function switchPage(pageName) {
     // Load page-specific content
     if (pageName === 'logs') { loadViolations(); }
     if (pageName === 'settings') loadSettings();
+    
+    // Re-initialize touch scrolling for newly visible containers
+    setTimeout(initAllTouchScrolling, 100);
 }
 
 // ============================================================================
@@ -1592,6 +1730,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial status check and load brightness
     checkSystemStatus();
     loadInitialBrightness();
+    
+    // Initialize touch scrolling for all scrollable containers
+    initAllTouchScrolling();
     
     // Periodic status checks
     setInterval(checkSystemStatus, 5000);  // Check every 5 seconds
