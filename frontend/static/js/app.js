@@ -433,7 +433,7 @@ async function loadLogs() {
         } else {
             logsContainer.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">\u2630</span>
+                    <span class="icon"><i class="fa-solid fa-bars"></i></span>
                     <div>No activity yet</div>
                 </div>
             `;
@@ -444,7 +444,7 @@ async function loadLogs() {
         const logsContainer = document.getElementById('logs-content-friendly');
         logsContainer.innerHTML = `
             <div class="log-empty">
-                <span class="icon">\u26A0</span>
+                <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
                 <div>Could not load activity log</div>
             </div>
         `;
@@ -465,7 +465,7 @@ async function loadViolations() {
         if (!events.length) {
             container.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">\u26A0</span>
+                    <span class="icon"><i class="fa-solid fa-shield-halved"></i></span>
                     <div>No violations recorded</div>
                     <small style="color: #888; margin-top: 8px;">Violations will appear here when detected</small>
                 </div>
@@ -484,7 +484,7 @@ async function loadViolations() {
         if (container) {
             container.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">\u26A0</span>
+                    <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
                     <div>Could not load violations</div>
                 </div>
             `;
@@ -507,7 +507,7 @@ function renderViolationCard(ev) {
     const violationIcon = getViolationIcon(ev.violation_type);
     
     // Driver action display
-    const actionIcon = ev.driver_action === 'wrong' ? '\u2715' : ev.driver_action === 'right' ? '\u2713' : '\u003F';
+    const actionIcon = ev.driver_action === 'wrong' ? '<i class="fa-solid fa-xmark"></i>' : ev.driver_action === 'right' ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-question"></i>';
     const actionClass = ev.driver_action === 'wrong' ? 'action-wrong' : ev.driver_action === 'right' ? 'action-right' : 'action-unknown';
     
     // Confidence
@@ -555,16 +555,16 @@ function renderViolationCard(ev) {
 
 function getViolationIcon(type) {
     const icons = {
-        'overspeed': '\u26A1',        // ⚡ Lightning bolt
-        'red_light': '\u25CF',        // ● Red circle
-        'stop_sign': '\u26D4',        // ⛔ No entry
-        'wrong_way': '\u26A0',        // ⚠ Warning sign
-        'illegal_turn': '\u21AA',     // ↪ Turn arrow
-        'lane_departure': '\u2194',   // ↔ Left-right arrow
-        'tailgating': '\u25A0',       // ■ Square (car representation)
-        'none': '\u2713'              // ✓ Check mark
+        'overspeed': '<i class="fa-solid fa-gauge-high"></i>',        // Speedometer
+        'red_light': '<i class="fa-solid fa-circle" style="color:#e53935"></i>',  // Red circle
+        'stop_sign': '<i class="fa-solid fa-hand"></i>',              // Stop hand
+        'wrong_way': '<i class="fa-solid fa-triangle-exclamation"></i>', // Warning
+        'illegal_turn': '<i class="fa-solid fa-arrow-turn-up"></i>',  // Turn arrow
+        'lane_departure': '<i class="fa-solid fa-arrows-left-right"></i>', // Lane change
+        'tailgating': '<i class="fa-solid fa-car-rear"></i>',         // Car rear
+        'none': '<i class="fa-solid fa-check"></i>'                   // Check mark
     };
-    return icons[type] || '\u25A1'; // □ Empty square as fallback
+    return icons[type] || '<i class="fa-solid fa-question"></i>'; // Question as fallback
 }
 
 function showViolationDetail(ev) {
@@ -854,7 +854,7 @@ function clearViolationsDisplay() {
     if (container) {
         container.innerHTML = `
             <div class="log-empty">
-                <span class="icon">\u2713</span>
+                <span class="icon"><i class="fa-solid fa-check"></i></span>
                 <div>Display cleared</div>
             </div>
         `;
@@ -882,21 +882,21 @@ function parseLogLine(logLine) {
 function formatMessage(message, level) {
     // Make messages more user-friendly
     const friendlyMessages = {
-        'Initializing camera': '\u25B6 Starting camera...',           // ▶ Play
-        'Camera started': '\u2713 Camera ready',                      // ✓ Check
-        'Camera stopped': '\u25A0 Camera stopped',                    // ■ Stop square
-        'Initializing OpenCV VideoCapture': '\u25B6 Setting up camera', // ▶ Play
-        'Sign Detection System Starting': '\u25B2 System starting...', // ▲ Up triangle
-        'Registered config change callback': '\u2699 Configuration loaded', // ⚙ Gear
-        'Config file reloaded': '\u21BB Settings updated',            // ↻ Reload
-        'Camera resolution changed': '\u25A1 Resolution updated',     // □ Square
-        'Detection started': '\u25CF Detection active',               // ● Bullet
-        'Detection stopped': '\u25A0 Detection paused',               // ■ Square
-        'Model loaded': '\u2713 AI model ready',                      // ✓ Check
-        'Frame captured': '\u25A0 Image saved',                       // ■ Square
-        'Server starting': '\u25CF Server starting...',               // ● Bullet
-        'WebSocket connected': '\u2713 Connected',                    // ✓ Check
-        'WebSocket disconnected': '\u2715 Disconnected',              // ✕ X mark
+        'Initializing camera': '<i class="fa-solid fa-play"></i> Starting camera...',
+        'Camera started': '<i class="fa-solid fa-check"></i> Camera ready',
+        'Camera stopped': '<i class="fa-solid fa-stop"></i> Camera stopped',
+        'Initializing OpenCV VideoCapture': '<i class="fa-solid fa-play"></i> Setting up camera',
+        'Sign Detection System Starting': '<i class="fa-solid fa-arrow-up"></i> System starting...',
+        'Registered config change callback': '<i class="fa-solid fa-gear"></i> Configuration loaded',
+        'Config file reloaded': '<i class="fa-solid fa-rotate"></i> Settings updated',
+        'Camera resolution changed': '<i class="fa-solid fa-display"></i> Resolution updated',
+        'Detection started': '<i class="fa-solid fa-circle"></i> Detection active',
+        'Detection stopped': '<i class="fa-solid fa-stop"></i> Detection paused',
+        'Model loaded': '<i class="fa-solid fa-check"></i> AI model ready',
+        'Frame captured': '<i class="fa-solid fa-image"></i> Image saved',
+        'Server starting': '<i class="fa-solid fa-circle"></i> Server starting...',
+        'WebSocket connected': '<i class="fa-solid fa-check"></i> Connected',
+        'WebSocket disconnected': '<i class="fa-solid fa-xmark"></i> Disconnected',
     };
     
     // Check for exact matches
@@ -907,11 +907,11 @@ function formatMessage(message, level) {
     }
     
     // Check for patterns
-    if (message.includes('FPS')) return `\u25BA ${message}`;          // ▸ Small triangle
-    if (message.includes('detected')) return `\u25CF ${message}`;     // ● Bullet
-    if (message.includes('error') || message.includes('Error')) return `\u2715 ${message}`; // ✕ X
-    if (message.includes('warning') || message.includes('Warning')) return `\u26A0 ${message}`; // ⚠ Warning
-    if (message.includes('success') || message.includes('Success')) return `\u2713 ${message}`; // ✓ Check
+    if (message.includes('FPS')) return `<i class="fa-solid fa-caret-right"></i> ${message}`;
+    if (message.includes('detected')) return `<i class="fa-solid fa-circle"></i> ${message}`;
+    if (message.includes('error') || message.includes('Error')) return `<i class="fa-solid fa-xmark"></i> ${message}`;
+    if (message.includes('warning') || message.includes('Warning')) return `<i class="fa-solid fa-triangle-exclamation"></i> ${message}`;
+    if (message.includes('success') || message.includes('Success')) return `<i class="fa-solid fa-check"></i> ${message}`;
     
     return message;
 }
@@ -936,7 +936,7 @@ function clearLogsDisplay() {
     const logsContainer = document.getElementById('logs-content-friendly');
     logsContainer.innerHTML = `
         <div class="log-empty">
-            <span class="icon">\u2713</span>
+            <span class="icon"><i class="fa-solid fa-check"></i></span>
             <div>Display cleared</div>
         </div>
     `;
@@ -1292,11 +1292,11 @@ function toggleSavedNetworks() {
     
     if (container.style.display === 'none' || !container.style.display) {
         container.style.display = 'block';
-        if (toggleIcon) toggleIcon.textContent = '▲';
+        if (toggleIcon) toggleIcon.innerHTML = '<i class="fa-solid fa-chevron-up"></i>';
         loadSavedNetworks();
     } else {
         container.style.display = 'none';
-        if (toggleIcon) toggleIcon.textContent = '▼';
+        if (toggleIcon) toggleIcon.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
     }
 }
 
