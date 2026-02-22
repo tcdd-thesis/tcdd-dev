@@ -16,8 +16,52 @@ const state = {
     status: {
         wifi: false,
         camera: false
-    }    
+    },
+    // Track original settings for unsaved changes detection
+    originalSettings: {
+        brightness: 50,
+        confidence: 50
+    }
 };
+
+// ============================================================================
+// TOUCH SCROLL IMPLEMENTATION  
+// ============================================================================
+
+/**
+ * Initialize touch scrolling for an element (simplified version)
+ * Uses direct DOM manipulation for maximum compatibility
+ */
+function initTouchScroll(element) {
+    if (!element) return;
+    if (element.dataset.touchScrollInit) return;
+    element.dataset.touchScrollInit = 'true';
+    
+    let startY = 0;
+    let scrollStart = 0;
+    
+    element.addEventListener('touchstart', function(e) {
+        startY = e.touches[0].clientY;
+        scrollStart = element.scrollTop;
+    }, { passive: true });
+    
+    element.addEventListener('touchmove', function(e) {
+        const touch = e.touches[0];
+        const deltaY = startY - touch.clientY;
+        element.scrollTop = scrollStart + deltaY;
+    }, { passive: true });
+}
+
+/**
+ * Initialize all scrollable containers
+ */
+function initAllTouchScrolling() {
+    const scrollables = document.querySelectorAll(
+        '.settings-container-compact, .violations-log-container, #wifi-networks-list, #wifi-saved-list, .modal-content'
+    );
+    scrollables.forEach(el => initTouchScroll(el));
+    console.log('Touch scrolling initialized for', scrollables.length, 'elements');
+}
 
 // ============================================================================
 // SCREEN BRIGHTNESS CONTROL (CSS Overlay Dimming)
@@ -254,7 +298,67 @@ function goHome() {
         stopCamera();
     }
     
+    // Check for unsaved settings changes
+    if (state.currentPage === 'settings' && hasSettingsChanged()) {
+        showUnsavedSettingsModal();
+        return;
+    }
+    
     switchPage('home');
+}
+
+/**
+ * Check if settings have been modified
+ */
+function hasSettingsChanged() {
+    const brightnessSlider = document.getElementById('setting-brightness');
+    const confidenceSlider = document.getElementById('setting-confidence');
+    
+    const currentBrightness = brightnessSlider ? parseInt(brightnessSlider.value) : state.originalSettings.brightness;
+    const currentConfidence = confidenceSlider ? parseInt(confidenceSlider.value) : state.originalSettings.confidence;
+    
+    return currentBrightness !== state.originalSettings.brightness ||
+           currentConfidence !== state.originalSettings.confidence;
+}
+
+/**
+ * Show unsaved settings confirmation modal
+ */
+function showUnsavedSettingsModal() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+/**
+ * Save settings and go home
+ */
+async function saveSettingsAndGoHome() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'none';
+    
+    await saveSettings();
+    switchPage('home');
+}
+
+/**
+ * Discard settings changes and go home
+ */
+function discardSettingsAndGoHome() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'none';
+    
+    // Restore original brightness visually
+    setScreenBrightness(state.originalSettings.brightness);
+    
+    switchPage('home');
+}
+
+/**
+ * Cancel and stay on settings page
+ */
+function cancelUnsavedSettings() {
+    const modal = document.getElementById('unsaved-settings-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 function switchPage(pageName) {
@@ -268,6 +372,9 @@ function switchPage(pageName) {
     // Load page-specific content
     if (pageName === 'logs') { loadViolations(); }
     if (pageName === 'settings') loadSettings();
+    
+    // Re-initialize touch scrolling for newly visible containers
+    setTimeout(initAllTouchScrolling, 100);
 }
 
 // ============================================================================
@@ -368,7 +475,7 @@ async function loadLogs() {
         } else {
             logsContainer.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">\u2630</span>
+                    <span class="icon"><i class="fa-solid fa-bars"></i></span>
                     <div>No activity yet</div>
                 </div>
             `;
@@ -379,7 +486,7 @@ async function loadLogs() {
         const logsContainer = document.getElementById('logs-content-friendly');
         logsContainer.innerHTML = `
             <div class="log-empty">
-                <span class="icon">\u26A0</span>
+                <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
                 <div>Could not load activity log</div>
             </div>
         `;
@@ -400,7 +507,7 @@ async function loadViolations() {
         if (!events.length) {
             container.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">\u26A0</span>
+                    <span class="icon"><i class="fa-solid fa-shield-halved"></i></span>
                     <div>No violations recorded</div>
                     <small style="color: #888; margin-top: 8px;">Violations will appear here when detected</small>
                 </div>
@@ -419,7 +526,7 @@ async function loadViolations() {
         if (container) {
             container.innerHTML = `
                 <div class="log-empty">
-                    <span class="icon">\u26A0</span>
+                    <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
                     <div>Could not load violations</div>
                 </div>
             `;
@@ -442,7 +549,7 @@ function renderViolationCard(ev) {
     const violationIcon = getViolationIcon(ev.violation_type);
     
     // Driver action display
-    const actionIcon = ev.driver_action === 'wrong' ? '\u2715' : ev.driver_action === 'right' ? '\u2713' : '\u003F';
+    const actionIcon = ev.driver_action === 'wrong' ? '<i class="fa-solid fa-xmark"></i>' : ev.driver_action === 'right' ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-question"></i>';
     const actionClass = ev.driver_action === 'wrong' ? 'action-wrong' : ev.driver_action === 'right' ? 'action-right' : 'action-unknown';
     
     // Confidence
@@ -490,16 +597,16 @@ function renderViolationCard(ev) {
 
 function getViolationIcon(type) {
     const icons = {
-        'overspeed': '\u26A1',        // ⚡ Lightning bolt
-        'red_light': '\u25CF',        // ● Red circle
-        'stop_sign': '\u26D4',        // ⛔ No entry
-        'wrong_way': '\u26A0',        // ⚠ Warning sign
-        'illegal_turn': '\u21AA',     // ↪ Turn arrow
-        'lane_departure': '\u2194',   // ↔ Left-right arrow
-        'tailgating': '\u25A0',       // ■ Square (car representation)
-        'none': '\u2713'              // ✓ Check mark
+        'overspeed': '<i class="fa-solid fa-gauge-high"></i>',        // Speedometer
+        'red_light': '<i class="fa-solid fa-circle" style="color:#e53935"></i>',  // Red circle
+        'stop_sign': '<i class="fa-solid fa-hand"></i>',              // Stop hand
+        'wrong_way': '<i class="fa-solid fa-triangle-exclamation"></i>', // Warning
+        'illegal_turn': '<i class="fa-solid fa-arrow-turn-up"></i>',  // Turn arrow
+        'lane_departure': '<i class="fa-solid fa-arrows-left-right"></i>', // Lane change
+        'tailgating': '<i class="fa-solid fa-car-rear"></i>',         // Car rear
+        'none': '<i class="fa-solid fa-check"></i>'                   // Check mark
     };
-    return icons[type] || '\u25A1'; // □ Empty square as fallback
+    return icons[type] || '<i class="fa-solid fa-question"></i>'; // Question as fallback
 }
 
 function showViolationDetail(ev) {
@@ -789,7 +896,7 @@ function clearViolationsDisplay() {
     if (container) {
         container.innerHTML = `
             <div class="log-empty">
-                <span class="icon">\u2713</span>
+                <span class="icon"><i class="fa-solid fa-check"></i></span>
                 <div>Display cleared</div>
             </div>
         `;
@@ -817,21 +924,21 @@ function parseLogLine(logLine) {
 function formatMessage(message, level) {
     // Make messages more user-friendly
     const friendlyMessages = {
-        'Initializing camera': '\u25B6 Starting camera...',           // ▶ Play
-        'Camera started': '\u2713 Camera ready',                      // ✓ Check
-        'Camera stopped': '\u25A0 Camera stopped',                    // ■ Stop square
-        'Initializing OpenCV VideoCapture': '\u25B6 Setting up camera', // ▶ Play
-        'Sign Detection System Starting': '\u25B2 System starting...', // ▲ Up triangle
-        'Registered config change callback': '\u2699 Configuration loaded', // ⚙ Gear
-        'Config file reloaded': '\u21BB Settings updated',            // ↻ Reload
-        'Camera resolution changed': '\u25A1 Resolution updated',     // □ Square
-        'Detection started': '\u25CF Detection active',               // ● Bullet
-        'Detection stopped': '\u25A0 Detection paused',               // ■ Square
-        'Model loaded': '\u2713 AI model ready',                      // ✓ Check
-        'Frame captured': '\u25A0 Image saved',                       // ■ Square
-        'Server starting': '\u25CF Server starting...',               // ● Bullet
-        'WebSocket connected': '\u2713 Connected',                    // ✓ Check
-        'WebSocket disconnected': '\u2715 Disconnected',              // ✕ X mark
+        'Initializing camera': '<i class="fa-solid fa-play"></i> Starting camera...',
+        'Camera started': '<i class="fa-solid fa-check"></i> Camera ready',
+        'Camera stopped': '<i class="fa-solid fa-stop"></i> Camera stopped',
+        'Initializing OpenCV VideoCapture': '<i class="fa-solid fa-play"></i> Setting up camera',
+        'Sign Detection System Starting': '<i class="fa-solid fa-arrow-up"></i> System starting...',
+        'Registered config change callback': '<i class="fa-solid fa-gear"></i> Configuration loaded',
+        'Config file reloaded': '<i class="fa-solid fa-rotate"></i> Settings updated',
+        'Camera resolution changed': '<i class="fa-solid fa-display"></i> Resolution updated',
+        'Detection started': '<i class="fa-solid fa-circle"></i> Detection active',
+        'Detection stopped': '<i class="fa-solid fa-stop"></i> Detection paused',
+        'Model loaded': '<i class="fa-solid fa-check"></i> AI model ready',
+        'Frame captured': '<i class="fa-solid fa-image"></i> Image saved',
+        'Server starting': '<i class="fa-solid fa-circle"></i> Server starting...',
+        'WebSocket connected': '<i class="fa-solid fa-check"></i> Connected',
+        'WebSocket disconnected': '<i class="fa-solid fa-xmark"></i> Disconnected',
     };
     
     // Check for exact matches
@@ -842,11 +949,11 @@ function formatMessage(message, level) {
     }
     
     // Check for patterns
-    if (message.includes('FPS')) return `\u25BA ${message}`;          // ▸ Small triangle
-    if (message.includes('detected')) return `\u25CF ${message}`;     // ● Bullet
-    if (message.includes('error') || message.includes('Error')) return `\u2715 ${message}`; // ✕ X
-    if (message.includes('warning') || message.includes('Warning')) return `\u26A0 ${message}`; // ⚠ Warning
-    if (message.includes('success') || message.includes('Success')) return `\u2713 ${message}`; // ✓ Check
+    if (message.includes('FPS')) return `<i class="fa-solid fa-caret-right"></i> ${message}`;
+    if (message.includes('detected')) return `<i class="fa-solid fa-circle"></i> ${message}`;
+    if (message.includes('error') || message.includes('Error')) return `<i class="fa-solid fa-xmark"></i> ${message}`;
+    if (message.includes('warning') || message.includes('Warning')) return `<i class="fa-solid fa-triangle-exclamation"></i> ${message}`;
+    if (message.includes('success') || message.includes('Success')) return `<i class="fa-solid fa-check"></i> ${message}`;
     
     return message;
 }
@@ -871,7 +978,7 @@ function clearLogsDisplay() {
     const logsContainer = document.getElementById('logs-content-friendly');
     logsContainer.innerHTML = `
         <div class="log-empty">
-            <span class="icon">\u2713</span>
+            <span class="icon"><i class="fa-solid fa-check"></i></span>
             <div>Display cleared</div>
         </div>
     `;
@@ -899,19 +1006,6 @@ async function loadSettings() {
             setScreenBrightness(brightness);
         }
         
-        // Resolution dropdown
-        const resolution = `${config.camera?.width || 640}x${config.camera?.height || 480}`;
-        const resolutionSelect = document.getElementById('setting-resolution');
-        if (resolutionSelect) {
-            resolutionSelect.value = resolution;
-        }
-        
-        // FPS dropdown
-        const fpsSelect = document.getElementById('setting-fps');
-        if (fpsSelect) {
-            fpsSelect.value = config.camera?.fps || 30;
-        }
-        
         // Confidence slider
         const confidence = config.detection?.confidence || 0.5;
         const confidenceSlider = document.getElementById('setting-confidence');
@@ -921,7 +1015,12 @@ async function loadSettings() {
             confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
         }
         
-        showToast('Settings loaded', 'success');
+        // Store original settings for change detection
+        state.originalSettings.brightness = brightness;
+        state.originalSettings.confidence = Math.round(confidence * 100);
+        
+        // Load WiFi status
+        await loadWifiStatus();
         
     } catch (error) {
         console.error('Failed to load settings:', error);
@@ -951,25 +1050,12 @@ async function saveSettings() {
         // Get display brightness
         const brightness = parseInt(document.getElementById('setting-brightness').value);
         
-        // Parse resolution
-        const resolution = document.getElementById('setting-resolution').value.split('x');
-        const width = parseInt(resolution[0]);
-        const height = parseInt(resolution[1]);
-        
-        // Get FPS
-        const fps = parseInt(document.getElementById('setting-fps').value);
-        
         // Get confidence
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
         
         const config = {
             display: {
                 brightness: brightness
-            },
-            camera: {
-                width: width,
-                height: height,
-                fps: fps
             },
             detection: {
                 confidence: confidence
@@ -980,11 +1066,329 @@ async function saveSettings() {
         const response = await api.put('/config', config);
         
         state.config = response.config;
+        
+        // Update original settings after successful save
+        state.originalSettings.brightness = brightness;
+        state.originalSettings.confidence = Math.round(confidence * 100);
+        
         showToast('Settings saved!', 'success');
         
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
+    }
+}
+
+/**
+ * Reset settings to default values
+ */
+function resetToDefaults() {
+    // Default values
+    const defaultBrightness = 50;
+    const defaultConfidence = 50;
+    
+    // Update sliders
+    const brightnessSlider = document.getElementById('setting-brightness');
+    const brightnessDisplay = document.getElementById('brightness-display');
+    const confidenceSlider = document.getElementById('setting-confidence');
+    const confidenceDisplay = document.getElementById('confidence-display');
+    
+    if (brightnessSlider && brightnessDisplay) {
+        brightnessSlider.value = defaultBrightness;
+        brightnessDisplay.textContent = defaultBrightness + '%';
+        setScreenBrightness(defaultBrightness);
+    }
+    
+    if (confidenceSlider && confidenceDisplay) {
+        confidenceSlider.value = defaultConfidence;
+        confidenceDisplay.textContent = defaultConfidence + '%';
+    }
+    
+    showToast('Reset to defaults', 'info');
+}
+
+// ============================================================================
+// WIFI MANAGEMENT
+// ============================================================================
+
+// WiFi state for connection handling
+let wifiConnectingSsid = null;
+
+/**
+ * Get signal strength bars based on signal percentage
+ * @param {number} signal - Signal strength 0-100
+ * @returns {number} - Number of active bars (1-4)
+ */
+function getSignalBars(signal) {
+    if (signal >= 70) return 4;      // Excellent
+    if (signal >= 50) return 3;      // Good
+    if (signal >= 30) return 2;      // Fair
+    return 1;                         // Weak
+}
+
+/**
+ * Generate signal bars HTML
+ * @param {number} signal - Signal strength 0-100
+ * @returns {string} - HTML for signal bars
+ */
+function renderSignalBars(signal) {
+    const activeBars = getSignalBars(signal);
+    const colorClass = activeBars >= 3 ? 'signal-strong' : (activeBars === 2 ? 'signal-medium' : 'signal-weak');
+    
+    let barsHtml = '';
+    for (let i = 1; i <= 4; i++) {
+        const isActive = i <= activeBars;
+        barsHtml += `<span class="signal-bar bar-${i} ${isActive ? 'active' : ''}"></span>`;
+    }
+    
+    return `<span class="signal-bars ${colorClass}" title="${signal}%">${barsHtml}</span>`;
+}
+
+/**
+ * Load and display current WiFi connection status
+ */
+async function loadWifiStatus() {
+    const statusText = document.getElementById('wifi-status-text');
+    const disconnectBtn = document.getElementById('btn-wifi-disconnect');
+    
+    try {
+        const response = await api.get('/wifi/status');
+        
+        if (response.connected && response.ssid) {
+            const signal = response.signal || 0;
+            statusText.innerHTML = `
+                <span class="wifi-connected">
+                    <i class="fa fa-wifi"></i> ${escapeHtml(response.ssid)}
+                    ${renderSignalBars(signal)}
+                </span>`;
+            if (disconnectBtn) disconnectBtn.style.display = 'inline-block';
+            updateStatus('wifi', true);
+        } else {
+            statusText.innerHTML = '<span class="wifi-disconnected"><i class="fa fa-wifi"></i> Not Connected</span>';
+            if (disconnectBtn) disconnectBtn.style.display = 'none';
+            updateStatus('wifi', false);
+        }
+    } catch (error) {
+        console.error('Failed to load WiFi status:', error);
+        statusText.innerHTML = '<span class="wifi-error"><i class="fa fa-exclamation-triangle"></i> Error</span>';
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+    }
+}
+
+/**
+ * Scan for available WiFi networks
+ */
+async function scanWifiNetworks() {
+    const listContainer = document.getElementById('wifi-networks-list');
+    const scanBtn = document.getElementById('btn-scan-wifi');
+    
+    // Show the list container
+    if (listContainer) listContainer.style.display = 'block';
+    
+    // Show loading state
+    if (scanBtn) {
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Scanning...';
+    }
+    listContainer.innerHTML = '<div class="wifi-loading"><i class="fa fa-spinner fa-spin"></i> Scanning for networks...</div>';
+    
+    try {
+        const response = await api.get('/wifi/scan');
+        const networks = response.networks || [];
+        
+        if (networks.length === 0) {
+            listContainer.innerHTML = '<div class="wifi-empty">No networks found</div>';
+        } else {
+            listContainer.innerHTML = networks.map(net => {
+                const hasPassword = !!(net.security && net.security !== '' && net.security !== '--');
+                return `
+                <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${hasPassword})">
+                    <div class="wifi-network-info">
+                        <span class="wifi-network-name">${escapeHtml(net.ssid)}</span>
+                        <span class="wifi-network-signal">
+                            <i class="fa fa-signal"></i> ${net.signal}%
+                            ${hasPassword ? '<i class="fa fa-lock"></i>' : ''}
+                        </span>
+                    </div>
+                </div>
+            `}).join('');
+        }
+    } catch (error) {
+        console.error('WiFi scan failed:', error);
+        listContainer.innerHTML = '<div class="wifi-error">Scan failed. Try again.</div>';
+        showToast('WiFi scan failed', 'error');
+    } finally {
+        if (scanBtn) {
+            scanBtn.disabled = false;
+            scanBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Scan';
+        }
+    }
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Prompt for WiFi connection (show password modal if secured)
+ */
+function promptWifiConnect(ssid, hasPassword) {
+    wifiConnectingSsid = ssid;
+    
+    if (hasPassword) {
+        // Show password modal
+        const modal = document.getElementById('wifi-password-modal');
+        const ssidDisplay = document.getElementById('wifi-connect-ssid');
+        const passwordInput = document.getElementById('wifi-password-input');
+        
+        if (ssidDisplay) ssidDisplay.textContent = ssid;
+        if (passwordInput) passwordInput.value = '';
+        if (modal) modal.style.display = 'flex';
+        
+        // Focus password input
+        setTimeout(() => passwordInput?.focus(), 100);
+    } else {
+        // Connect directly without password
+        connectToWifi(ssid, '');
+    }
+}
+
+/**
+ * Submit WiFi password and connect
+ */
+async function submitWifiPassword() {
+    const passwordInput = document.getElementById('wifi-password-input');
+    const password = passwordInput?.value || '';
+    
+    if (!wifiConnectingSsid) {
+        showToast('No network selected', 'error');
+        return;
+    }
+    
+    closeWifiModal();
+    await connectToWifi(wifiConnectingSsid, password);
+}
+
+/**
+ * Close WiFi password modal
+ */
+function closeWifiModal() {
+    const modal = document.getElementById('wifi-password-modal');
+    if (modal) modal.style.display = 'none';
+    wifiConnectingSsid = null;
+}
+
+/**
+ * Connect to a WiFi network
+ */
+async function connectToWifi(ssid, password) {
+    showToast(`Connecting to ${ssid}...`, 'info');
+    
+    try {
+        const response = await api.post('/wifi/connect', { ssid, password });
+        
+        if (response.connected) {
+            showToast(`Connected to ${ssid}!`, 'success');
+            await loadWifiStatus();
+        } else {
+            showToast(response.error || 'Connection failed', 'error');
+        }
+    } catch (error) {
+        console.error('WiFi connect failed:', error);
+        showToast('Connection failed', 'error');
+    }
+}
+
+/**
+ * Disconnect from current WiFi network
+ */
+async function disconnectWifi() {
+    showToast('Disconnecting...', 'info');
+    
+    try {
+        const response = await api.post('/wifi/disconnect');
+        
+        if (!response.error) {
+            showToast('Disconnected', 'success');
+            await loadWifiStatus();
+        } else {
+            showToast(response.error || 'Disconnect failed', 'error');
+        }
+    } catch (error) {
+        console.error('WiFi disconnect failed:', error);
+        showToast('Disconnect failed', 'error');
+    }
+}
+
+/**
+ * Toggle saved networks visibility
+ */
+function toggleSavedNetworks() {
+    const container = document.getElementById('wifi-saved-list');
+    const toggleIcon = document.getElementById('saved-networks-toggle');
+    
+    if (container.style.display === 'none' || !container.style.display) {
+        container.style.display = 'block';
+        if (toggleIcon) toggleIcon.innerHTML = '<i class="fa-solid fa-chevron-up"></i>';
+        loadSavedNetworks();
+    } else {
+        container.style.display = 'none';
+        if (toggleIcon) toggleIcon.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+    }
+}
+
+/**
+ * Load saved WiFi networks
+ */
+async function loadSavedNetworks() {
+    const container = document.getElementById('wifi-saved-list');
+    container.innerHTML = '<div class="wifi-loading"><i class="fa fa-spinner fa-spin"></i> Loading...</div>';
+    
+    try {
+        const response = await api.get('/wifi/saved');
+        const networks = response.networks || [];
+        
+        if (networks.length === 0) {
+            container.innerHTML = '<div class="wifi-empty">No saved networks</div>';
+        } else {
+            container.innerHTML = networks.map(net => `
+                <div class="wifi-saved-item">
+                    <span class="wifi-saved-name">${escapeHtml(net.name)}</span>
+                    <button class="btn-forget" onclick="forgetWifi('${escapeHtml(net.name)}')" title="Forget">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load saved networks:', error);
+        container.innerHTML = '<div class="wifi-error">Failed to load</div>';
+    }
+}
+
+/**
+ * Forget a saved WiFi network
+ */
+async function forgetWifi(name) {
+    if (!confirm('Forget this network?')) return;
+    
+    try {
+        const response = await api.post('/wifi/forget', { name });
+        
+        if (!response.error) {
+            showToast('Network forgotten', 'success');
+            await loadSavedNetworks();
+        } else {
+            showToast(response.error || 'Failed to forget', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to forget network:', error);
+        showToast('Failed to forget network', 'error');
     }
 }
 
@@ -1049,31 +1453,55 @@ function updateStatus(component, isOnline) {
     
     const dot = statusElement.querySelector('.status-dot');
     
+    if (dot) {
+        if (isOnline) {
+            dot.className = 'status-dot dot online';
+        } else {
+            dot.className = 'status-dot dot offline';
+        }
+    }
+    
     if (isOnline) {
-        dot.className = 'status-dot dot online';
         statusElement.classList.add('connected');
     } else {
-        dot.className = 'status-dot dot offline';
         statusElement.classList.remove('connected');
     }
 }
 
 async function checkWiFiStatus() {
-    // Check WiFi by trying to reach the backend
+    // Check actual WiFi connection status via API
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const response = await api.get('/wifi/status');
+        const isConnected = response.connected === true;
+        const signal = response.signal || 0;
         
-        await fetch('/api/status', { 
-            signal: controller.signal,
-            cache: 'no-cache'
-        });
+        updateStatus('wifi', isConnected);
         
-        clearTimeout(timeoutId);
-        updateStatus('wifi', true);
-        return true;
+        // Update home page signal bars and fallback icon
+        const homeSignal = document.getElementById('home-wifi-signal');
+        const homeFallback = document.getElementById('home-wifi-fallback');
+        
+        if (isConnected) {
+            // Show signal bars, hide fallback icon
+            if (homeSignal) {
+                homeSignal.innerHTML = renderSignalBars(signal);
+                homeSignal.style.display = '';
+            }
+            if (homeFallback) homeFallback.style.display = 'none';
+        } else {
+            // Hide signal bars, show fallback icon (dimmed)
+            if (homeSignal) homeSignal.style.display = 'none';
+            if (homeFallback) homeFallback.style.display = '';
+        }
+        
+        return isConnected;
     } catch (error) {
+        // If API fails, show fallback icon
         updateStatus('wifi', false);
+        const homeSignal = document.getElementById('home-wifi-signal');
+        const homeFallback = document.getElementById('home-wifi-fallback');
+        if (homeSignal) homeSignal.style.display = 'none';
+        if (homeFallback) homeFallback.style.display = '';
         return false;
     }
 }
@@ -1171,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
-    document.getElementById('btn-load-settings').addEventListener('click', loadSettings);
+    document.getElementById('btn-reset-settings').addEventListener('click', resetToDefaults);
     
     // Brightness slider - real-time screen dimming
     const brightnessSlider = document.getElementById('setting-brightness');
@@ -1206,6 +1634,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial status check and load brightness
     checkSystemStatus();
     loadInitialBrightness();
+    
+    // Initialize touch scrolling for all scrollable containers
+    initAllTouchScrolling();
     
     // Periodic status checks
     setInterval(checkSystemStatus, 5000);  // Check every 5 seconds
