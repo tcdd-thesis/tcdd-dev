@@ -24,6 +24,8 @@ from config import Config
 from metrics_logger import MetricsLogger
 from violations_logger import ViolationsLogger
 from display import DisplayController
+from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP
+from hotspot import HotspotManager, get_hotspot_manager
 import psutil
 
 # Initialize Flask app
@@ -64,6 +66,10 @@ display_controller = None
 is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
+
+# Pairing and Hotspot managers (initialized after config)
+pairing_manager = None
+hotspot_manager = None
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -136,8 +142,31 @@ config.register_change_callback(on_config_change)
 
 def initialize():
     """Initialize camera and detector and start background streaming"""
-    global camera, detector, display_controller, is_streaming
+    global camera, detector, display_controller, is_streaming, pairing_manager, hotspot_manager
     try:
+        logger.info("Initializing pairing manager...")
+        pairing_manager = get_pairing_manager(data_dir='data')
+        
+        # Set disconnect callback to emit socketio event
+        def disconnect_device(session_token):
+            """Disconnect a paired device by session token"""
+            socketio.emit('force_disconnect', {'reason': 'New device paired'}, room=session_token)
+            logger.info(f"📤 Sent disconnect signal for session: {session_token[:8]}...")
+        
+        pairing_manager.set_disconnect_callback(disconnect_device)
+        
+        logger.info("Initializing hotspot manager...")
+        hotspot_manager = get_hotspot_manager(config=config)
+        
+        # Auto-start hotspot if configured
+        if hotspot_manager.is_enabled() and hotspot_manager.is_auto_start():
+            logger.info("📶 Auto-starting hotspot...")
+            result = hotspot_manager.start()
+            if result['success']:
+                logger.info(f"✅ Hotspot started: {result.get('ssid')} (IP: {result.get('ip')})")
+            else:
+                logger.warning(f"⚠️ Could not auto-start hotspot: {result.get('message')}")
+        
         logger.info("Initializing display controller...")
         display_controller = DisplayController(config)
         
@@ -632,6 +661,323 @@ def get_violations():
     except Exception as e:
         logger.error(f"Error getting violations: {e}")
         return jsonify({'error': str(e)}), 500
+
+# ----------------------------------------------------------------------------
+# PAIRING API
+# ----------------------------------------------------------------------------
+
+def is_local_request():
+    """Check if request is from local machine (touchscreen)"""
+    return pairing_manager.is_local_request(request.remote_addr)
+
+def require_pairing(f):
+    """
+    Decorator to require pairing for remote requests.
+    Local (touchscreen) requests always bypass.
+    """
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Touchscreen bypass
+        if is_local_request():
+            return f(*args, **kwargs)
+        
+        # Check session token in header or cookie
+        session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
+        
+        if not session_token:
+            return jsonify({'error': 'Authentication required', 'code': 'NO_TOKEN'}), 401
+        
+        if not pairing_manager.validate_session(session_token):
+            return jsonify({'error': 'Invalid or expired session', 'code': 'INVALID_TOKEN'}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
+@app.route('/api/pair/generate', methods=['POST'])
+def generate_pairing_token():
+    """
+    Generate a new pairing token and QR data.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Pairing can only be initiated from touchscreen'}), 403
+    
+    try:
+        port = config.get('port', 5000)
+        data = pairing_manager.generate_pairing_data(port=port)
+        
+        logger.info(f"🔑 Pairing token generated: {data['token']}")
+        
+        return jsonify({
+            'success': True,
+            'token': data['token'],
+            'url': data['url'],
+            'qr_content': data['qr_content'],
+            'ip': data['ip'],
+            'port': data['port']
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error generating pairing token: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/pair/status', methods=['GET'])
+def get_pairing_status():
+    """
+    Get current pairing status.
+    Shows different info based on local vs remote request.
+    """
+    try:
+        status = pairing_manager.get_status()
+        
+        # Add whether this is a local request
+        status['is_local'] = is_local_request()
+        
+        # For remote requests, check if they're the paired device
+        if not is_local_request():
+            session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
+            status['is_paired_device'] = pairing_manager.validate_session(session_token) if session_token else False
+        
+        return jsonify(status), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting pairing status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/pair/validate', methods=['POST'])
+def validate_pairing_token():
+    """
+    Validate a pairing token from phone/tablet.
+    Called when phone scans QR code or enters token manually.
+    """
+    try:
+        data = request.get_json()
+        token = data.get('token', '').strip().upper()
+        
+        if not token:
+            return jsonify({'success': False, 'message': 'Token is required'}), 400
+        
+        # Get device info
+        device_info = {
+            'device_id': data.get('device_id'),
+            'device_name': data.get('device_name', 'Unknown Device'),
+            'user_agent': request.headers.get('User-Agent', '')
+        }
+        
+        # Validate and pair
+        result = pairing_manager.validate_and_pair(token, device_info)
+        
+        if result['success']:
+            logger.info(f"✅ Device paired via API: {device_info['device_name']}")
+            
+            # Also emit event for touchscreen to update UI
+            socketio.emit('device_paired', {
+                'device_name': device_info['device_name'],
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            response = jsonify(result)
+            # Set session token as cookie too
+            response.set_cookie('session_token', result['session_token'], 
+                              httponly=True, samesite='Lax', max_age=31536000)  # 1 year
+            return response, 200
+        else:
+            return jsonify(result), 400
+        
+    except Exception as e:
+        logger.error(f"Error validating pairing token: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/pair/unpair', methods=['POST'])
+def unpair_device():
+    """
+    Unpair the currently paired device.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Unpairing can only be done from touchscreen'}), 403
+    
+    try:
+        if pairing_manager.unpair():
+            logger.info("🔓 Device unpaired via API")
+            socketio.emit('device_unpaired', {
+                'timestamp': datetime.now().isoformat()
+            })
+            return jsonify({'success': True, 'message': 'Device unpaired'}), 200
+        else:
+            return jsonify({'success': False, 'message': 'No device was paired'}), 200
+        
+    except Exception as e:
+        logger.error(f"Error unpairing device: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/pair')
+def pair_landing_page():
+    """
+    Mobile landing page for pairing.
+    Accessed when phone scans QR code.
+    """
+    token = request.args.get('token', '')
+    # For now, redirect to main page with token
+    # Phase 5 will add a dedicated mobile pairing UI
+    return render_template('index.html')
+
+# ----------------------------------------------------------------------------
+# HOTSPOT API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/hotspot/status', methods=['GET'])
+def get_hotspot_status():
+    """Get current hotspot status"""
+    try:
+        status = hotspot_manager.get_status()
+        return jsonify(status), 200
+    except Exception as e:
+        logger.error(f"Error getting hotspot status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hotspot/start', methods=['POST'])
+def start_hotspot():
+    """
+    Start the WiFi hotspot.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
+    
+    try:
+        result = hotspot_manager.start()
+        
+        if result['success']:
+            logger.info(f"📶 Hotspot started via API: {result.get('ssid')}")
+            socketio.emit('hotspot_started', {
+                'ssid': result.get('ssid'),
+                'ip': result.get('ip'),
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return jsonify(result), 200 if result['success'] else 500
+        
+    except Exception as e:
+        logger.error(f"Error starting hotspot: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/hotspot/stop', methods=['POST'])
+def stop_hotspot():
+    """
+    Stop the WiFi hotspot.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
+    
+    try:
+        result = hotspot_manager.stop()
+        
+        if result['success']:
+            logger.info("📴 Hotspot stopped via API")
+            socketio.emit('hotspot_stopped', {
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error stopping hotspot: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/hotspot/credentials', methods=['GET'])
+def get_hotspot_credentials():
+    """Get hotspot SSID and password"""
+    try:
+        creds = hotspot_manager.get_credentials()
+        status = hotspot_manager.get_status()
+        return jsonify({
+            **creds,
+            'active': status['active'],
+            'ip': HOTSPOT_IP
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting hotspot credentials: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hotspot/credentials', methods=['POST'])
+def set_hotspot_credentials():
+    """
+    Set custom hotspot credentials.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Credential changes require touchscreen access'}), 403
+    
+    try:
+        data = request.get_json()
+        ssid = data.get('ssid')
+        password = data.get('password')
+        
+        result = hotspot_manager.set_credentials(ssid=ssid, password=password)
+        return jsonify(result), 200 if result['success'] else 400
+        
+    except Exception as e:
+        logger.error(f"Error setting hotspot credentials: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hotspot/regenerate', methods=['POST'])
+def regenerate_hotspot_credentials():
+    """
+    Generate new random hotspot credentials.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Credential regeneration requires touchscreen access'}), 403
+    
+    try:
+        result = hotspot_manager.regenerate_credentials()
+        
+        if result['success']:
+            logger.info(f"🔑 Hotspot credentials regenerated: {result.get('ssid')}")
+        
+        return jsonify(result), 200 if result['success'] else 400
+        
+    except Exception as e:
+        logger.error(f"Error regenerating hotspot credentials: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hotspot/autostart', methods=['POST'])
+def set_hotspot_autostart():
+    """
+    Set hotspot auto-start preference.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Auto-start setting requires touchscreen access'}), 403
+    
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', True)
+        
+        result = hotspot_manager.set_auto_start(enabled)
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error setting hotspot auto-start: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hotspot/clients', methods=['GET'])
+def get_hotspot_clients():
+    """Get list of connected hotspot clients"""
+    try:
+        clients = hotspot_manager.get_connected_clients()
+        return jsonify({
+            'count': len(clients),
+            'clients': clients
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting hotspot clients: {e}")
+        return jsonify({'error': str(e), 'clients': []}), 500
 
 # ============================================================================
 # STREAMING LOOP WITH METRICS
