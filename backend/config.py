@@ -86,7 +86,8 @@ class Config:
                 "auto_start": True,
                 "ssid": "",
                 "password": "",
-                "interface": "wlan0"
+                "interface": "wlan0",
+                "domain": "tcdd.local"
             },
             "pairing": {
                 "require_confirmation": True,

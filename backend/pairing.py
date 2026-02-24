@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 # Default hotspot IP (NetworkManager default)
 HOTSPOT_IP = '10.42.0.1'
 
+# Default local domain for hotspot access
+HOTSPOT_DOMAIN = 'tcdd.local'
+
 
 class PairingManager:
     """
@@ -280,30 +283,42 @@ class PairingManager:
         """
         return HOTSPOT_IP
     
-    def generate_pairing_data(self, port: int = 5000) -> Dict[str, Any]:
+    def generate_pairing_data(self, port: int = 5000, domain: Optional[str] = None) -> Dict[str, Any]:
         """
         Generate complete pairing data including QR code content.
-        Uses the hotspot IP (constant 10.42.0.1).
+        Uses the domain name if provided, otherwise falls back to IP.
         
         Args:
             port: Server port number
+            domain: Optional domain name (e.g., 'tcdd.local')
             
         Returns:
             dict: Pairing data with token, URL, and QR content
         """
         # Generate or get pending token
         token = self._pending_token or self.generate_pairing_token()
-        ip = HOTSPOT_IP  # Always use hotspot IP
         
-        # URL for phone to connect
-        url = f"http://{ip}:{port}/pair?token={token}"
+        # Use domain if provided, otherwise fall back to IP
+        host = domain or HOTSPOT_DOMAIN
+        
+        # URL for phone to connect (domain-based URL for easy typing)
+        # Note: Port 80 is implicit if using standard HTTP
+        if port == 80:
+            url = f"http://{host}/pair?token={token}"
+        else:
+            url = f"http://{host}:{port}/pair?token={token}"
+        
+        # Also provide IP-based URL as fallback
+        ip_url = f"http://{HOTSPOT_IP}:{port}/pair?token={token}"
         
         return {
             'token': token,
-            'ip': ip,
+            'ip': HOTSPOT_IP,
+            'domain': host,
             'port': port,
             'url': url,
-            'qr_content': url  # QR code should encode this URL
+            'ip_url': ip_url,
+            'qr_content': url  # QR code should encode the domain URL
         }
     
     def get_status(self) -> Dict[str, Any]:
@@ -317,7 +332,8 @@ class PairingManager:
             'is_paired': self.is_paired(),
             'paired_device': self.get_paired_device_info(),
             'has_pending_token': self._pending_token is not None,
-            'hotspot_ip': HOTSPOT_IP
+            'hotspot_ip': HOTSPOT_IP,
+            'hotspot_domain': HOTSPOT_DOMAIN
         }
 
 

@@ -24,7 +24,7 @@ from config import Config
 from metrics_logger import MetricsLogger
 from violations_logger import ViolationsLogger
 from display import DisplayController
-from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP
+from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP, HOTSPOT_DOMAIN
 from hotspot import HotspotManager, get_hotspot_manager
 import psutil
 
@@ -707,7 +707,8 @@ def generate_pairing_token():
     
     try:
         port = config.get('port', 5000)
-        data = pairing_manager.generate_pairing_data(port=port)
+        domain = hotspot_manager.get_domain() if hotspot_manager else None
+        data = pairing_manager.generate_pairing_data(port=port, domain=domain)
         
         logger.info(f"🔑 Pairing token generated: {data['token']}")
         
@@ -715,8 +716,10 @@ def generate_pairing_token():
             'success': True,
             'token': data['token'],
             'url': data['url'],
+            'ip_url': data.get('ip_url'),
             'qr_content': data['qr_content'],
             'ip': data['ip'],
+            'domain': data.get('domain'),
             'port': data['port']
         }), 200
         

@@ -4,11 +4,13 @@ WiFi Hotspot Manager
 Manages the Raspberry Pi's WiFi hotspot for direct device connections.
 Uses NetworkManager (nmcli) for reliable hotspot management.
 Settings are stored in the centralized config.json.
+Includes local DNS via dnsmasq for easy access (e.g., http://tcdd.local).
 """
 
 import subprocess
 import logging
 import secrets
+import os
 from typing import Optional, Dict, Any, Tuple
 from threading import Lock
 
@@ -16,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Default hotspot IP (NetworkManager assigns this)
 HOTSPOT_IP = '10.42.0.1'
+
+# Default local domain for hotspot access
+HOTSPOT_DOMAIN = 'tcdd.local'
+
+# dnsmasq config file path
+DNSMASQ_CONFIG_FILE = '/etc/dnsmasq.d/tcdd-hotspot.conf'
 
 
 class HotspotManager:
@@ -60,16 +68,20 @@ class HotspotManager:
             self._interface = self.config.get('hotspot.interface', 'wlan0')
             self._auto_start = self.config.get('hotspot.auto_start', True)
             self._enabled = self.config.get('hotspot.enabled', True)
+            self._domain = self.config.get('hotspot.domain', HOTSPOT_DOMAIN)
             
             # Generate credentials if not set
             if not self._ssid or not self._password:
                 self._generate_credentials()
             else:
-                logger.info(f"✅ Loaded hotspot config: SSID={self._ssid}")
+                logger.info(f"✅ Loaded hotspot config: SSID={self._ssid}, domain={self._domain}")
         else:
             # No config object, generate defaults
             self._interface = 'wlan0'
             self._auto_start = True
+            self._enabled = True
+            self._domain = HOTSPOT_DOMAIN
+            self._generate_credentials()
             self._enabled = True
             self._generate_credentials()
     
@@ -95,6 +107,128 @@ class HotspotManager:
         
         logger.info(f"🔑 Generated hotspot credentials: SSID={self._ssid}")
         self._save_to_config()
+    
+    def _setup_dns(self) -> bool:
+        """
+        Configure dnsmasq to provide local DNS for the hotspot.
+        Maps the domain (e.g., tcdd.local) to the hotspot IP.
+        
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # Create dnsmasq config content
+            config_content = f"""# TCDD Hotspot DNS Configuration
+# Auto-generated - do not edit manually
+# Maps {self._domain} to {HOTSPOT_IP}
+
+# Only listen on hotspot interface
+interface={self._interface}
+bind-interfaces
+
+# DNS entries for local access
+address=/{self._domain}/{HOTSPOT_IP}
+
+# Also handle common subdomains
+address=/www.{self._domain}/{HOTSPOT_IP}
+
+# Don't forward queries for local domain
+local=/{self._domain}/
+
+# DHCP range for hotspot clients (10.42.0.10 - 10.42.0.250)
+dhcp-range=10.42.0.10,10.42.0.250,12h
+
+# Set this device as the DNS server for DHCP clients
+dhcp-option=6,{HOTSPOT_IP}
+"""
+            
+            # Write config file (requires sudo)
+            # Use a temp file and sudo mv approach
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+                f.write(config_content)
+                temp_path = f.name
+            
+            # Move to dnsmasq.d with sudo
+            result = subprocess.run(
+                ['sudo', 'mv', temp_path, DNSMASQ_CONFIG_FILE],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"Failed to create dnsmasq config: {result.stderr}")
+                return False
+            
+            # Set proper permissions
+            subprocess.run(['sudo', 'chmod', '644', DNSMASQ_CONFIG_FILE], timeout=5)
+            
+            # Restart dnsmasq to apply changes
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'restart', 'dnsmasq'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"✅ DNS configured: {self._domain} → {HOTSPOT_IP}")
+                return True
+            else:
+                # dnsmasq might not be installed, try to install it
+                logger.warning(f"dnsmasq restart failed, attempting install...")
+                install_result = subprocess.run(
+                    ['sudo', 'apt-get', 'install', '-y', 'dnsmasq'],
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                if install_result.returncode == 0:
+                    subprocess.run(['sudo', 'systemctl', 'restart', 'dnsmasq'], timeout=30)
+                    logger.info(f"✅ dnsmasq installed and DNS configured")
+                    return True
+                else:
+                    logger.warning(f"⚠️ Could not setup DNS (dnsmasq not available)")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"❌ DNS setup error: {e}")
+            return False
+    
+    def _cleanup_dns(self) -> bool:
+        """
+        Remove dnsmasq configuration for the hotspot.
+        
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # Check if config file exists
+            if not os.path.exists(DNSMASQ_CONFIG_FILE):
+                return True
+            
+            # Remove config file
+            result = subprocess.run(
+                ['sudo', 'rm', '-f', DNSMASQ_CONFIG_FILE],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            # Restart dnsmasq
+            subprocess.run(
+                ['sudo', 'systemctl', 'restart', 'dnsmasq'],
+                capture_output=True,
+                timeout=30
+            )
+            
+            logger.info("🧹 DNS config cleaned up")
+            return True
+            
+        except Exception as e:
+            logger.error(f"DNS cleanup error: {e}")
+            return False
     
     def _run_nmcli(self, args: list, timeout: int = 30) -> Tuple[str, str, int]:
         """
@@ -201,12 +335,17 @@ class HotspotManager:
                     self._is_active = True
                     logger.info(f"✅ Hotspot started: {self._ssid} (IP: {HOTSPOT_IP})")
                     
+                    # Setup DNS for local domain access
+                    dns_ok = self._setup_dns()
+                    
                     return {
                         'success': True,
                         'message': f'Hotspot "{self._ssid}" started',
                         'ssid': self._ssid,
                         'password': self._password,
-                        'ip': HOTSPOT_IP
+                        'ip': HOTSPOT_IP,
+                        'domain': self._domain if dns_ok else None,
+                        'url': f'http://{self._domain}' if dns_ok else f'http://{HOTSPOT_IP}'
                     }
                 else:
                     error_msg = stderr.strip() or 'Failed to start hotspot'
@@ -239,6 +378,9 @@ class HotspotManager:
             
             try:
                 logger.info("📴 Stopping hotspot...")
+                
+                # Clean up DNS config first
+                self._cleanup_dns()
                 
                 # Deactivate the hotspot connection
                 stdout, stderr, code = self._run_nmcli([
@@ -397,8 +539,14 @@ class HotspotManager:
             'ssid': self._ssid,
             'password': self._password if self._is_active else None,
             'interface': self._interface,
-            'ip': HOTSPOT_IP
+            'ip': HOTSPOT_IP,
+            'domain': self._domain,
+            'url': f'http://{self._domain}' if self._is_active else None
         }
+    
+    def get_domain(self) -> str:
+        """Get the configured local domain for hotspot access."""
+        return self._domain
     
     def get_connected_clients(self) -> list:
         """
