@@ -81,6 +81,17 @@ class Config:
                 "backlight_pin": 18,
                 "pwm_frequency": 1000
             },
+            "hotspot": {
+                "enabled": True,
+                "auto_start": True,
+                "ssid": "",
+                "password": "",
+                "interface": "wlan0"
+            },
+            "pairing": {
+                "require_confirmation": True,
+                "touchscreen_bypass": True
+            },
             "logging": {
                 "level": "INFO",
                 "file": "data/logs/app.log"
