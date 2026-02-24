@@ -84,6 +84,12 @@ class Config:
             "logging": {
                 "level": "INFO",
                 "file": "data/logs/app.log"
+            },
+            "tts": {
+                "enabled": True,
+                "speech_rate": 160,
+                "volume": 1.0,
+                "cooldown_seconds": 10
             }
         }
     

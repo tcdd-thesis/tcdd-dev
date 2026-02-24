@@ -24,6 +24,7 @@ from config import Config
 from metrics_logger import MetricsLogger
 from violations_logger import ViolationsLogger
 from display import DisplayController
+from tts import TTSEngine
 import psutil
 
 # Initialize Flask app
@@ -61,6 +62,7 @@ logger = logging.getLogger(__name__)
 camera = None
 detector = None
 display_controller = None
+tts_engine = None
 is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
@@ -74,7 +76,7 @@ def on_config_change(old_config, new_config):
     Handle configuration changes and update running components
     This is called automatically when config.json is modified
     """
-    global camera, detector, display_controller
+    global camera, detector, display_controller, tts_engine
     
     logger.info("🔄 Configuration changed, updating components...")
     
@@ -116,6 +118,20 @@ def on_config_change(old_config, new_config):
                 logger.info(f"🔆 Display brightness changed: {old_brightness}% → {new_brightness}%")
                 display_controller.set_brightness(new_brightness)
         
+        # Check TTS settings changes
+        tts_changed = (
+            old_config.get('tts') != new_config.get('tts')
+        )
+        
+        # Update TTS engine if settings changed
+        if tts_changed and tts_engine:
+            logger.info("🔊 TTS settings changed, updating TTS engine...")
+            tts_engine.enabled = new_config.get('tts', {}).get('enabled', True)
+            tts_engine.speech_rate = new_config.get('tts', {}).get('speech_rate', 160)
+            tts_engine.volume = new_config.get('tts', {}).get('volume', 1.0)
+            tts_engine.cooldown_seconds = new_config.get('tts', {}).get('cooldown_seconds', 10)
+            logger.info("✅ TTS settings updated")
+        
         # Broadcast changes to all connected clients
         socketio.emit('config_updated', {
             'timestamp': datetime.now().isoformat(),
@@ -136,7 +152,7 @@ config.register_change_callback(on_config_change)
 
 def initialize():
     """Initialize camera and detector and start background streaming"""
-    global camera, detector, display_controller, is_streaming
+    global camera, detector, display_controller, tts_engine, is_streaming
     try:
         logger.info("Initializing display controller...")
         display_controller = DisplayController(config)
@@ -146,6 +162,11 @@ def initialize():
         
         logger.info("Initializing detector...")
         detector = Detector(config)
+        
+        logger.info("Initializing TTS engine...")
+        tts_engine = TTSEngine(config)
+        if tts_engine.is_ready():
+            tts_engine.speak("System ready. Driver assistance activated.")
         
         logger.info("Initialization complete!")
         # Start camera and detection immediately
@@ -183,6 +204,7 @@ def get_status():
     """Get system status"""
     try:
         model_info = detector.get_info() if detector else {'engine': 'unknown', 'model': 'not loaded'}
+        tts_info = tts_engine.get_info() if tts_engine else {'enabled': False, 'ready': False}
         
         status = {
             'camera': camera.is_running() if camera else False,
@@ -190,6 +212,7 @@ def get_status():
             'streaming': is_streaming,
             'engine': model_info['engine'],
             'model': model_info['model'],
+            'tts': tts_info,
             'timestamp': datetime.now().isoformat()
         }
         return jsonify(status), 200
@@ -687,6 +710,12 @@ def stream_video():
                 'count': len(detections)
             })
 
+            # --- TTS Alert ---
+            # Pass detections to TTS engine; it picks the highest-priority
+            # alert, checks cooldowns, and queues speech on its own thread.
+            if tts_engine:
+                tts_engine.process_detections(detections)
+
             # Simple example: derive and log violation events (stub)
             # In a real implementation, this would use tracked vehicles, signal state, and rules.
             # Here we log a synthetic violation when a STOP sign is detected with high confidence.
@@ -781,6 +810,8 @@ if __name__ == '__main__':
             socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
         except KeyboardInterrupt:
             logger.info("\nShutting down...")
+            if tts_engine:
+                tts_engine.stop()
             if camera:
                 camera.stop()
             logger.info("Goodbye!")

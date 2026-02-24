@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+"""
+Text-to-Speech Alert Engine
+Provides real-time spoken alerts for detected traffic control devices.
+Uses pyttsx3 (offline TTS via espeak) with a dedicated background thread
+to avoid blocking the detection loop.
+"""
+
+import logging
+import time
+import threading
+from queue import Queue, Empty
+
+logger = logging.getLogger(__name__)
+
+# Try importing pyttsx3
+try:
+    import pyttsx3
+    HAS_TTS = True
+except ImportError:
+    HAS_TTS = False
+    logger.warning("pyttsx3 not available — TTS alerts will be disabled")
+
+
+# =============================================================================
+# ALERT MAPPING — Instructional style messages for each detection label
+# =============================================================================
+
+TRAFFIC_ALERTS = {
+    # --- Critical (Tier 1) ---
+    "stop":                              "Stop sign ahead. Prepare to stop.",
+    "traffic_light_red":                 "Red light ahead. Please stop.",
+    "traffic_light_red_no_left_turn":    "Red light ahead. No left turn allowed.",
+    "traffic_light_red_no_right_turn":   "Red light ahead. No right turn allowed.",
+    "traffic_light_red_right_turn":      "Red light, right turn signal. Proceed with caution.",
+    "traffic_light_red_left_turn":       "Red light, left turn signal. Proceed with caution.",
+
+    # --- High (Tier 2) ---
+    "traffic_light_yellow":              "Yellow light ahead. Prepare to stop.",
+    "yield":                             "Yield sign ahead. Slow down and give way.",
+    "pedestrian_crossing":               "Pedestrian crossing ahead. Slow down.",
+    "pwd_crossing":                      "PWD crossing ahead. Slow down and give way.",
+    "yield_to_pedestrian":               "Yield to pedestrians ahead.",
+
+    # --- Medium (Tier 3) ---
+    "speed_limit_50kph":                 "Speed limit fifty kilometers per hour.",
+    "speed_limit_60kph":                 "Speed limit sixty kilometers per hour.",
+    "speed_limit_80kph":                 "Speed limit eighty kilometers per hour.",
+    "no_uturn":                          "No U-turn allowed.",
+    "no_left_turn":                      "No left turn allowed.",
+    "no_right_turn":                     "No right turn allowed.",
+    "no_turn_on_red":                    "No turn on red.",
+    "no_left_turn_on_red":               "No left turn on red.",
+    "no_right_turn_on_red":              "No right turn on red.",
+    "no_parking":                        "No parking zone.",
+    "do_not_block_intersection":         "Do not block the intersection.",
+    "curve_right":                       "Curve to the right ahead.",
+    "curve_left":                        "Curve to the left ahead.",
+
+    # --- Low / Informational (Tier 4) ---
+    "traffic_light_green":               "Green light. You may proceed.",
+    "traffic_light_green_no_right_turn": "Green light. No right turn allowed.",
+    "traffic_light_green_no_left_turn":  "Green light. No left turn allowed.",
+    "traffic_light_green_right_turn":    "Green light, right turn signal.",
+    "traffic_light_green_left_turn":     "Green light, left turn signal.",
+    "no_lights":                         "No traffic lights ahead.",
+    "bike_lane":                         "Bike lane ahead. Watch for cyclists.",
+    "loading_unloading_zone":            "Loading and unloading zone.",
+    "one_way_left":                      "One way street to the left.",
+    "one_way_right":                     "One way street to the right.",
+    "one_way":                           "One way street ahead.",
+    "two_way":                           "Two way traffic ahead.",
+    "keep_right":                        "Keep right.",
+    "keep_left":                         "Keep left.",
+    "road_split":                        "Road split ahead.",
+}
+
+# =============================================================================
+# PRIORITY TIERS — Lower number = higher priority
+# =============================================================================
+
+PRIORITY_TIERS = {
+    # Tier 1 — Critical: must stop / immediate danger
+    "stop":                              1,
+    "traffic_light_red":                 1,
+    "traffic_light_red_no_left_turn":    1,
+    "traffic_light_red_no_right_turn":   1,
+    "traffic_light_red_right_turn":      1,
+    "traffic_light_red_left_turn":       1,
+
+    # Tier 2 — High: caution / yield
+    "traffic_light_yellow":              2,
+    "yield":                             2,
+    "pedestrian_crossing":               2,
+    "pwd_crossing":                      2,
+    "yield_to_pedestrian":               2,
+
+    # Tier 3 — Medium: regulatory signs
+    "speed_limit_50kph":                 3,
+    "speed_limit_60kph":                 3,
+    "speed_limit_80kph":                 3,
+    "no_uturn":                          3,
+    "no_left_turn":                      3,
+    "no_right_turn":                     3,
+    "no_turn_on_red":                    3,
+    "no_left_turn_on_red":               3,
+    "no_right_turn_on_red":              3,
+    "no_parking":                        3,
+    "do_not_block_intersection":         3,
+    "curve_right":                       3,
+    "curve_left":                        3,
+
+    # Tier 4 — Low / Informational
+    "traffic_light_green":               4,
+    "traffic_light_green_no_right_turn": 4,
+    "traffic_light_green_no_left_turn":  4,
+    "traffic_light_green_right_turn":    4,
+    "traffic_light_green_left_turn":     4,
+    "no_lights":                         4,
+    "bike_lane":                         4,
+    "loading_unloading_zone":            4,
+    "one_way_left":                      4,
+    "one_way_right":                     4,
+    "one_way":                           4,
+    "two_way":                           4,
+    "keep_right":                        4,
+    "keep_left":                         4,
+    "road_split":                        4,
+}
+
+# Fallback priority for any unknown label
+DEFAULT_PRIORITY = 5
+
+
+class TTSEngine:
+    """
+    Threaded Text-to-Speech engine for real-time driver alerts.
+
+    Features:
+        - Dedicated background thread so speech never blocks detection.
+        - Per-label cooldown to avoid repetitive announcements.
+        - Priority system: when multiple labels are detected in one frame,
+          only the highest-priority alert is spoken.
+    """
+
+    def __init__(self, config=None):
+        """
+        Initialize the TTS engine.
+
+        Args:
+            config: Config object. Reads keys under ``tts.*``.
+        """
+        self.config = config
+
+        # Settings (with defaults)
+        self.enabled = self._cfg("tts.enabled", True)
+        self.speech_rate = self._cfg("tts.speech_rate", 160)
+        self.volume = self._cfg("tts.volume", 1.0)
+        self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
+
+        # Internal state
+        self._last_spoken: dict[str, float] = {}
+        self._queue: Queue = Queue()
+        self._running = False
+        self._thread: threading.Thread | None = None
+        self._engine_ready = False
+
+        if not HAS_TTS:
+            logger.warning("TTS engine disabled — pyttsx3 is not installed")
+            self.enabled = False
+            return
+
+        if not self.enabled:
+            logger.info("TTS engine disabled via configuration")
+            return
+
+        # Start the background worker
+        self._start_worker()
+
+    # -----------------------------------------------------------------
+    # Configuration helper
+    # -----------------------------------------------------------------
+
+    def _cfg(self, key: str, default):
+        """Read a config value, falling back to *default* if config is absent."""
+        if self.config:
+            return self.config.get(key, default)
+        return default
+
+    # -----------------------------------------------------------------
+    # Background worker
+    # -----------------------------------------------------------------
+
+    def _start_worker(self):
+        """Spin up the daemon thread that owns the pyttsx3 engine."""
+        self._running = True
+        self._thread = threading.Thread(target=self._worker_loop, daemon=True, name="tts-worker")
+        self._thread.start()
+        logger.info("TTS background worker started")
+
+    def _worker_loop(self):
+        """
+        Runs on its own thread.  Creates the pyttsx3 engine here so all
+        engine calls happen on the same thread (required by pyttsx3).
+        """
+        try:
+            engine = pyttsx3.init()
+            engine.setProperty("rate", self.speech_rate)
+            engine.setProperty("volume", self.volume)
+            self._engine_ready = True
+            logger.info(
+                f"✅ TTS engine initialised  —  rate={self.speech_rate}, "
+                f"volume={self.volume}, cooldown={self.cooldown_seconds}s"
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to initialise pyttsx3: {e}")
+            self._engine_ready = False
+            self._running = False
+            return
+
+        while self._running:
+            try:
+                message = self._queue.get(timeout=0.5)
+                if message is None:
+                    # Poison pill — shut down
+                    break
+
+                # Re-apply settings in case they were changed at runtime
+                engine.setProperty("rate", self.speech_rate)
+                engine.setProperty("volume", self.volume)
+
+                engine.say(message)
+                engine.runAndWait()
+
+            except Empty:
+                continue
+            except Exception as e:
+                logger.error(f"TTS worker error: {e}")
+
+        # Clean up
+        try:
+            engine.stop()
+        except Exception:
+            pass
+        logger.info("TTS background worker stopped")
+
+    # -----------------------------------------------------------------
+    # Public API
+    # -----------------------------------------------------------------
+
+    def process_detections(self, detections: list[dict]):
+        """
+        Accept a list of detections from a single frame and speak only
+        the highest-priority alert (respecting cooldowns).
+
+        Each detection dict must contain at least ``class_name`` (str).
+
+        Args:
+            detections: List of detection dicts from Detector.detect().
+        """
+        if not self.enabled or not self._engine_ready:
+            return
+
+        if not detections:
+            return
+
+        # Reload runtime settings from config each call (cheap dict lookups)
+        self.enabled = self._cfg("tts.enabled", True)
+        if not self.enabled:
+            return
+        self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
+        self.speech_rate = self._cfg("tts.speech_rate", 160)
+        self.volume = self._cfg("tts.volume", 1.0)
+
+        now = time.time()
+
+        # Build candidate list: (priority, label)
+        candidates = []
+        for det in detections:
+            label = det.get("class_name", "").strip()
+            if not label:
+                continue
+            if label not in TRAFFIC_ALERTS:
+                continue
+            # Cooldown check
+            last_time = self._last_spoken.get(label, 0)
+            if now - last_time < self.cooldown_seconds:
+                continue
+            priority = PRIORITY_TIERS.get(label, DEFAULT_PRIORITY)
+            candidates.append((priority, label))
+
+        if not candidates:
+            return
+
+        # Pick highest priority (lowest number). Among ties choose first.
+        candidates.sort(key=lambda c: c[0])
+        _, best_label = candidates[0]
+
+        message = TRAFFIC_ALERTS[best_label]
+        self._last_spoken[best_label] = now
+
+        # Enqueue for the worker thread
+        self._queue.put(message)
+        logger.debug(f"🔊 TTS queued: [{best_label}] \"{message}\"")
+
+    def speak(self, text: str):
+        """
+        Directly speak arbitrary text (bypasses priority/cooldown).
+        Useful for system announcements like startup confirmation.
+
+        Args:
+            text: The text to speak.
+        """
+        if not self.enabled or not self._engine_ready:
+            return
+        self._queue.put(text)
+
+    def stop(self):
+        """Shut down the TTS worker thread gracefully."""
+        if not self._running:
+            return
+        self._running = False
+        # Send poison pill so the worker unblocks
+        self._queue.put(None)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=5)
+        logger.info("TTS engine stopped")
+
+    def is_ready(self) -> bool:
+        """Return True if the TTS engine is initialised and running."""
+        return self.enabled and self._engine_ready and self._running
+
+    def get_info(self) -> dict:
+        """Return a status dict (useful for the /api/status endpoint)."""
+        return {
+            "enabled": self.enabled,
+            "ready": self.is_ready(),
+            "speech_rate": self.speech_rate,
+            "volume": self.volume,
+            "cooldown_seconds": self.cooldown_seconds,
+            "queue_size": self._queue.qsize(),
+            "labels_mapped": len(TRAFFIC_ALERTS),
+        }
