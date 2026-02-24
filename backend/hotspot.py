@@ -113,18 +113,18 @@ class HotspotManager:
         Configure dnsmasq to provide local DNS for the hotspot.
         Maps the domain (e.g., tcdd.local) to the hotspot IP.
         
+        NOTE: NetworkManager handles DHCP for the hotspot automatically.
+        We only use dnsmasq for DNS resolution of the local domain.
+        
         Returns:
             bool: True if successful
         """
         try:
-            # Create dnsmasq config content
+            # Create dnsmasq config content - DNS ONLY, no DHCP
+            # NetworkManager handles DHCP for hotspot clients
             config_content = f"""# TCDD Hotspot DNS Configuration
 # Auto-generated - do not edit manually
 # Maps {self._domain} to {HOTSPOT_IP}
-
-# Only listen on hotspot interface
-interface={self._interface}
-bind-interfaces
 
 # DNS entries for local access
 address=/{self._domain}/{HOTSPOT_IP}
@@ -135,11 +135,13 @@ address=/www.{self._domain}/{HOTSPOT_IP}
 # Don't forward queries for local domain
 local=/{self._domain}/
 
-# DHCP range for hotspot clients (10.42.0.10 - 10.42.0.250)
-dhcp-range=10.42.0.10,10.42.0.250,12h
+# Don't run DHCP - NetworkManager handles that for the hotspot
+no-dhcp-interface={self._interface}
 
-# Set this device as the DNS server for DHCP clients
-dhcp-option=6,{HOTSPOT_IP}
+# Listen on all interfaces for DNS
+listen-address={HOTSPOT_IP}
+listen-address=127.0.0.1
+bind-interfaces
 """
             
             # Write config file (requires sudo)
@@ -318,8 +320,16 @@ dhcp-option=6,{HOTSPOT_IP}
             try:
                 logger.info(f"📶 Starting hotspot: {self._ssid}")
                 
+                # Stop dnsmasq first to avoid DHCP conflicts with NetworkManager
+                subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], 
+                              capture_output=True, timeout=10)
+                
                 # First, try to delete any existing hotspot connection with same name
                 self._run_nmcli(['connection', 'delete', self.HOTSPOT_CONNECTION_NAME], timeout=5)
+                
+                # Ensure WiFi is on and not connected elsewhere
+                self._run_nmcli(['radio', 'wifi', 'on'], timeout=5)
+                self._run_nmcli(['device', 'disconnect', self._interface], timeout=5)
                 
                 # Create and activate hotspot
                 # Using nmcli device wifi hotspot command
