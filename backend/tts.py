@@ -299,6 +299,7 @@ class TTSEngine:
             detections: List of detection dicts from Detector.detect().
         """
         if not self.enabled or not self._engine_ready:
+            logger.warning(f"TTS: early return — enabled={self.enabled}, engine_ready={self._engine_ready}")
             return
 
         if not detections:
@@ -307,6 +308,7 @@ class TTSEngine:
         # Reload runtime settings from config each call (cheap dict lookups)
         self.enabled = self._cfg("tts.enabled", True)
         if not self.enabled:
+            logger.warning("TTS: disabled via config after reload")
             return
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
         self.speech_rate = self._cfg("tts.speech_rate", 160)
@@ -321,6 +323,7 @@ class TTSEngine:
             if not label:
                 continue
             if label not in TRAFFIC_ALERTS:
+                logger.warning(f"TTS: label '{label}' not found in TRAFFIC_ALERTS — skipping")
                 continue
             # Cooldown check
             last_time = self._last_spoken.get(label, 0)
