@@ -11,10 +11,21 @@ if ! command -v chromium-browser &> /dev/null; then
     exit 1
 fi
 
-# Check if config.json exists
+# --- Config migration ---
+TEMPLATE="config-template-json.txt"
+
 if [ ! -f "config.json" ]; then
-    echo "Error: config.json not found! Creating from template..."
-    sed -E 's|//.*||; s/[[:space:]]+$//; /^[[:space:]]*$/d' config-template-json.txt > config.json
+    echo "config.json not found — creating from template..."
+    sed -E 's|//.*||; s/[[:space:]]+$//; /^[[:space:]]*$/d' "$TEMPLATE" > config.json
+else
+    # Extract versions (strip comments from template first)
+    TMPL_VER=$(sed -E 's|//.*||' "$TEMPLATE" | grep -oP '"version"\s*:\s*"\K[^"]+')
+    CONF_VER=$(grep -oP '"version"\s*:\s*"\K[^"]+' config.json)
+
+    if [ "$TMPL_VER" != "$CONF_VER" ]; then
+        echo "Template version ($TMPL_VER) differs from config ($CONF_VER) — migrating..."
+        python3 -c "from backend.config import migrate_config; migrate_config('$TEMPLATE', 'config.json')"
+    fi
 fi
 
 # Load configuration from config.json

@@ -14,6 +14,49 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def _strip_json_comments(text):
+    """
+    Strip // comments from JSON-with-comments text.
+    Handles comments correctly even when // appears inside strings.
+    Returns cleaned JSON string.
+    """
+    lines = text.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        in_string = False
+        escape_next = False
+        result = []
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+                i += 1
+                continue
+            if ch == '\\' and in_string:
+                result.append(ch)
+                escape_next = True
+                i += 1
+                continue
+            if ch == '"':
+                in_string = not in_string
+                result.append(ch)
+                i += 1
+                continue
+            if not in_string and ch == '/' and i + 1 < len(line) and line[i + 1] == '/':
+                break  # Rest of line is a comment
+            result.append(ch)
+            i += 1
+
+        stripped = ''.join(result).rstrip()
+        if stripped.strip() == '':
+            continue
+        cleaned_lines.append(stripped)
+
+    return '\n'.join(cleaned_lines)
+
+
 class Config:
     """
     Centralized configuration manager with real-time updates
@@ -68,54 +111,12 @@ class Config:
         try:
             with open(template_path, 'r') as f:
                 content = f.read()
-            
-            # Process line by line
-            lines = content.split('\n')
-            cleaned_lines = []
-            for line in lines:
-                # Remove // comments (but not inside strings)
-                in_string = False
-                escape_next = False
-                result = []
-                i = 0
-                while i < len(line):
-                    ch = line[i]
-                    if escape_next:
-                        result.append(ch)
-                        escape_next = False
-                        i += 1
-                        continue
-                    if ch == '\\' and in_string:
-                        result.append(ch)
-                        escape_next = True
-                        i += 1
-                        continue
-                    if ch == '"':
-                        in_string = not in_string
-                        result.append(ch)
-                        i += 1
-                        continue
-                    if not in_string and ch == '/' and i + 1 < len(line) and line[i + 1] == '/':
-                        break  # Rest of line is a comment
-                    result.append(ch)
-                    i += 1
-                
-                stripped = ''.join(result)
-                
-                # Remove trailing whitespace (preserves leading indentation)
-                stripped = stripped.rstrip()
-                
-                # Skip empty lines
-                if stripped.strip() == '':
-                    continue
-                
-                cleaned_lines.append(stripped)
-            
-            cleaned_json = '\n'.join(cleaned_lines)
+
+            cleaned_json = _strip_json_comments(content)
             with open(self.config_file, 'w') as f:
                 f.write(cleaned_json)
             return json.loads(cleaned_json)
-        
+
         except Exception as e:
             logger.error(f"Error parsing config template: {e}")
             return None
@@ -306,3 +307,94 @@ class Config:
             'callbacks_registered': len(self._change_callbacks),
             'keys': list(self.config.keys())
         }
+
+
+def _parse_version(ver_str):
+    """
+    Parse a version string into a comparable tuple.
+    Supports formats like '1.0.0' and '0.1.0-b20260226-1'.
+    The base version (e.g. 1.0.0) is split into integer parts.
+    A pre-release suffix (after '-') makes the version sort lower
+    than the same base without a suffix.
+    """
+    # Split base version from pre-release suffix
+    parts = ver_str.split('-', 1)
+    base = parts[0]
+    suffix = parts[1] if len(parts) > 1 else None
+
+    # Convert base to tuple of ints
+    base_tuple = tuple(int(x) for x in base.split('.'))
+
+    # Versions without suffix sort higher than those with one
+    # e.g. 1.0.0 > 1.0.0-beta1
+    if suffix is None:
+        return (base_tuple, (1,))  # no suffix = release
+    else:
+        return (base_tuple, (0, suffix))  # suffix = pre-release
+
+
+def _merge_configs(template, current):
+    """
+    Recursively merge current config into template structure.
+    - Keys in template but not in current: added (new settings)
+    - Keys in current but not in template: dropped (obsolete)
+    - Keys in both: keep current value; recurse if both are dicts
+    """
+    merged = {}
+    for key, tmpl_value in template.items():
+        if key in current:
+            cur_value = current[key]
+            if isinstance(tmpl_value, dict) and isinstance(cur_value, dict):
+                merged[key] = _merge_configs(tmpl_value, cur_value)
+            else:
+                merged[key] = cur_value
+        else:
+            # New key from template
+            merged[key] = tmpl_value
+    return merged
+
+
+def migrate_config(template_path, config_path):
+    """
+    Migrate config.json to match a newer template.
+    Adds new keys, removes obsolete keys, preserves user values.
+    Only runs if the template version is strictly newer.
+
+    Called from start.sh when a version mismatch is detected.
+    """
+    # Parse template
+    with open(template_path, 'r') as f:
+        template = json.loads(_strip_json_comments(f.read()))
+
+    # Load existing config
+    with open(config_path, 'r') as f:
+        current = json.load(f)
+
+    tmpl_ver = template.get('config_version', '0.0.0')
+    conf_ver = current.get('config_version', '0.0.0')
+
+    # Compare versions — only migrate if template is strictly newer
+    if _parse_version(tmpl_ver) <= _parse_version(conf_ver):
+        print(f"Config is up to date (config: {conf_ver}, template: {tmpl_ver}) — skipping migration.")
+        return
+
+    print(f"Migrating config from {conf_ver} to {tmpl_ver}...")
+
+    # Merge: template structure wins, user values preserved
+    merged = _merge_configs(template, current)
+
+    # Ensure version is updated to the template's version
+    merged['config_version'] = tmpl_ver
+
+    # Backup old config
+    backup_path = f"{config_path}.backup"
+    with open(config_path, 'r') as f:
+        backup_data = f.read()
+    with open(backup_path, 'w') as f:
+        f.write(backup_data)
+    print(f"Old config backed up to {backup_path}")
+
+    # Save merged config
+    with open(config_path, 'w') as f:
+        json.dump(merged, f, indent=2)
+    print(f"Config migrated successfully to version {tmpl_ver}.")
