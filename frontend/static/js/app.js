@@ -1,18 +1,32 @@
-// Hotspot toggle logic
-function toggleHotspotUI(checkbox) {
-    if (checkbox.checked) {
-        // Prompt user before enabling hotspot
-        showHotspotPrompt();
-    } else {
-        // Disable hotspot directly
-        api.post('/hotspot/toggle', { enabled: false })
+// ============================================================================
+// HOTSPOT TOGGLE LOGIC
+// ============================================================================
+
+/**
+ * Toggle hotspot on/off via the button.
+ * Reads current state from the button label text.
+ */
+function toggleHotspotUI() {
+    const label = document.getElementById('hotspot-toggle-label');
+    const isCurrentlyEnabled = label && label.textContent.trim().startsWith('Disable');
+
+    if (isCurrentlyEnabled) {
+        // Stop hotspot
+        api.post('/hotspot/stop')
             .then(res => {
-                showToast('Hotspot disabled', 'info');
-                document.getElementById('hotspot-status-text').textContent = 'Disabled';
+                if (res.success) {
+                    showToast('Hotspot disabled', 'info');
+                    updateHotspotUI(false);
+                } else {
+                    showToast('Failed to stop hotspot', 'error');
+                }
             })
             .catch(err => {
                 showToast('Failed to disable hotspot', 'error');
             });
+    } else {
+        // Prompt user about WiFi disconnect before enabling
+        showHotspotPrompt();
     }
 }
 
@@ -24,47 +38,57 @@ function showHotspotPrompt() {
 function closeHotspotPrompt() {
     const modal = document.getElementById('hotspot-prompt-modal');
     if (modal) modal.style.display = 'none';
-    // Uncheck toggle if cancelled
-    document.getElementById('hotspot-toggle').checked = false;
 }
 
 function confirmHotspotEnable() {
     closeHotspotPrompt();
-    // Enable hotspot in backend
+    showToast('Starting hotspot...', 'info');
+
+    // Enable + start hotspot
     api.post('/hotspot/toggle', { enabled: true })
-        .then(res => {
-            // Start hotspot
-            api.post('/hotspot/start').then(result => {
-                if (result.prompt) {
-                    showToast(result.prompt, 'warning');
-                } else if (result.success) {
-                    showToast('Hotspot enabled', 'success');
-                    document.getElementById('hotspot-status-text').textContent = 'Enabled';
-                } else {
-                    showToast('Failed to start hotspot', 'error');
-                    document.getElementById('hotspot-toggle').checked = false;
-                }
-            });
+        .then(() => api.post('/hotspot/start'))
+        .then(result => {
+            if (result.success) {
+                showToast('Hotspot enabled!', 'success');
+                updateHotspotUI(true, result.ssid);
+            } else {
+                showToast(result.message || 'Failed to start hotspot', 'error');
+            }
         })
         .catch(err => {
             showToast('Failed to enable hotspot', 'error');
-            document.getElementById('hotspot-toggle').checked = false;
         });
 }
 
-// On page load, fetch hotspot status and set toggle
+/**
+ * Update hotspot UI elements (button label, status text, SSID)
+ */
+function updateHotspotUI(active, ssid) {
+    const label = document.getElementById('hotspot-toggle-label');
+    const statusText = document.getElementById('hotspot-status-text');
+    const ssidSpan = document.getElementById('hotspot-ssid');
+
+    if (label) label.textContent = active ? 'Disable Hotspot' : 'Enable Hotspot';
+    if (statusText) statusText.textContent = active ? 'Active' : 'Inactive';
+    if (ssidSpan && ssid) ssidSpan.textContent = ssid;
+}
+
+/**
+ * Load current hotspot status from backend and update UI.
+ * Called from loadSettings().
+ */
 function loadHotspotStatus() {
     api.get('/hotspot/status').then(status => {
-        const toggle = document.getElementById('hotspot-toggle');
-        const text = document.getElementById('hotspot-status-text');
-        if (toggle) toggle.checked = status.enabled;
-        if (text) text.textContent = status.active ? 'Enabled' : 'Disabled';
+        updateHotspotUI(status.active, status.ssid);
+        const ssidSpan = document.getElementById('hotspot-ssid');
+        if (ssidSpan) ssidSpan.textContent = status.ssid || '---';
+    }).catch(err => {
+        console.error('Failed to load hotspot status:', err);
+        const statusText = document.getElementById('hotspot-status-text');
+        if (statusText) statusText.textContent = 'Unavailable';
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadHotspotStatus();
-});
 /**
  * Sign Detection System - Touchscreen Application
  * Optimized for 2.8" LCD (640x480)
@@ -103,16 +127,16 @@ function initTouchScroll(element) {
     if (!element) return;
     if (element.dataset.touchScrollInit) return;
     element.dataset.touchScrollInit = 'true';
-    
+
     let startY = 0;
     let scrollStart = 0;
-    
-    element.addEventListener('touchstart', function(e) {
+
+    element.addEventListener('touchstart', function (e) {
         startY = e.touches[0].clientY;
         scrollStart = element.scrollTop;
     }, { passive: true });
-    
-    element.addEventListener('touchmove', function(e) {
+
+    element.addEventListener('touchmove', function (e) {
         const touch = e.touches[0];
         const deltaY = startY - touch.clientY;
         element.scrollTop = scrollStart + deltaY;
@@ -144,10 +168,10 @@ function initAllTouchScrolling() {
 function setScreenBrightness(brightness) {
     brightness = Math.max(0, Math.min(100, brightness));
     state.brightness = brightness;
-    
+
     const overlay = document.getElementById('brightness-overlay');
     const body = document.body;
-    
+
     if (brightness <= 50) {
         // 0-50%: Use black overlay for dimming
         // 0% = 0.9 opacity (very dark), 50% = 0 opacity (no dimming)
@@ -168,7 +192,7 @@ function setScreenBrightness(brightness) {
             overlay.style.opacity = '0';
         }
     }
-    
+
     console.log(`Brightness: ${brightness}%`);
 }
 
@@ -183,13 +207,13 @@ function getScreenBrightness() {
 // API helper
 const api = {
     baseUrl: '/api',
-    
+
     async get(endpoint) {
         const response = await fetch(`${this.baseUrl}${endpoint}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
     },
-    
+
     async post(endpoint, data = {}) {
         const response = await fetch(`${this.baseUrl}${endpoint}`, {
             method: 'POST',
@@ -199,7 +223,7 @@ const api = {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
     },
-    
+
     async put(endpoint, data = {}) {
         const response = await fetch(`${this.baseUrl}${endpoint}`, {
             method: 'PUT',
@@ -218,7 +242,7 @@ function showToast(message, type = 'info') {
     toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
-    
+
     setTimeout(() => {
         toast.remove();
     }, 3000);
@@ -248,13 +272,13 @@ async function confirmShutdown() {
     if (confirmModal) {
         confirmModal.style.display = 'none';
     }
-    
+
     // Show progress modal
     const progressModal = document.getElementById('shutdown-progress-modal');
     if (progressModal) {
         progressModal.style.display = 'flex';
     }
-    
+
     try {
         await api.post('/shutdown');
         // The system will shut down after 2 seconds
@@ -293,13 +317,13 @@ async function confirmReboot() {
     if (confirmModal) {
         confirmModal.style.display = 'none';
     }
-    
+
     // Show progress modal
     const progressModal = document.getElementById('reboot-progress-modal');
     if (progressModal) {
         progressModal.style.display = 'flex';
     }
-    
+
     try {
         await api.post('/reboot');
         // The system will reboot after 2 seconds
@@ -338,13 +362,13 @@ async function confirmCloseApp() {
     if (confirmModal) {
         confirmModal.style.display = 'none';
     }
-    
+
     // Show progress modal
     const progressModal = document.getElementById('closeapp-progress-modal');
     if (progressModal) {
         progressModal.style.display = 'flex';
     }
-    
+
     try {
         await api.post('/close-app');
         // Server will kill Chromium and itself
@@ -364,13 +388,13 @@ function goHome() {
     if (state.streaming) {
         stopCamera();
     }
-    
+
     // Check for unsaved settings changes
     if (state.currentPage === 'settings' && hasSettingsChanged()) {
         showUnsavedSettingsModal();
         return;
     }
-    
+
     switchPage('home');
 }
 
@@ -380,12 +404,12 @@ function goHome() {
 function hasSettingsChanged() {
     const brightnessSlider = document.getElementById('setting-brightness');
     const confidenceSlider = document.getElementById('setting-confidence');
-    
+
     const currentBrightness = brightnessSlider ? parseInt(brightnessSlider.value) : state.originalSettings.brightness;
     const currentConfidence = confidenceSlider ? parseInt(confidenceSlider.value) : state.originalSettings.confidence;
-    
+
     return currentBrightness !== state.originalSettings.brightness ||
-           currentConfidence !== state.originalSettings.confidence;
+        currentConfidence !== state.originalSettings.confidence;
 }
 
 /**
@@ -402,7 +426,7 @@ function showUnsavedSettingsModal() {
 async function saveSettingsAndGoHome() {
     const modal = document.getElementById('unsaved-settings-modal');
     if (modal) modal.style.display = 'none';
-    
+
     await saveSettings();
     switchPage('home');
 }
@@ -413,10 +437,10 @@ async function saveSettingsAndGoHome() {
 function discardSettingsAndGoHome() {
     const modal = document.getElementById('unsaved-settings-modal');
     if (modal) modal.style.display = 'none';
-    
+
     // Restore original brightness visually
     setScreenBrightness(state.originalSettings.brightness);
-    
+
     switchPage('home');
 }
 
@@ -432,14 +456,14 @@ function switchPage(pageName) {
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
-    
+
     document.getElementById(`page-${pageName}`).classList.add('active');
     state.currentPage = pageName;
-    
+
     // Load page-specific content
     if (pageName === 'logs') { loadViolations(); }
     if (pageName === 'settings') loadSettings();
-    
+
     // Re-initialize touch scrolling for newly visible containers
     setTimeout(initAllTouchScrolling, 100);
 }
@@ -452,17 +476,17 @@ async function startCamera() {
     try {
         showToast('Starting camera...', 'info');
         await api.post('/camera/start');
-        
+
         state.streaming = true;
         document.getElementById('no-feed').style.display = 'none';
         updateStatus('camera', true);
-        
+
         showToast('Camera started!', 'success');
-        
+
     } catch (error) {
         console.error('Failed to start camera:', error);
         showToast('Failed to start camera', 'error');
-        updateStatus('camera', false);        
+        updateStatus('camera', false);
     }
 }
 
@@ -470,13 +494,13 @@ async function stopCamera() {
     try {
         showToast('Stopping camera...', 'info');
         await api.post('/camera/stop');
-        
+
         state.streaming = false;
         document.getElementById('no-feed').style.display = 'flex';
-        updateStatus('camera', false);        
-        
+        updateStatus('camera', false);
+
         showToast('Camera stopped', 'success');
-        
+
     } catch (error) {
         console.error('Failed to stop camera:', error);
         showToast('Failed to stop camera', 'error');
@@ -495,19 +519,19 @@ function captureFrame() {
 function handleVideoFrame(data) {
     const canvas = document.getElementById('video-canvas');
     const ctx = canvas.getContext('2d');
-    
+
     const img = new Image();
     img.onload = () => {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
-        
+
         // Update stats
         state.detectionCount = data.count || 0;
         document.getElementById('detection-count').textContent = state.detectionCount;
     };
     img.src = 'data:image/jpeg;base64,' + data.frame;
-    
+
     // Calculate FPS
     if (!state.lastFrameTime) state.lastFrameTime = Date.now();
     const now = Date.now();
@@ -525,10 +549,10 @@ async function loadLogs() {
     try {
         const response = await api.get('/logs?limit=100');
         const logsContainer = document.getElementById('logs-content-friendly');
-        
+
         if (response.logs && response.logs.length > 0) {
             logsContainer.innerHTML = '';
-            
+
             // Parse and format logs
             response.logs.forEach(logLine => {
                 const entry = parseLogLine(logLine);
@@ -536,7 +560,7 @@ async function loadLogs() {
                     logsContainer.appendChild(createLogEntry(entry));
                 }
             });
-            
+
             // Scroll to bottom
             logsContainer.scrollTop = logsContainer.scrollHeight;
         } else {
@@ -547,7 +571,7 @@ async function loadLogs() {
                 </div>
             `;
         }
-        
+
     } catch (error) {
         console.error('Failed to load logs:', error);
         const logsContainer = document.getElementById('logs-content-friendly');
@@ -603,28 +627,28 @@ async function loadViolations() {
 
 function renderViolationCard(ev) {
     const card = document.createElement('div');
-    card.className = `violation-card severity-${(ev.severity||'low')}`;
+    card.className = `violation-card severity-${(ev.severity || 'low')}`;
     card.style.cursor = 'pointer';  // Ensure cursor shows it's clickable
-    
+
     // Parse timestamp
     const timestamp = new Date(ev.timestamp);
     const timeStr = timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     const dateStr = timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    
+
     // Violation type display
     const violationType = (ev.violation_type || 'unknown').replace(/_/g, ' ');
     const violationIcon = getViolationIcon(ev.violation_type);
-    
+
     // Driver action display
     const actionIcon = ev.driver_action === 'wrong' ? '<i class="fa-solid fa-xmark"></i>' : ev.driver_action === 'right' ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-question"></i>';
     const actionClass = ev.driver_action === 'wrong' ? 'action-wrong' : ev.driver_action === 'right' ? 'action-right' : 'action-unknown';
-    
+
     // Confidence
     const confidence = Math.round((ev.confidence || 0) * 100);
-    
+
     // Location
     const location = ev.context?.road_name || ev.context?.camera_id || 'Unknown location';
-    
+
     card.innerHTML = `
         <div class="violation-card-header">
             <div class="violation-icon">${violationIcon}</div>
@@ -652,13 +676,13 @@ function renderViolationCard(ev) {
             </div>
         </div>
     `;
-    
+
     // Click to show details - simple handler
-    card.addEventListener('click', function(e) {
+    card.addEventListener('click', function (e) {
         console.log('Violation card clicked:', ev.id, ev);
         showViolationDetail(ev);
     });
-    
+
     return card;
 }
 
@@ -678,18 +702,18 @@ function getViolationIcon(type) {
 
 function showViolationDetail(ev) {
     console.log('showViolationDetail called with:', ev);
-    
+
     const modal = document.getElementById('violation-detail-modal');
     const content = document.getElementById('violation-detail-content');
-    
+
     console.log('Modal element:', modal);
     console.log('Content element:', content);
-    
+
     if (!modal || !content) {
         console.error('Modal or content element not found!');
         return;
     }
-    
+
     // Parse timestamp
     const timestamp = new Date(ev.timestamp);
     const fullTimeStr = timestamp.toLocaleString('en-US', {
@@ -701,7 +725,7 @@ function showViolationDetail(ev) {
         second: '2-digit',
         hour12: false
     });
-    
+
     // Build detail HTML
     let detailHTML = `
         <div class="detail-section">
@@ -734,7 +758,7 @@ function showViolationDetail(ev) {
             </div>
         </div>
     `;
-    
+
     // Vehicle info
     if (ev.vehicle) {
         detailHTML += `
@@ -749,7 +773,7 @@ function showViolationDetail(ev) {
             </div>
         `;
     }
-    
+
     // Context
     if (ev.context) {
         detailHTML += `
@@ -780,7 +804,7 @@ function showViolationDetail(ev) {
             </div>
         `;
     }
-    
+
     // Evidence
     if (ev.evidence) {
         detailHTML += `
@@ -788,7 +812,7 @@ function showViolationDetail(ev) {
                 <h4>Evidence</h4>
                 <div class="detail-grid">
         `;
-        
+
         // Overspeed evidence
         if (ev.evidence.speed !== undefined) {
             detailHTML += `
@@ -806,7 +830,7 @@ function showViolationDetail(ev) {
                 </div>
             `;
         }
-        
+
         // Red light evidence
         if (ev.evidence.signal_state) {
             detailHTML += `
@@ -824,7 +848,7 @@ function showViolationDetail(ev) {
                 </div>
             `;
         }
-        
+
         // Stop sign evidence
         if (ev.evidence.stopped !== undefined) {
             detailHTML += `
@@ -844,7 +868,7 @@ function showViolationDetail(ev) {
                 ` : ''}
             `;
         }
-        
+
         // Sign detected
         if (ev.evidence.sign_detected) {
             detailHTML += `
@@ -854,7 +878,7 @@ function showViolationDetail(ev) {
                 </div>
             `;
         }
-        
+
         // Media links
         if (ev.evidence.snapshot_url) {
             detailHTML += `
@@ -872,13 +896,13 @@ function showViolationDetail(ev) {
                 </div>
             `;
         }
-        
+
         detailHTML += `
                 </div>
             </div>
         `;
     }
-    
+
     // Thresholds
     if (ev.thresholds) {
         detailHTML += `
@@ -899,7 +923,7 @@ function showViolationDetail(ev) {
             </div>
         `;
     }
-    
+
     // Review status
     if (ev.review) {
         detailHTML += `
@@ -926,7 +950,7 @@ function showViolationDetail(ev) {
             </div>
         `;
     }
-    
+
     // Model info
     if (ev.model) {
         detailHTML += `
@@ -945,7 +969,7 @@ function showViolationDetail(ev) {
             </div>
         `;
     }
-    
+
     content.innerHTML = detailHTML;
     modal.style.display = 'flex';
     console.log('Modal displayed, style.display:', modal.style.display);
@@ -974,7 +998,7 @@ function clearViolationsDisplay() {
 function parseLogLine(logLine) {
     // Parse log format: "2025-10-17 12:04:44,454 - module - LEVEL - message"
     const match = logLine.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - (.+?) - (\w+) - (.+)/);
-    
+
     if (match) {
         const [, timestamp, module, level, message] = match;
         return {
@@ -984,7 +1008,7 @@ function parseLogLine(logLine) {
             message: formatMessage(message, level)
         };
     }
-    
+
     return null;
 }
 
@@ -1007,21 +1031,21 @@ function formatMessage(message, level) {
         'WebSocket connected': '<i class="fa-solid fa-check"></i> Connected',
         'WebSocket disconnected': '<i class="fa-solid fa-xmark"></i> Disconnected',
     };
-    
+
     // Check for exact matches
     for (const [key, friendly] of Object.entries(friendlyMessages)) {
         if (message.includes(key)) {
             return friendly;
         }
     }
-    
+
     // Check for patterns
     if (message.includes('FPS')) return `<i class="fa-solid fa-caret-right"></i> ${message}`;
     if (message.includes('detected')) return `<i class="fa-solid fa-circle"></i> ${message}`;
     if (message.includes('error') || message.includes('Error')) return `<i class="fa-solid fa-xmark"></i> ${message}`;
     if (message.includes('warning') || message.includes('Warning')) return `<i class="fa-solid fa-triangle-exclamation"></i> ${message}`;
     if (message.includes('success') || message.includes('Success')) return `<i class="fa-solid fa-check"></i> ${message}`;
-    
+
     return message;
 }
 
@@ -1029,15 +1053,15 @@ function createLogEntry(entry) {
     const div = document.createElement('div');
     const levelClass = entry.level.toLowerCase();
     div.className = `log-entry ${levelClass}`;
-    
+
     // Format time (show only HH:MM:SS)
     const time = entry.timestamp.split(' ')[1];
-    
+
     div.innerHTML = `
         <div class="log-time">${time}</div>
         <div class="log-message">${entry.message}</div>
     `;
-    
+
     return div;
 }
 
@@ -1065,10 +1089,10 @@ async function loadPairingStatus() {
     const nameSpan = document.getElementById('pairing-device-name');
     const unpairBtn = document.getElementById('btn-unpair');
     const generateBtn = document.getElementById('btn-generate-pairing');
-    
+
     try {
         const status = await api.get('/pair/status');
-        
+
         if (status.is_paired && status.paired_device) {
             // Paired state
             badge.className = 'pairing-badge pairing-paired';
@@ -1103,10 +1127,10 @@ async function generatePairingCode() {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating...';
     }
-    
+
     try {
         const data = await api.post('/pair/generate');
-        
+
         if (data.success) {
             showPairingQRModal(data);
         } else {
@@ -1131,18 +1155,18 @@ function showPairingQRModal(data) {
     const modal = document.getElementById('pairing-qr-modal');
     const qrContainer = document.getElementById('pairing-qr-image');
     const tokenDisplay = document.getElementById('pairing-token-display');
-    
+
     if (!modal) return;
-    
+
     // Display the token
     if (tokenDisplay) tokenDisplay.textContent = data.token || '--------';
-    
+
     // Use server-generated QR code image
     if (qrContainer) {
         const qrUrl = `/api/pair/qr?token=${encodeURIComponent(data.token)}`;
         qrContainer.innerHTML = `<img src="${qrUrl}" alt="Pairing QR Code">`;
     }
-    
+
     modal.style.display = 'flex';
 }
 
@@ -1159,13 +1183,13 @@ function closePairingQR() {
 async function unpairDevice() {
     try {
         const result = await api.post('/pair/unpair');
-        
+
         if (result.success) {
             showToast('Device unpaired', 'success');
         } else {
             showToast(result.message || 'Nothing to unpair', 'info');
         }
-        
+
         loadPairingStatus();
     } catch (error) {
         console.error('Failed to unpair:', error);
@@ -1182,7 +1206,7 @@ async function loadSettings() {
         const response = await api.get('/config');
         state.config = response.config || response;
         const config = state.config;
-        
+
         // Display brightness slider
         const brightness = config.display?.brightness ?? 50;
         const brightnessSlider = document.getElementById('setting-brightness');
@@ -1193,7 +1217,7 @@ async function loadSettings() {
             // Apply brightness to screen
             setScreenBrightness(brightness);
         }
-        
+
         // Confidence slider
         const confidence = config.detection?.confidence || 0.5;
         const confidenceSlider = document.getElementById('setting-confidence');
@@ -1202,17 +1226,20 @@ async function loadSettings() {
             confidenceSlider.value = Math.round(confidence * 100);
             confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
         }
-        
+
         // Store original settings for change detection
         state.originalSettings.brightness = brightness;
         state.originalSettings.confidence = Math.round(confidence * 100);
-        
+
         // Load WiFi status
         await loadWifiStatus();
-        
+
+        // Load hotspot status
+        loadHotspotStatus();
+
         // Load pairing status
         await loadPairingStatus();
-        
+
     } catch (error) {
         console.error('Failed to load settings:', error);
         showToast('Failed to load settings', 'error');
@@ -1240,10 +1267,10 @@ async function saveSettings() {
     try {
         // Get display brightness
         const brightness = parseInt(document.getElementById('setting-brightness').value);
-        
+
         // Get confidence
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
-        
+
         const config = {
             display: {
                 brightness: brightness
@@ -1252,18 +1279,18 @@ async function saveSettings() {
                 confidence: confidence
             }
         };
-        
+
         showToast('Saving...', 'info');
         const response = await api.put('/config', config);
-        
+
         state.config = response.config;
-        
+
         // Update original settings after successful save
         state.originalSettings.brightness = brightness;
         state.originalSettings.confidence = Math.round(confidence * 100);
-        
+
         showToast('Settings saved!', 'success');
-        
+
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
@@ -1277,24 +1304,24 @@ function resetToDefaults() {
     // Default values
     const defaultBrightness = 50;
     const defaultConfidence = 50;
-    
+
     // Update sliders
     const brightnessSlider = document.getElementById('setting-brightness');
     const brightnessDisplay = document.getElementById('brightness-display');
     const confidenceSlider = document.getElementById('setting-confidence');
     const confidenceDisplay = document.getElementById('confidence-display');
-    
+
     if (brightnessSlider && brightnessDisplay) {
         brightnessSlider.value = defaultBrightness;
         brightnessDisplay.textContent = defaultBrightness + '%';
         setScreenBrightness(defaultBrightness);
     }
-    
+
     if (confidenceSlider && confidenceDisplay) {
         confidenceSlider.value = defaultConfidence;
         confidenceDisplay.textContent = defaultConfidence + '%';
     }
-    
+
     showToast('Reset to defaults', 'info');
 }
 
@@ -1325,13 +1352,13 @@ function getSignalBars(signal) {
 function renderSignalBars(signal) {
     const activeBars = getSignalBars(signal);
     const colorClass = activeBars >= 3 ? 'signal-strong' : (activeBars === 2 ? 'signal-medium' : 'signal-weak');
-    
+
     let barsHtml = '';
     for (let i = 1; i <= 4; i++) {
         const isActive = i <= activeBars;
         barsHtml += `<span class="signal-bar bar-${i} ${isActive ? 'active' : ''}"></span>`;
     }
-    
+
     return `<span class="signal-bars ${colorClass}" title="${signal}%">${barsHtml}</span>`;
 }
 
@@ -1341,10 +1368,10 @@ function renderSignalBars(signal) {
 async function loadWifiStatus() {
     const statusText = document.getElementById('wifi-status-text');
     const disconnectBtn = document.getElementById('btn-wifi-disconnect');
-    
+
     try {
         const response = await api.get('/wifi/status');
-        
+
         if (response.connected && response.ssid) {
             const signal = response.signal || 0;
             statusText.innerHTML = `
@@ -1372,21 +1399,21 @@ async function loadWifiStatus() {
 async function scanWifiNetworks() {
     const listContainer = document.getElementById('wifi-networks-list');
     const scanBtn = document.getElementById('btn-scan-wifi');
-    
+
     // Show the list container
     if (listContainer) listContainer.style.display = 'block';
-    
+
     // Show loading state
     if (scanBtn) {
         scanBtn.disabled = true;
         scanBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Scanning...';
     }
     listContainer.innerHTML = '<div class="wifi-loading"><i class="fa fa-spinner fa-spin"></i> Scanning for networks...</div>';
-    
+
     try {
         const response = await api.get('/wifi/scan');
         const networks = response.networks || [];
-        
+
         if (networks.length === 0) {
             listContainer.innerHTML = '<div class="wifi-empty">No networks found</div>';
         } else {
@@ -1430,17 +1457,17 @@ function escapeHtml(text) {
  */
 function promptWifiConnect(ssid, hasPassword) {
     wifiConnectingSsid = ssid;
-    
+
     if (hasPassword) {
         // Show password modal
         const modal = document.getElementById('wifi-password-modal');
         const ssidDisplay = document.getElementById('wifi-connect-ssid');
         const passwordInput = document.getElementById('wifi-password-input');
-        
+
         if (ssidDisplay) ssidDisplay.textContent = ssid;
         if (passwordInput) passwordInput.value = '';
         if (modal) modal.style.display = 'flex';
-        
+
         // Focus password input
         setTimeout(() => passwordInput?.focus(), 100);
     } else {
@@ -1455,12 +1482,12 @@ function promptWifiConnect(ssid, hasPassword) {
 async function submitWifiPassword() {
     const passwordInput = document.getElementById('wifi-password-input');
     const password = passwordInput?.value || '';
-    
+
     if (!wifiConnectingSsid) {
         showToast('No network selected', 'error');
         return;
     }
-    
+
     closeWifiModal();
     await connectToWifi(wifiConnectingSsid, password);
 }
@@ -1479,10 +1506,10 @@ function closeWifiModal() {
  */
 async function connectToWifi(ssid, password) {
     showToast(`Connecting to ${ssid}...`, 'info');
-    
+
     try {
         const response = await api.post('/wifi/connect', { ssid, password });
-        
+
         if (response.connected) {
             showToast(`Connected to ${ssid}!`, 'success');
             await loadWifiStatus();
@@ -1500,10 +1527,10 @@ async function connectToWifi(ssid, password) {
  */
 async function disconnectWifi() {
     showToast('Disconnecting...', 'info');
-    
+
     try {
         const response = await api.post('/wifi/disconnect');
-        
+
         if (!response.error) {
             showToast('Disconnected', 'success');
             await loadWifiStatus();
@@ -1522,7 +1549,7 @@ async function disconnectWifi() {
 function toggleSavedNetworks() {
     const container = document.getElementById('wifi-saved-list');
     const toggleIcon = document.getElementById('saved-networks-toggle');
-    
+
     if (container.style.display === 'none' || !container.style.display) {
         container.style.display = 'block';
         if (toggleIcon) toggleIcon.innerHTML = '<i class="fa-solid fa-chevron-up"></i>';
@@ -1539,11 +1566,11 @@ function toggleSavedNetworks() {
 async function loadSavedNetworks() {
     const container = document.getElementById('wifi-saved-list');
     container.innerHTML = '<div class="wifi-loading"><i class="fa fa-spinner fa-spin"></i> Loading...</div>';
-    
+
     try {
         const response = await api.get('/wifi/saved');
         const networks = response.networks || [];
-        
+
         if (networks.length === 0) {
             container.innerHTML = '<div class="wifi-empty">No saved networks</div>';
         } else {
@@ -1567,10 +1594,10 @@ async function loadSavedNetworks() {
  */
 async function forgetWifi(name) {
     if (!confirm('Forget this network?')) return;
-    
+
     try {
         const response = await api.post('/wifi/forget', { name });
-        
+
         if (!response.error) {
             showToast('Network forgotten', 'success');
             await loadSavedNetworks();
@@ -1589,56 +1616,56 @@ async function forgetWifi(name) {
 
 function connectWebSocket() {
     state.socket = io();
-    
+
     state.socket.on('connect', () => {
         console.log('WebSocket connected');
         updateStatus('backend', true);
         showToast('Connected to server', 'success');
         // Check full system status
-        checkSystemStatus();        
+        checkSystemStatus();
     });
-    
+
     state.socket.on('disconnect', () => {
         console.log('WebSocket disconnected');
         updateStatus('backend', false);
         updateStatus('camera', false);
         showToast('Disconnected from server', 'warning');
     });
-    
+
     state.socket.on('video_frame', (data) => {
         if (state.currentPage === 'live') {
             handleVideoFrame(data);
         }
     });
-    
+
     state.socket.on('connection_response', (data) => {
         console.log('Connection response:', data);
     });
-    
+
     // Listen for pairing events
     state.socket.on('device_paired', (data) => {
         console.log('Device paired:', data);
         showToast(`${data.device_name || 'Device'} paired!`, 'success');
         if (state.currentPage === 'settings') loadPairingStatus();
     });
-    
+
     state.socket.on('device_unpaired', () => {
         console.log('Device unpaired');
         if (state.currentPage === 'settings') loadPairingStatus();
     });
-    
+
     // Listen for config updates from server
     state.socket.on('config_updated', (data) => {
         console.log('\u21BB Configuration updated from server:', data);
-        
+
         if (state.configAutoReload) {
             state.config = data.config;
-            
+
             // Update UI if on settings page
             if (state.currentPage === 'settings') {
                 loadSettings();
             }
-            
+
             showToast('Configuration updated automatically', 'info');
         }
     });
@@ -1650,12 +1677,12 @@ function connectWebSocket() {
 
 function updateStatus(component, isOnline) {
     state.status[component] = isOnline;
-    
+
     const statusElement = document.getElementById(`status-${component}`);
     if (!statusElement) return;
-    
+
     const dot = statusElement.querySelector('.status-dot');
-    
+
     if (dot) {
         if (isOnline) {
             dot.className = 'status-dot dot online';
@@ -1663,7 +1690,7 @@ function updateStatus(component, isOnline) {
             dot.className = 'status-dot dot offline';
         }
     }
-    
+
     if (isOnline) {
         statusElement.classList.add('connected');
     } else {
@@ -1677,13 +1704,13 @@ async function checkWiFiStatus() {
         const response = await api.get('/wifi/status');
         const isConnected = response.connected === true;
         const signal = response.signal || 0;
-        
+
         updateStatus('wifi', isConnected);
-        
+
         // Update home page signal bars and fallback icon
         const homeSignal = document.getElementById('home-wifi-signal');
         const homeFallback = document.getElementById('home-wifi-fallback');
-        
+
         if (isConnected) {
             // Show signal bars, hide fallback icon
             if (homeSignal) {
@@ -1696,7 +1723,7 @@ async function checkWiFiStatus() {
             if (homeSignal) homeSignal.style.display = 'none';
             if (homeFallback) homeFallback.style.display = '';
         }
-        
+
         return isConnected;
     } catch (error) {
         // If API fails, show fallback icon
@@ -1713,19 +1740,19 @@ async function checkSystemStatus() {
     try {
         // Check WiFi
         const hasWiFi = await checkWiFiStatus();
-        
+
         if (!hasWiFi) {
             updateStatus('backend', false);
             updateStatus('camera', false);
             return;
         }
-        
+
         // Check backend and camera
         const status = await api.get('/status');
-        
+
         updateStatus('backend', true);
         updateStatus('camera', status.camera || false);
-        
+
         // Update model info if available        
         if (status.model) {
             const modelElement = document.getElementById('model-name');
@@ -1733,11 +1760,11 @@ async function checkSystemStatus() {
                 modelElement.textContent = status.model.split('/').pop();
             }
         }
-        
+
     } catch (error) {
         console.error('Failed to check status:', error);
         updateStatus('backend', false);
-        updateStatus('camera', false);        
+        updateStatus('camera', false);
     }
 }
 
@@ -1752,14 +1779,14 @@ async function checkStatus() {
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Initializing Sign Detection System...');
-    
+
     // Navigation
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             switchPage(e.target.dataset.page);
         });
     });
-    
+
     // Menu buttons - Home page navigation
     document.querySelectorAll('.menu-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1767,22 +1794,22 @@ document.addEventListener('DOMContentLoaded', () => {
             switchPage(page);
         });
     });
-    
+
     // Driving Mode buttons
     document.getElementById('btn-casual-mode').addEventListener('click', () => {
         showToast('Casual Mode - Coming Soon!', 'info');
         // TODO: Implement casual driving mode
     });
-    
+
     document.getElementById('btn-gamified-mode').addEventListener('click', () => {
         showToast('Gamified Mode - Coming Soon!', 'info');
         // TODO: Implement gamified driving mode
     });
-    
+
     // Logs controls
     document.getElementById('btn-refresh-logs').addEventListener('click', loadViolations);
     document.getElementById('btn-clear-display').addEventListener('click', clearViolationsDisplay);
-    
+
     // Modal close handlers
     const modal = document.getElementById('violation-detail-modal');
     if (modal) {
@@ -1791,7 +1818,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (closeBtn) {
             closeBtn.addEventListener('click', closeViolationDetail);
         }
-        
+
         // Click outside modal to close
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -1799,21 +1826,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Settings controls
     document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
     document.getElementById('btn-reset-settings').addEventListener('click', resetToDefaults);
-    
+
     // Brightness slider - real-time screen dimming
     const brightnessSlider = document.getElementById('setting-brightness');
     let brightnessTimeout = null;
     brightnessSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
         document.getElementById('brightness-display').textContent = value + '%';
-        
+
         // Apply screen brightness immediately via CSS overlay
         setScreenBrightness(value);
-        
+
         // Debounce saving to config (don't need to save on every tiny change)
         if (brightnessTimeout) clearTimeout(brightnessTimeout);
         brightnessTimeout = setTimeout(async () => {
@@ -1824,29 +1851,29 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 500);
     });
-    
+
     // Confidence slider update
     document.getElementById('setting-confidence').addEventListener('input', (e) => {
         const value = e.target.value;
         document.getElementById('confidence-display').textContent = value + '%';
     });
-    
+
     // Connect WebSocket
     connectWebSocket();
-    
+
     // Initial status check and load brightness
     checkSystemStatus();
     loadInitialBrightness();
-    
+
     // Initialize touch scrolling for all scrollable containers
     initAllTouchScrolling();
-    
+
     // Periodic status checks
     setInterval(checkSystemStatus, 5000);  // Check every 5 seconds
-    
+
     // Start on home page
     switchPage('home');
-    
+
     console.log('\u2713 Application ready!');
 });
 

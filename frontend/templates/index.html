@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=640, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="/static/css/fontawesome-local.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
+
 <body class="touchscreen">
     <!-- Brightness Overlay (CSS-based screen dimming) -->
     <div id="brightness-overlay"></div>
@@ -27,7 +29,8 @@
                 </div>
                 <div class="status-panel">
                     <div class="status-item" id="status-wifi">
-                        <span id="home-wifi-fallback" class="status-icon-indicator"><i class="fa-solid fa-wifi"></i></span>
+                        <span id="home-wifi-fallback" class="status-icon-indicator"><i
+                                class="fa-solid fa-wifi"></i></span>
                         <span id="home-wifi-signal" class="home-signal-bars" style="display:none;"></span>
                         <span class="status-label">WiFi</span>
                     </div>
@@ -37,18 +40,18 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="menu-buttons">
                 <button class="menu-btn" data-page="live">
                     <span class="icon"><i class="fa-solid fa-play"></i></span>
                     <span class="label">Live Feed</span>
-                </button>                            
-                
+                </button>
+
                 <button class="menu-btn" data-page="settings">
                     <span class="icon"><i class="fa-solid fa-gear"></i></span>
                     <span class="label">Settings</span>
                 </button>
-                
+
                 <button class="menu-btn" data-page="logs">
                     <span class="icon"><i class="fa-solid fa-list"></i></span>
                     <span class="label">Logs</span>
@@ -83,21 +86,21 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Driving Mode Page -->
         <div id="page-driving" class="page">
             <div class="page-header">
                 <button class="btn-back" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
                 <h2>Driving Mode</h2>
             </div>
-            
+
             <div class="driving-mode-selector">
                 <button class="mode-btn mode-casual" id="btn-casual-mode">
                     <span class="mode-icon"><i class="fa-solid fa-flag"></i></span>
                     <span class="mode-title">Casual Mode</span>
                     <span class="mode-desc">Simple detection display</span>
                 </button>
-                
+
                 <button class="mode-btn mode-gamified" id="btn-gamified-mode">
                     <span class="mode-icon"><i class="fa-solid fa-star"></i></span>
                     <span class="mode-title">Gamified Mode</span>
@@ -112,22 +115,25 @@
                 <button class="btn-back" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
                 <h2>Violation Logs</h2>
             </div>
-            
+
             <div class="controls-compact">
-                <button id="btn-refresh-logs" class="btn btn-primary btn-touch" onclick="loadViolations()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
-                <button id="btn-clear-display" class="btn btn-secondary btn-touch" onclick="clearViolationsDisplay()"><i class="fa-solid fa-xmark"></i> Clear</button>
+                <button id="btn-refresh-logs" class="btn btn-primary btn-touch" onclick="loadViolations()"><i
+                        class="fa-solid fa-rotate-right"></i> Refresh</button>
+                <button id="btn-clear-display" class="btn btn-secondary btn-touch" onclick="clearViolationsDisplay()"><i
+                        class="fa-solid fa-xmark"></i> Clear</button>
             </div>
 
             <div class="violations-log-container">
                 <div id="violations-list" class="violations-list"></div>
             </div>
-            
+
             <!-- Detail Modal -->
             <div id="violation-detail-modal" class="modal" style="display: none;">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h3>Violation Details</h3>
-                        <button class="btn-close" onclick="closeViolationDetail()"><i class="fa-solid fa-xmark"></i></button>
+                        <button class="btn-close" onclick="closeViolationDetail()"><i
+                                class="fa-solid fa-xmark"></i></button>
                     </div>
                     <div id="violation-detail-content" class="modal-body"></div>
                 </div>
@@ -140,21 +146,24 @@
                 <button class="btn-back" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
                 <h2>Settings</h2>
             </div>
-            
+
             <div class="settings-container-compact">
+                <!-- Section 1: Device Settings -->
                 <div class="settings-group settings-group-touch">
                     <h3>Device Settings</h3>
                     <div class="setting-row">
                         <label>Screen Brightness</label>
                         <div class="slider-container">
-                            <input type="range" id="setting-brightness" class="slider-touch" min="10" max="100" value="50" step="5">
+                            <input type="range" id="setting-brightness" class="slider-touch" min="10" max="100"
+                                value="50" step="5">
                             <span id="brightness-display" class="slider-value">50%</span>
                         </div>
                     </div>
                     <div class="setting-row">
                         <label>Detection Confidence</label>
                         <div class="slider-container">
-                            <input type="range" id="setting-confidence" class="slider-touch" min="0" max="100" value="50" step="5">
+                            <input type="range" id="setting-confidence" class="slider-touch" min="0" max="100"
+                                value="50" step="5">
                             <span id="confidence-display" class="slider-value">50%</span>
                         </div>
                     </div>
@@ -168,10 +177,36 @@
                     </div>
                 </div>
 
+                <!-- Section 2: WiFi -->
                 <div class="settings-group settings-group-touch">
-                    <h3>Hotspot & WiFi</h3>
+                    <h3><i class="fa-solid fa-wifi"></i> WiFi</h3>
+                    <div class="wifi-status-row">
+                        <span class="wifi-label">Status</span>
+                        <span id="wifi-status-text"><i class="fa fa-spinner fa-spin"></i> Checking...</span>
+                    </div>
+                    <div class="wifi-actions">
+                        <button class="btn-wifi primary" id="btn-scan-wifi" onclick="scanWifiNetworks()">
+                            <i class="fa-solid fa-magnifying-glass"></i> Scan
+                        </button>
+                        <button class="btn-wifi secondary" id="btn-wifi-disconnect" onclick="disconnectWifi()"
+                            style="display:none;">
+                            <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
+                        </button>
+                    </div>
+                    <div id="wifi-networks-list" style="display:none;"></div>
+                    <button class="btn-toggle-saved" onclick="toggleSavedNetworks()">
+                        <i class="fa-solid fa-bookmark"></i> Saved Networks
+                        <span id="saved-networks-toggle"><i class="fa-solid fa-chevron-down"></i></span>
+                    </button>
+                    <div id="wifi-saved-list" style="display:none;"></div>
+                </div>
+
+                <!-- Section 3: Hotspot & Pairing -->
+                <div class="settings-group settings-group-touch">
+                    <h3><i class="fa-solid fa-tower-broadcast"></i> Hotspot & Pairing</h3>
+                    <!-- Hotspot controls -->
                     <div class="setting-row">
-                        <label>Hotspot Status</label>
+                        <label>Hotspot</label>
                         <span id="hotspot-status-text" class="hotspot-status">Checking...</span>
                     </div>
                     <div class="setting-row">
@@ -179,57 +214,17 @@
                         <span id="hotspot-ssid" class="hotspot-ssid">---</span>
                     </div>
                     <div class="setting-row">
-                        <button class="btn btn-hotspot-toggle btn-touch" id="hotspot-toggle-btn" onclick="toggleHotspotUI()">
+                        <button class="btn btn-hotspot-toggle btn-touch" id="hotspot-toggle-btn"
+                            onclick="toggleHotspotUI()">
                             <i class="fa-solid fa-wifi"></i> <span id="hotspot-toggle-label">Enable Hotspot</span>
                         </button>
-                        <span class="setting-desc">Share WiFi for phone/tablet access</span>
-                    <div class="setting-row">
                         <button class="btn btn-primary btn-touch" id="btn-show-hotspot-qr" onclick="showHotspotQR()">
-                            <i class="fa-solid fa-qrcode"></i> Show QR Codes
+                            <i class="fa-solid fa-qrcode"></i> QR
                         </button>
                     </div>
-                    <!-- QR modal with image display -->
-                    <div id="hotspot-qr-modal" class="modal" style="display:none;">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h3>Hotspot QR Codes</h3>
-                                <button class="btn-close" onclick="closeHotspotQR()"><i class="fa-solid fa-xmark"></i></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="setting-desc">Scan to join WiFi hotspot:</div>
-                                <div id="hotspot-wifi-qr" class="qr-image"></div>
-                                <div class="setting-desc" style="margin-top:10px;">Scan to access web app:</div>
-                                <div id="hotspot-webapp-qr" class="qr-image"></div>
-                                <div style="margin-top:10px;">
-                                    <span id="hotspot-ssid-info"></span>
-                                    <span id="hotspot-password-info"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-    <!-- Hotspot Prompt Modal -->
-    <div id="hotspot-prompt-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Enable Hotspot</h3>
-                <button class="btn-close" onclick="closeHotspotPrompt()"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="modal-body">
-                <p>This will disconnect WiFi to start the hotspot. Proceed?</p>
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                    <button class="btn btn-secondary btn-touch" onclick="closeHotspotPrompt()">Cancel</button>
-                    <button class="btn btn-success btn-touch" onclick="confirmHotspotEnable()">Enable Hotspot</button>
-                </div>
-            </div>
-        </div>
-    </div>
-                </div>
-
-                <div class="settings-group settings-group-touch">
-                    <h3><i class="fa-solid fa-mobile-screen"></i> Device Pairing</h3>
+                    <!-- Pairing controls -->
                     <div class="setting-row">
-                        <label>Status</label>
+                        <label>Pairing</label>
                         <span id="pairing-status-badge" class="pairing-badge pairing-unpaired">
                             <i class="fa-solid fa-circle"></i> Not Paired
                         </span>
@@ -241,20 +236,24 @@
                         </div>
                     </div>
                     <div class="setting-row pairing-actions">
-                        <button class="btn btn-primary btn-touch" id="btn-generate-pairing" onclick="generatePairingCode()">
+                        <button class="btn btn-primary btn-touch" id="btn-generate-pairing"
+                            onclick="generatePairingCode()">
                             <i class="fa-solid fa-qrcode"></i> Pair Device
                         </button>
-                        <button class="btn btn-danger btn-touch" id="btn-unpair" onclick="unpairDevice()" style="display:none;">
+                        <button class="btn btn-danger btn-touch" id="btn-unpair" onclick="unpairDevice()"
+                            style="display:none;">
                             <i class="fa-solid fa-link-slash"></i> Unpair
                         </button>
                     </div>
                 </div>
 
                 <div class="controls-compact">
-                    <button id="btn-reset-settings" class="btn btn-secondary btn-touch"><i class="fa-solid fa-rotate-left"></i> Reset</button>
-                    <button id="btn-save-settings" class="btn btn-success btn-touch"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+                    <button id="btn-reset-settings" class="btn btn-secondary btn-touch"><i
+                            class="fa-solid fa-rotate-left"></i> Reset</button>
+                    <button id="btn-save-settings" class="btn btn-success btn-touch"><i
+                            class="fa-solid fa-floppy-disk"></i> Save</button>
                 </div>
-                
+
                 <!-- Spacer to ensure content is scrollable -->
                 <div style="height: 50px;"></div>
             </div>
@@ -270,7 +269,8 @@
             </div>
             <div class="modal-body">
                 <p id="wifi-connect-ssid" style="margin-bottom: 10px; font-weight: bold;"></p>
-                <input type="password" id="wifi-password-input" class="input-touch" placeholder="Enter password" autocomplete="off">
+                <input type="password" id="wifi-password-input" class="input-touch" placeholder="Enter password"
+                    autocomplete="off">
                 <div class="wifi-modal-buttons" style="margin-top: 15px; display: flex; gap: 10px;">
                     <button class="btn btn-secondary btn-touch" onclick="closeWifiModal()">Cancel</button>
                     <button class="btn btn-success btn-touch" onclick="submitWifiPassword()">Connect</button>
@@ -279,6 +279,42 @@
         </div>
     </div>
 
+    <!-- Hotspot QR Modal -->
+    <div id="hotspot-qr-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Hotspot QR Codes</h3>
+                <button class="btn-close" onclick="closeHotspotQR()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-desc">Scan to join WiFi hotspot:</div>
+                <div id="hotspot-wifi-qr" class="qr-image"></div>
+                <div class="setting-desc" style="margin-top:10px;">Scan to access web app:</div>
+                <div id="hotspot-webapp-qr" class="qr-image"></div>
+                <div style="margin-top:10px;">
+                    <span id="hotspot-ssid-info"></span>
+                    <span id="hotspot-password-info"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hotspot Prompt Modal -->
+    <div id="hotspot-prompt-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Enable Hotspot</h3>
+                <button class="btn-close" onclick="closeHotspotPrompt()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p>This will disconnect WiFi. Proceed?</p>
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn btn-secondary btn-touch" onclick="closeHotspotPrompt()">Cancel</button>
+                    <button class="btn btn-success btn-touch" onclick="confirmHotspotEnable()">Enable Hotspot</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- Pairing QR Modal -->
     <div id="pairing-qr-modal" class="modal" style="display:none;">
         <div class="modal-content pairing-modal-content">
@@ -403,4 +439,5 @@
     <!-- Load our app -->
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>
