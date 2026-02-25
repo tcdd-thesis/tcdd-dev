@@ -568,6 +568,22 @@ body.touchscreen {
 .btn-danger { background: var(--danger); }
 .btn-secondary { background: var(--secondary); }
 
+/* Hotspot Toggle Button */
+.btn-hotspot-toggle {
+    background: #fff200;
+    color: #222 !important;
+    border: 2px solid #bfa800;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    transition: background 0.2s, color 0.2s;
+}
+.btn-hotspot-toggle:active,
+.btn-hotspot-toggle:hover {
+    background: #ffe066;
+    color: #222 !important;
+    border-color: #bfa800;
+}
+
 /* ========== Controls Compact ========== */
 .controls-compact {
     padding: 10px 15px;
