@@ -1,0 +1,18 @@
+[Unit]
+Description=TCDD Detection System
+After=network.target graphical.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=tcdd-thesis
+WorkingDirectory=/home/tcdd-thesis/tcdd-dev
+ExecStart=/bin/bash /home/tcdd-thesis/tcdd-dev/start.sh
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target
