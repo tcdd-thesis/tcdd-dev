@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-b20260226-1",
+  "version": "0.1.0-b20260226-2",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -133,18 +133,6 @@
     "console_output": true,        // Print to console
     "log_detections": false        // Log every detection (verbose!)
   },
-
-  // =============================================================================
-  // PERFORMANCE SETTINGS
-  // Changes will reload the detector
-  // =============================================================================
-  
-  "performance": {
-    "enable_gpu": false,           // Use GPU for inference (requires CUDA)
-    "num_threads": 4,              // CPU threads for inference
-    "inference_device": "cpu"      // Device: cpu, cuda, cuda:0
-  },
-  
   
   // =============================================================================
   // ALERT SYSTEM
@@ -157,7 +145,6 @@
     "cooldown_seconds": 60,        // Min seconds between alerts
     "webhook_url": ""              // Webhook URL (Slack, Discord, etc.)
   },
-  
   
   // =============================================================================
   // USER INTERFACE SETTINGS
