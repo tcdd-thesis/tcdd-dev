@@ -20,6 +20,15 @@ fi
 # Load configuration from config.json
 CONFIG=$(cat config.json)
 
+# --- Dev mode check ---
+# When dev_mode is true, abort automatic startup (e.g. when launched by systemd).
+# The user can still run the backend manually during development.
+DEV_MODE=$(echo "$CONFIG" | grep -oP '"dev_mode"\s*:\s*\K(true|false)')
+if [ "$DEV_MODE" = "true" ] && [ -n "$INVOCATION_ID" ]; then
+    echo "Dev mode is enabled — automatic startup aborted."
+    exit 0
+fi
+
 # Extract virtual environment path from config.json, exit if no value found
 if echo "$CONFIG" | grep -q '"venv_path":\s*"\K[^"]+'; then
     echo "Error: 'venv_path' not found in config.json!"
