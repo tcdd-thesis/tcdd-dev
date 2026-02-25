@@ -1,3 +1,104 @@
+# Insert after last /api/hotspot route (after get_hotspot_clients)
+@app.route('/api/hotspot/qr', methods=['GET'])
+def get_hotspot_qr():
+    """
+    Returns QR code data for:
+    - WiFi connection (SSID, password)
+    - Web app access (static URL)
+    """
+    try:
+        creds = hotspot_manager.get_credentials()
+        ssid = creds['ssid']
+        password = creds['password']
+        # WiFi QR code (WIFI:T:WPA;S:SSID;P:PASSWORD;;)
+        wifi_qr = f"WIFI:T:WPA;S:{ssid};P:{password};;"
+        # Web app QR code (static URL)
+        domain = creds.get('domain') or HOTSPOT_DOMAIN
+        port = config.get('port', 5000)
+        if port == 80:
+            url = f"http://{domain}/"
+        else:
+            url = f"http://{domain}:{port}/"
+        return jsonify({
+            'wifi_qr': wifi_qr,
+            'webapp_qr': url,
+            'ssid': ssid,
+            'password': password,
+            'url': url
+        }), 200
+    except Exception as e:
+        logger.error(f"Error generating hotspot QR: {e}")
+        return jsonify({'error': str(e)}), 500
+# Place this after all managers are initialized and before the main block, near other hotspot routes
+@app.route('/api/hotspot/qr', methods=['GET'])
+def get_hotspot_qr():
+    """
+    Returns QR code data for:
+    - WiFi connection (SSID, password)
+    - Web app access (static URL)
+    """
+    try:
+        creds = hotspot_manager.get_credentials()
+        ssid = creds['ssid']
+        password = creds['password']
+        # WiFi QR code (WIFI:T:WPA;S:SSID;P:PASSWORD;;)
+        wifi_qr = f"WIFI:T:WPA;S:{ssid};P:{password};;"
+        # Web app QR code (static URL)
+        domain = creds.get('domain') or HOTSPOT_DOMAIN
+        port = config.get('port', 5000)
+        if port == 80:
+            url = f"http://{domain}/"
+        else:
+            url = f"http://{domain}:{port}/"
+        return jsonify({
+            'wifi_qr': wifi_qr,
+            'webapp_qr': url,
+            'ssid': ssid,
+            'password': password,
+            'url': url
+        }), 200
+    except Exception as e:
+        logger.error(f"Error generating hotspot QR: {e}")
+        return jsonify({'error': str(e)}), 500
+# Add after all managers are initialized, before the main block
+@app.route('/api/hotspot/qr', methods=['GET'])
+def get_hotspot_qr():
+    """
+    Returns QR code data for:
+    - WiFi connection (SSID, password)
+    - Web app access (static URL)
+    """
+    try:
+        creds = hotspot_manager.get_credentials()
+        ssid = creds['ssid']
+        password = creds['password']
+        # WiFi QR code (WIFI:T:WPA;S:SSID;P:PASSWORD;;)
+        wifi_qr = f"WIFI:T:WPA;S:{ssid};P:{password};;"
+        # Web app QR code (static URL)
+        domain = creds.get('domain') or HOTSPOT_DOMAIN
+        port = config.get('port', 5000)
+        if port == 80:
+            url = f"http://{domain}/"
+        else:
+            url = f"http://{domain}:{port}/"
+        return jsonify({
+            'wifi_qr': wifi_qr,
+            'webapp_qr': url,
+            'ssid': ssid,
+            'password': password,
+            'url': url
+        }), 200
+    except Exception as e:
+        logger.error(f"Error generating hotspot QR: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Place this after Flask app initialization
+
+# ...existing code...
+
+# Add after app, config, and hotspot_manager are initialized
+
+
 #!/usr/bin/env python3
 """
 Sign Detection System - Main Flask Application
