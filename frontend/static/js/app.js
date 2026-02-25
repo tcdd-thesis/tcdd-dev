@@ -1053,6 +1053,127 @@ function clearLogsDisplay() {
 }
 
 // ============================================================================
+// DEVICE PAIRING
+// ============================================================================
+
+/**
+ * Load and display current pairing status in the Settings page
+ */
+async function loadPairingStatus() {
+    const badge = document.getElementById('pairing-status-badge');
+    const infoDiv = document.getElementById('pairing-device-info');
+    const nameSpan = document.getElementById('pairing-device-name');
+    const unpairBtn = document.getElementById('btn-unpair');
+    const generateBtn = document.getElementById('btn-generate-pairing');
+    
+    try {
+        const status = await api.get('/pair/status');
+        
+        if (status.is_paired && status.paired_device) {
+            // Paired state
+            badge.className = 'pairing-badge pairing-paired';
+            badge.innerHTML = '<i class="fa-solid fa-circle"></i> Paired';
+            if (infoDiv) infoDiv.style.display = 'block';
+            if (nameSpan) nameSpan.textContent = status.paired_device.device_name || 'Unknown';
+            if (unpairBtn) unpairBtn.style.display = 'inline-flex';
+            if (generateBtn) {
+                generateBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i> New Code';
+            }
+        } else {
+            // Not paired state
+            badge.className = 'pairing-badge pairing-unpaired';
+            badge.innerHTML = '<i class="fa-solid fa-circle"></i> Not Paired';
+            if (infoDiv) infoDiv.style.display = 'none';
+            if (unpairBtn) unpairBtn.style.display = 'none';
+            if (generateBtn) {
+                generateBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Pair Device';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load pairing status:', error);
+    }
+}
+
+/**
+ * Generate a new pairing code and show the QR modal
+ */
+async function generatePairingCode() {
+    const btn = document.getElementById('btn-generate-pairing');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating...';
+    }
+    
+    try {
+        const data = await api.post('/pair/generate');
+        
+        if (data.success) {
+            showPairingQRModal(data);
+        } else {
+            showToast(data.error || 'Failed to generate code', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to generate pairing code:', error);
+        showToast('Failed to generate pairing code', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Pair Device';
+        }
+    }
+}
+
+/**
+ * Show the pairing QR code modal with the generated data.
+ * Uses server-side QR image generation (works offline, no CDN needed).
+ */
+function showPairingQRModal(data) {
+    const modal = document.getElementById('pairing-qr-modal');
+    const qrContainer = document.getElementById('pairing-qr-image');
+    const tokenDisplay = document.getElementById('pairing-token-display');
+    
+    if (!modal) return;
+    
+    // Display the token
+    if (tokenDisplay) tokenDisplay.textContent = data.token || '--------';
+    
+    // Use server-generated QR code image
+    if (qrContainer) {
+        const qrUrl = `/api/pair/qr?token=${encodeURIComponent(data.token)}`;
+        qrContainer.innerHTML = `<img src="${qrUrl}" alt="Pairing QR Code">`;
+    }
+    
+    modal.style.display = 'flex';
+}
+
+function closePairingQR() {
+    const modal = document.getElementById('pairing-qr-modal');
+    if (modal) modal.style.display = 'none';
+    // Refresh status in case device paired while modal was open
+    loadPairingStatus();
+}
+
+/**
+ * Unpair the currently paired device
+ */
+async function unpairDevice() {
+    try {
+        const result = await api.post('/pair/unpair');
+        
+        if (result.success) {
+            showToast('Device unpaired', 'success');
+        } else {
+            showToast(result.message || 'Nothing to unpair', 'info');
+        }
+        
+        loadPairingStatus();
+    } catch (error) {
+        console.error('Failed to unpair:', error);
+        showToast('Failed to unpair device', 'error');
+    }
+}
+
+// ============================================================================
 // SETTINGS PAGE
 // ============================================================================
 
@@ -1088,6 +1209,9 @@ async function loadSettings() {
         
         // Load WiFi status
         await loadWifiStatus();
+        
+        // Load pairing status
+        await loadPairingStatus();
         
     } catch (error) {
         console.error('Failed to load settings:', error);
@@ -1489,6 +1613,18 @@ function connectWebSocket() {
     
     state.socket.on('connection_response', (data) => {
         console.log('Connection response:', data);
+    });
+    
+    // Listen for pairing events
+    state.socket.on('device_paired', (data) => {
+        console.log('Device paired:', data);
+        showToast(`${data.device_name || 'Device'} paired!`, 'success');
+        if (state.currentPage === 'settings') loadPairingStatus();
+    });
+    
+    state.socket.on('device_unpaired', () => {
+        console.log('Device unpaired');
+        if (state.currentPage === 'settings') loadPairingStatus();
     });
     
     // Listen for config updates from server

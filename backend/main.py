@@ -922,6 +922,34 @@ def pair_landing_page():
     # Phase 5 will add a dedicated mobile pairing UI
     return render_template('index.html')
 
+@app.route('/api/pair/qr')
+def get_pairing_qr():
+    """
+    Serve a QR code image for device pairing.
+    Query params:
+        token: pairing token (required)
+    """
+    token = request.args.get('token', '')
+    if not token:
+        return jsonify({'error': 'Token is required'}), 400
+    
+    # Build the pairing URL
+    port = config.get('port', 5000)
+    domain = hotspot_manager.get_domain() if hotspot_manager else None
+    if domain:
+        qr_data = f"http://{domain}:{port}/pair?token={token}"
+    else:
+        qr_data = f"http://{HOTSPOT_IP}:{port}/pair?token={token}"
+    
+    if qrcode is None:
+        return jsonify({'error': 'qrcode library not installed'}), 500
+    
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png', as_attachment=False, download_name=f"pair_{token}_qr.png")
+
 # ----------------------------------------------------------------------------
 # HOTSPOT API
 # ----------------------------------------------------------------------------

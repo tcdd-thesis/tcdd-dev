@@ -225,6 +225,31 @@
         </div>
     </div>
                 </div>
+
+                <div class="settings-group settings-group-touch">
+                    <h3><i class="fa-solid fa-mobile-screen"></i> Device Pairing</h3>
+                    <div class="setting-row">
+                        <label>Status</label>
+                        <span id="pairing-status-badge" class="pairing-badge pairing-unpaired">
+                            <i class="fa-solid fa-circle"></i> Not Paired
+                        </span>
+                    </div>
+                    <div id="pairing-device-info" class="pairing-device-info" style="display:none;">
+                        <div class="setting-row">
+                            <label>Device</label>
+                            <span id="pairing-device-name" class="setting-value">—</span>
+                        </div>
+                    </div>
+                    <div class="setting-row pairing-actions">
+                        <button class="btn btn-primary btn-touch" id="btn-generate-pairing" onclick="generatePairingCode()">
+                            <i class="fa-solid fa-qrcode"></i> Pair Device
+                        </button>
+                        <button class="btn btn-danger btn-touch" id="btn-unpair" onclick="unpairDevice()" style="display:none;">
+                            <i class="fa-solid fa-link-slash"></i> Unpair
+                        </button>
+                    </div>
+                </div>
+
                 <div class="controls-compact">
                     <button id="btn-reset-settings" class="btn btn-secondary btn-touch"><i class="fa-solid fa-rotate-left"></i> Reset</button>
                     <button id="btn-save-settings" class="btn btn-success btn-touch"><i class="fa-solid fa-floppy-disk"></i> Save</button>
@@ -249,6 +274,27 @@
                 <div class="wifi-modal-buttons" style="margin-top: 15px; display: flex; gap: 10px;">
                     <button class="btn btn-secondary btn-touch" onclick="closeWifiModal()">Cancel</button>
                     <button class="btn btn-success btn-touch" onclick="submitWifiPassword()">Connect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pairing QR Modal -->
+    <div id="pairing-qr-modal" class="modal" style="display:none;">
+        <div class="modal-content pairing-modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-qrcode"></i> Pair Device</h3>
+                <button class="btn-close" onclick="closePairingQR()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body pairing-modal-body">
+                <div class="pairing-instructions">
+                    <span class="pairing-step">1. Connect phone to hotspot</span>
+                    <span class="pairing-step">2. Scan QR or enter code</span>
+                </div>
+                <div id="pairing-qr-image" class="pairing-qr-container"></div>
+                <div class="pairing-token-row">
+                    <span class="pairing-token-label">Code:</span>
+                    <span id="pairing-token-display" class="pairing-token-value">--------</span>
                 </div>
             </div>
         </div>
