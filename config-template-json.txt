@@ -71,7 +71,8 @@
     "show_labels": true,           // Show class names
     "show_confidence": true,       // Show confidence scores
     "bbox_thickness": 2,           // Bounding box thickness (pixels)
-    "font_scale": 0.5              // Label font size
+    "font_scale": 0.5,             // Label font size
+    "interval": 1                  // Detection interval (seconds)
   },
   
   

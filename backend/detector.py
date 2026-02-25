@@ -52,7 +52,7 @@ class Detector:
         self.loaded = False
         
         # Parse model path(s) based on engine
-        model_config = config.get('detection.model', [])
+        model_config = config.get('detection.model_files', [])
         if not isinstance(model_config, list):
             model_config = [model_config]  # Convert to list for backward compatibility
         
