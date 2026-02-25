@@ -154,36 +154,48 @@
                 </div>
 
                 <div class="settings-group">
-                    <h3>WiFi & Hotspot</h3>
-                    <div class="setting-row wifi-status-row">
-                        <label>Status</label>
-                        <span id="wifi-status-text" class="wifi-status">Checking...</span>
-                    </div>
-                    <div class="setting-row hotspot-toggle-row">
-                        <label>Hotspot</label>
-                        <input type="checkbox" id="hotspot-toggle" onchange="toggleHotspotUI(this)">
+                    <h3>Hotspot & WiFi</h3>
+                    <div class="setting-row">
+                        <label>Hotspot Status</label>
                         <span id="hotspot-status-text" class="hotspot-status">Checking...</span>
                     </div>
-                    <div class="wifi-controls">
-                        <button id="btn-wifi-disconnect" class="btn btn-danger btn-touch btn-small" onclick="disconnectWifi()" style="display:none;">
-                            <i class="fa-solid fa-link-slash"></i> Disconnect
+                    <div class="setting-row">
+                        <label>SSID</label>
+                        <span id="hotspot-ssid" class="hotspot-ssid">---</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>Enable Hotspot</label>
+                        <input type="checkbox" id="hotspot-toggle" onchange="toggleHotspotUI(this)">
+                        <span class="setting-desc">Share WiFi for phone/tablet access</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-desc">When enabled, your phone/tablet can connect to this device's WiFi hotspot and access the web app.</span>
+                    </div>
+                    <div class="setting-row">
+                        <button class="btn btn-primary btn-touch" id="btn-show-hotspot-qr" onclick="showHotspotQR()">
+                            <i class="fa-solid fa-qrcode"></i> Show QR Codes
                         </button>
-                        <button id="btn-scan-wifi" class="btn btn-primary btn-touch btn-small" onclick="scanWifiNetworks()">
-                            <i class="fa-solid fa-magnifying-glass"></i> Scan
-                        </button>
                     </div>
-                    <div id="wifi-networks-list" class="wifi-networks-list" style="display:none;">
-                        <!-- Networks will be populated by JavaScript -->
-                    </div>
-                    <div id="wifi-saved-section" style="margin-top: 10px;">
-                        <div class="setting-row" style="cursor: pointer;" onclick="toggleSavedNetworks()">
-                            <label>Saved Networks</label>
-                            <span id="saved-networks-toggle"><i class="fa-solid fa-chevron-down"></i></span>
+                    <!-- Placeholder for QR modal -->
+                    <div id="hotspot-qr-modal" class="modal" style="display:none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Hotspot QR Codes</h3>
+                                <button class="btn-close" onclick="closeHotspotQR()"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="setting-desc">Scan to join WiFi hotspot:</div>
+                                <div id="hotspot-wifi-qr"></div>
+                                <div class="setting-desc" style="margin-top:10px;">Scan to access web app:</div>
+                                <div id="hotspot-webapp-qr"></div>
+                                <div style="margin-top:10px;">
+                                    <span id="hotspot-ssid-info"></span>
+                                    <span id="hotspot-password-info"></span>
+                                </div>
+                            </div>
                         </div>
-                        <div id="wifi-saved-list" class="wifi-saved-list" style="display:none;">
-                            <!-- Saved networks will be populated by JavaScript -->
-                        </div>
                     </div>
+                </div>
     <!-- Hotspot Prompt Modal -->
     <div id="hotspot-prompt-modal" class="modal" style="display:none;">
         <div class="modal-content">
