@@ -1713,3 +1713,76 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log('\u2713 Application ready!');
 });
+
+// QR code display logic for Hotspot modal
+function showHotspotQR() {
+    const modal = document.getElementById('hotspot-qr-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    // Clear previous QR codes
+    document.getElementById('hotspot-wifi-qr').innerHTML = '';
+    document.getElementById('hotspot-webapp-qr').innerHTML = '';
+    document.getElementById('hotspot-ssid-info').textContent = '';
+    document.getElementById('hotspot-password-info').textContent = '';
+
+    // Fetch hotspot credentials
+    api.get('/hotspot/credentials').then(data => {
+        // WiFi QR code (WIFI:T:WPA;S:SSID;P:PASSWORD;;)
+        const wifiQR = `WIFI:T:WPA;S:${data.ssid};P:${data.password};;`;
+        renderQRCode('hotspot-wifi-qr', wifiQR);
+
+        // Web app QR code (URL)
+        const webappURL = `http://${data.ip}:5000/`;
+        renderQRCode('hotspot-webapp-qr', webappURL);
+
+        // Show SSID and password
+        document.getElementById('hotspot-ssid-info').textContent = `SSID: ${data.ssid}`;
+        document.getElementById('hotspot-password-info').textContent = `Password: ${data.password}`;
+    }).catch(err => {
+        document.getElementById('hotspot-wifi-qr').innerHTML = '<div class="qr-error">Failed to load hotspot info</div>';
+        document.getElementById('hotspot-webapp-qr').innerHTML = '';
+    });
+}
+
+function closeHotspotQR() {
+    const modal = document.getElementById('hotspot-qr-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+// Render QR code using qrcode.js (assumed loaded)
+function renderQRCode(elementId, text) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    // If qrcode.js is available
+    if (window.QRCode) {
+        new QRCode(el, {
+            text: text,
+            width: 128,
+            height: 128,
+            colorDark: '#000',
+            colorLight: '#fff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    } else {
+        el.textContent = text;
+    }
+}
+
+// Add instructions for users in modal
+// Instructions are already present in index.html modal body
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Modal close handler for QR modal
+    const qrModal = document.getElementById('hotspot-qr-modal');
+    if (qrModal) {
+        const closeBtn = qrModal.querySelector('.btn-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeHotspotQR);
+        }
+        qrModal.addEventListener('click', (e) => {
+            if (e.target === qrModal) closeHotspotQR();
+        });
+    }
+});

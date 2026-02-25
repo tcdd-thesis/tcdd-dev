@@ -142,8 +142,8 @@
             </div>
             
             <div class="settings-container-compact">
-                <div class="settings-group">
-                    <h3>Display</h3>
+                <div class="settings-group settings-group-touch">
+                    <h3>Device Settings</h3>
                     <div class="setting-row">
                         <label>Screen Brightness</label>
                         <div class="slider-container">
@@ -151,9 +151,24 @@
                             <span id="brightness-display" class="slider-value">50%</span>
                         </div>
                     </div>
+                    <div class="setting-row">
+                        <label>Detection Confidence</label>
+                        <div class="slider-container">
+                            <input type="range" id="setting-confidence" class="slider-touch" min="0" max="100" value="50" step="5">
+                            <span id="confidence-display" class="slider-value">50%</span>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <label>Version</label>
+                        <span class="setting-value">1.0.0</span>
+                    </div>
+                    <div class="setting-row">
+                        <label>Device</label>
+                        <span class="setting-value">Raspberry Pi 5</span>
+                    </div>
                 </div>
 
-                <div class="settings-group">
+                <div class="settings-group settings-group-touch">
                     <h3>Hotspot & WiFi</h3>
                     <div class="setting-row">
                         <label>Hotspot Status</label>
