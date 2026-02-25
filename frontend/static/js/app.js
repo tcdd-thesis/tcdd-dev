@@ -1,3 +1,70 @@
+// Hotspot toggle logic
+function toggleHotspotUI(checkbox) {
+    if (checkbox.checked) {
+        // Prompt user before enabling hotspot
+        showHotspotPrompt();
+    } else {
+        // Disable hotspot directly
+        api.post('/hotspot/toggle', { enabled: false })
+            .then(res => {
+                showToast('Hotspot disabled', 'info');
+                document.getElementById('hotspot-status-text').textContent = 'Disabled';
+            })
+            .catch(err => {
+                showToast('Failed to disable hotspot', 'error');
+            });
+    }
+}
+
+function showHotspotPrompt() {
+    const modal = document.getElementById('hotspot-prompt-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeHotspotPrompt() {
+    const modal = document.getElementById('hotspot-prompt-modal');
+    if (modal) modal.style.display = 'none';
+    // Uncheck toggle if cancelled
+    document.getElementById('hotspot-toggle').checked = false;
+}
+
+function confirmHotspotEnable() {
+    closeHotspotPrompt();
+    // Enable hotspot in backend
+    api.post('/hotspot/toggle', { enabled: true })
+        .then(res => {
+            // Start hotspot
+            api.post('/hotspot/start').then(result => {
+                if (result.prompt) {
+                    showToast(result.prompt, 'warning');
+                } else if (result.success) {
+                    showToast('Hotspot enabled', 'success');
+                    document.getElementById('hotspot-status-text').textContent = 'Enabled';
+                } else {
+                    showToast('Failed to start hotspot', 'error');
+                    document.getElementById('hotspot-toggle').checked = false;
+                }
+            });
+        })
+        .catch(err => {
+            showToast('Failed to enable hotspot', 'error');
+            document.getElementById('hotspot-toggle').checked = false;
+        });
+}
+
+// On page load, fetch hotspot status and set toggle
+function loadHotspotStatus() {
+    api.get('/hotspot/status').then(status => {
+        const toggle = document.getElementById('hotspot-toggle');
+        const text = document.getElementById('hotspot-status-text');
+        if (toggle) toggle.checked = status.enabled;
+        if (text) text.textContent = status.active ? 'Enabled' : 'Disabled';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadHotspotStatus();
+});
 /**
  * Sign Detection System - Touchscreen Application
  * Optimized for 2.8" LCD (640x480)

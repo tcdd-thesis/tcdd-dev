@@ -902,18 +902,43 @@ def get_hotspot_status():
         logger.error(f"Error getting hotspot status: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/hotspot/toggle', methods=['POST'])
+def toggle_hotspot():
+    """
+    Toggle hotspot enabled state (for settings UI).
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+        config.set('hotspot.enabled', enabled, save=True)
+        hotspot_manager._enabled = enabled
+        logger.info(f"Hotspot enabled set to {enabled}")
+        return jsonify({'success': True, 'enabled': enabled}), 200
+    except Exception as e:
+        logger.error(f"Error toggling hotspot: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/hotspot/start', methods=['POST'])
 def start_hotspot():
     """
     Start the WiFi hotspot.
     Only accessible from touchscreen (local).
+    Checks hotspot.enabled config.
     """
     if not is_local_request():
         return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
-    
+    if not config.get('hotspot.enabled', True):
+        return jsonify({'error': 'Hotspot is disabled in settings'}), 403
     try:
+        # Check if WiFi is connected and prompt user (frontend handles prompt)
+        wifi_status = hotspot_manager.is_wifi_connected() if hasattr(hotspot_manager, 'is_wifi_connected') else False
+        if wifi_status:
+            return jsonify({'prompt': 'Hotspot will disconnect WiFi. Proceed?'}), 200
         result = hotspot_manager.start()
-        
         if result['success']:
             logger.info(f"📶 Hotspot started via API: {result.get('ssid')}")
             socketio.emit('hotspot_started', {
@@ -921,9 +946,7 @@ def start_hotspot():
                 'ip': result.get('ip'),
                 'timestamp': datetime.now().isoformat()
             })
-        
         return jsonify(result), 200 if result['success'] else 500
-        
     except Exception as e:
         logger.error(f"Error starting hotspot: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500

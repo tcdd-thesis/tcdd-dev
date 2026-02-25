@@ -154,10 +154,15 @@
                 </div>
 
                 <div class="settings-group">
-                    <h3>WiFi</h3>
+                    <h3>WiFi & Hotspot</h3>
                     <div class="setting-row wifi-status-row">
                         <label>Status</label>
                         <span id="wifi-status-text" class="wifi-status">Checking...</span>
+                    </div>
+                    <div class="setting-row hotspot-toggle-row">
+                        <label>Hotspot</label>
+                        <input type="checkbox" id="hotspot-toggle" onchange="toggleHotspotUI(this)">
+                        <span id="hotspot-status-text" class="hotspot-status">Checking...</span>
                     </div>
                     <div class="wifi-controls">
                         <button id="btn-wifi-disconnect" class="btn btn-danger btn-touch btn-small" onclick="disconnectWifi()" style="display:none;">
@@ -179,6 +184,22 @@
                             <!-- Saved networks will be populated by JavaScript -->
                         </div>
                     </div>
+    <!-- Hotspot Prompt Modal -->
+    <div id="hotspot-prompt-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Enable Hotspot</h3>
+                <button class="btn-close" onclick="closeHotspotPrompt()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p>This will disconnect WiFi to start the hotspot. Proceed?</p>
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn btn-secondary btn-touch" onclick="closeHotspotPrompt()">Cancel</button>
+                    <button class="btn btn-success btn-touch" onclick="confirmHotspotEnable()">Enable Hotspot</button>
+                </div>
+            </div>
+        </div>
+    </div>
                 </div>
 
                 <div class="settings-group">
