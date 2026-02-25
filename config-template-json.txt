@@ -7,6 +7,7 @@
   "debug": false,                  // Enable debug mode (requires restart)
   "host": "0.0.0.0",               // Bind address (0.0.0.0 = all interfaces)
   "venv_path": "backend/.venv",    // Path to Python virtual environment (requires restart)
+  "dev_mode": false,               // Enable development mode (can exit app, no auto start, verbose logging)
   
   // =============================================================================
   // CAMERA SETTINGS
