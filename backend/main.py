@@ -290,7 +290,12 @@ def initialize():
         logger.info("Initializing hotspot manager...")
         hotspot_manager = get_hotspot_manager(config=config)
         
-        # Hotspot will only start when toggled ON by user in UI
+        # Explicitly disable hotspot auto-start
+        if hasattr(hotspot_manager, 'set_auto_start'):
+            hotspot_manager.set_auto_start(False)
+            logger.info("Hotspot auto-start has been disabled.")
+        if hasattr(config, 'set'):
+            config.set('hotspot.autostart', False, save=True)
         logger.info("Hotspot auto-start is disabled. Use the UI toggle to enable hotspot.")
         
         logger.info("Initializing display controller...")
