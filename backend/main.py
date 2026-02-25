@@ -40,6 +40,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Load configuration
 config = Config()
+# If empty config and exception raised, exit
+if config is None:
+    sys.exit(1)
 
 # Create necessary directories before logging setup
 os.makedirs('data/logs', exist_ok=True)

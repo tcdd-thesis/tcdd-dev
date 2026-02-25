@@ -63,29 +63,62 @@ class Config:
             return self._get_default_config()
     
     def _get_default_config(self):
-        """Get default configuration"""
-        return {
-            "port": 5000,
-            "debug": False,
-            "camera": {
-                "width": 640,
-                "height": 480,
-                "fps": 30
-            },
-            "detection": {
-                "model": "backend/models/yolov8n.pt",
-                "confidence": 0.5
-            },
-            "display": {
-                "brightness": 50,
-                "backlight_pin": 18,
-                "pwm_frequency": 1000
-            },
-            "logging": {
-                "level": "INFO",
-                "file": "data/logs/app.log"
-            }
-        }
+        """Get default configuration by parsing config-template-json.txt"""
+        template_path = os.path.join(os.path.dirname(self.config_file), 'config-template-json.txt')
+        try:
+            with open(template_path, 'r') as f:
+                content = f.read()
+            
+            # Process line by line
+            lines = content.split('\n')
+            cleaned_lines = []
+            for line in lines:
+                # Remove // comments (but not inside strings)
+                in_string = False
+                escape_next = False
+                result = []
+                i = 0
+                while i < len(line):
+                    ch = line[i]
+                    if escape_next:
+                        result.append(ch)
+                        escape_next = False
+                        i += 1
+                        continue
+                    if ch == '\\' and in_string:
+                        result.append(ch)
+                        escape_next = True
+                        i += 1
+                        continue
+                    if ch == '"':
+                        in_string = not in_string
+                        result.append(ch)
+                        i += 1
+                        continue
+                    if not in_string and ch == '/' and i + 1 < len(line) and line[i + 1] == '/':
+                        break  # Rest of line is a comment
+                    result.append(ch)
+                    i += 1
+                
+                stripped = ''.join(result)
+                
+                # Remove trailing whitespace (preserves leading indentation)
+                stripped = stripped.rstrip()
+                
+                # Skip empty lines
+                if stripped.strip() == '':
+                    continue
+                
+                cleaned_lines.append(stripped)
+            
+            cleaned_json = '\n'.join(cleaned_lines)
+            with open(self.config_file, 'w') as f:
+                f.write(cleaned_json)
+            return json.loads(cleaned_json)
+        
+        except Exception as e:
+            logger.error(f"Error parsing config template: {e}")
+            return None
     
     def reload(self):
         """
