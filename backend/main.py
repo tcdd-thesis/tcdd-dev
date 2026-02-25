@@ -6,101 +6,43 @@ Sign Detection System - Main Flask Application
 Serves both frontend (HTML/CSS/JS) and backend API
 """
 
-from flask import Flask, render_template, jsonify, request, send_from_directory
+# ============================================================================
+# IMPORTS
+# ============================================================================
+
+from flask import Flask, render_template, jsonify, request, send_from_directory, send_file
 from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 import os
 import sys
+import io
 import logging
+import psutil
 from datetime import datetime
 from pathlib import Path
 
-# Set project root directory (parent of backend/)
-PROJECT_ROOT = Path(__file__).parent.parent.resolve()
-os.chdir(PROJECT_ROOT)
-
-# Import local modules
+# Local imports
+from config import Config
 from camera import Camera
 from detector import Detector
-from config import Config
+from display import DisplayController
 from metrics_logger import MetricsLogger
 from violations_logger import ViolationsLogger
-from display import DisplayController
-from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP, HOTSPOT_DOMAIN
-from hotspot import HotspotManager, get_hotspot_manager
-import psutil
+from pairing import get_pairing_manager, HOTSPOT_IP
+from hotspot import get_hotspot_manager
 
-# For QR code image generation
-import io
-import qrcode
-from flask import send_file
+try:
+    import qrcode
+except ImportError:
+    qrcode = None
 
-
-#!/usr/bin/env python3
-"""
-Sign Detection System - Main Flask Application
-Serves both frontend (HTML/CSS/JS) and backend API
-"""
-
-from flask import Flask, render_template, jsonify, request, send_from_directory
-from flask_socketio import SocketIO, emit, disconnect
-from flask_cors import CORS
-import os
-import sys
-import logging
-from datetime import datetime
-from pathlib import Path
+# ============================================================================
+# APP INITIALIZATION
+# ============================================================================
 
 # Set project root directory (parent of backend/)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
-os.chdir(PROJECT_ROOT)
 
-# Import local modules
-from camera import Camera
-from detector import Detector
-from config import Config
-from metrics_logger import MetricsLogger
-from violations_logger import ViolationsLogger
-from display import DisplayController
-from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP, HOTSPOT_DOMAIN
-from hotspot import HotspotManager, get_hotspot_manager
-import psutil
-
-# For QR code image generation
-import io
-import qrcode
-from flask import send_file
-
-# Initialize Flask app
-app = Flask(__name__,
-            static_folder='../frontend/static',
-            static_url_path='/static',
-            template_folder='../frontend/templates')
-
-@app.route('/api/hotspot/qr')
-def get_hotspot_qr():
-    """
-    Serve QR code image for WiFi or webapp access.
-    Query params:
-        type: 'wifi' or 'webapp' (default: wifi)
-    """
-    qr_type = request.args.get('type', 'wifi')
-    creds = hotspot_manager.get_credentials()
-    ip = creds.get('ip', HOTSPOT_IP)
-    ssid = creds.get('ssid')
-    password = creds.get('password')
-    if qr_type == 'webapp':
-        qr_data = f"http://{ip}:5000/"
-    else:
-        # WiFi QR code format
-        qr_data = f"WIFI:T:WPA;S:{ssid};P:{password};;"
-    img = qrcode.make(qr_data)
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    return send_file(buf, mimetype='image/png', as_attachment=False, download_name=f"hotspot_{qr_type}_qr.png")
-
-# Initialize Flask app
 app = Flask(__name__,
             static_folder='../frontend/static',
             static_url_path='/static',
@@ -111,66 +53,13 @@ CORS(app)
 
 # Initialize SocketIO for real-time video streaming
 socketio = SocketIO(app, cors_allowed_origins="*", manage_session=True)
-# WebSocket session pairing state
+
+# WebSocket session pairing state: maps sid -> session_token
 connected_sessions = {}
 
 # ============================================================================
-# WEB ROUTES (Serve Frontend)
+# CONFIGURATION & LOGGING
 # ============================================================================
-
-# ============================================================================
-# SOCKETIO EVENTS (WebSocket Authentication)
-# ============================================================================
-
-@socketio.on('connect')
-def ws_connect():
-    # Accept connection, but require authentication for sensitive actions
-    emit('connected', {'message': 'WebSocket connected'})
-
-@socketio.on('authenticate')
-def ws_authenticate(data):
-    session_token = data.get('session_token')
-    if not session_token or not pairing_manager.validate_session(session_token):
-        emit('auth_failed', {'message': 'Invalid or missing session token'})
-        disconnect()
-        return
-    # Store session token for this sid
-    connected_sessions[request.sid] = session_token
-    emit('auth_success', {'message': 'Authenticated'})
-
-@socketio.on('disconnect')
-def ws_disconnect():
-    connected_sessions.pop(request.sid, None)
-
-# Example: Restrict sensitive command (system control)
-@socketio.on('shutdown')
-def ws_shutdown(data):
-    session_token = connected_sessions.get(request.sid)
-    if not session_token or not pairing_manager.validate_session(session_token):
-        emit('error', {'message': 'Authentication required for shutdown'})
-        return
-    # Only paired device can shutdown
-    shutdown_system()
-
-# Example: Restrict reboot command
-@socketio.on('reboot')
-def ws_reboot(data):
-    session_token = connected_sessions.get(request.sid)
-    if not session_token or not pairing_manager.validate_session(session_token):
-        emit('error', {'message': 'Authentication required for reboot'})
-        return
-    reboot_system()
-
-# Example: Restrict config update
-@socketio.on('update_config')
-def ws_update_config(data):
-    session_token = connected_sessions.get(request.sid)
-    if not session_token or not pairing_manager.validate_session(session_token):
-        emit('error', {'message': 'Authentication required for config update'})
-        return
-    update_config()
-
-# All other events (e.g., video streaming, status) remain unrestricted
 
 # Load configuration
 config = Config()
@@ -191,7 +80,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global instances
+# ============================================================================
+# GLOBAL INSTANCES
+# ============================================================================
+
 camera = None
 detector = None
 display_controller = None
@@ -199,7 +91,7 @@ is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
 
-# Pairing and Hotspot managers (initialized after config)
+# Pairing and Hotspot managers (initialized in initialize())
 pairing_manager = None
 hotspot_manager = None
 
@@ -281,9 +173,19 @@ def initialize():
         
         # Set disconnect callback to emit socketio event
         def disconnect_device(session_token):
-            """Disconnect a paired device by session token"""
-            socketio.emit('force_disconnect', {'reason': 'New device paired'}, room=session_token)
-            logger.info(f"📤 Sent disconnect signal for session: {session_token[:8]}...")
+            """Disconnect a paired device by session token.
+            Looks up the sid from connected_sessions and emits force_disconnect."""
+            for sid, tok in list(connected_sessions.items()):
+                if tok == session_token:
+                    socketio.emit('force_disconnect', {'reason': 'New device paired'}, to=sid)
+                    try:
+                        socketio.server.disconnect(sid)
+                    except Exception:
+                        pass
+                    connected_sessions.pop(sid, None)
+                    logger.info(f"📤 Disconnected session {sid} for token: {session_token[:8]}...")
+                    return
+            logger.info(f"📤 No active session found for token: {session_token[:8]}...")
         
         pairing_manager.set_disconnect_callback(disconnect_device)
         
@@ -333,6 +235,57 @@ def catch_all(path):
     if path.startswith('static/') or '.' in path:
         return send_from_directory(app.static_folder, path)
     return render_template('index.html')
+
+# ============================================================================
+# SOCKETIO EVENTS (WebSocket Authentication)
+# ============================================================================
+
+@socketio.on('connect')
+def ws_connect():
+    """Accept connection, but require authentication for sensitive actions"""
+    emit('connected', {'message': 'WebSocket connected'})
+
+@socketio.on('authenticate')
+def ws_authenticate(data):
+    """Authenticate a WebSocket connection with a session token"""
+    session_token = data.get('session_token')
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('auth_failed', {'message': 'Invalid or missing session token'})
+        disconnect()
+        return
+    # Store session token for this sid
+    connected_sessions[request.sid] = session_token
+    emit('auth_success', {'message': 'Authenticated'})
+
+@socketio.on('disconnect')
+def ws_disconnect():
+    """Clean up session tracking on disconnect"""
+    connected_sessions.pop(request.sid, None)
+
+# Restrict sensitive commands to authenticated (paired) devices
+@socketio.on('shutdown')
+def ws_shutdown(data):
+    session_token = connected_sessions.get(request.sid)
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('error', {'message': 'Authentication required for shutdown'})
+        return
+    shutdown_system()
+
+@socketio.on('reboot')
+def ws_reboot(data):
+    session_token = connected_sessions.get(request.sid)
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('error', {'message': 'Authentication required for reboot'})
+        return
+    reboot_system()
+
+@socketio.on('update_config')
+def ws_update_config(data):
+    session_token = connected_sessions.get(request.sid)
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('error', {'message': 'Authentication required for config update'})
+        return
+    update_config()
 
 # ============================================================================
 # API ROUTES
@@ -1135,6 +1088,37 @@ def get_hotspot_clients():
     except Exception as e:
         logger.error(f"Error getting hotspot clients: {e}")
         return jsonify({'error': str(e), 'clients': []}), 500
+
+# ----------------------------------------------------------------------------
+# HOTSPOT QR CODE API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/hotspot/qr')
+def get_hotspot_qr():
+    """
+    Serve QR code image for WiFi or webapp access.
+    Query params:
+        type: 'wifi' or 'webapp' (default: wifi)
+    """
+    qr_type = request.args.get('type', 'wifi')
+    creds = hotspot_manager.get_credentials()
+    ip = creds.get('ip', HOTSPOT_IP)
+    ssid = creds.get('ssid')
+    password = creds.get('password')
+    if qr_type == 'webapp':
+        qr_data = f"http://{ip}:5000/"
+    else:
+        # WiFi QR code format
+        qr_data = f"WIFI:T:WPA;S:{ssid};P:{password};;"
+    
+    if qrcode is None:
+        return jsonify({'error': 'qrcode library not installed'}), 500
+    
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png', as_attachment=False, download_name=f"hotspot_{qr_type}_qr.png")
 
 # ============================================================================
 # STREAMING LOOP WITH METRICS
