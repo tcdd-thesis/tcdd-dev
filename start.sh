@@ -29,6 +29,26 @@ if [ "$DEV_MODE" = "true" ] && [ -n "$INVOCATION_ID" ]; then
     exit 0
 fi
 
+# --- Systemd service check ---
+# Install and enable the systemd service if it isn't already present
+SERVICE_NAME="tcdd.service"
+SERVICE_SRC="$(pwd)/systemd/$SERVICE_NAME"
+SERVICE_DEST="/etc/systemd/system/$SERVICE_NAME"
+
+if [ ! -f "$SERVICE_DEST" ]; then
+    echo "Systemd service not installed. Installing $SERVICE_NAME..."
+    if [ -f "$SERVICE_SRC" ]; then
+        sudo cp "$SERVICE_SRC" "$SERVICE_DEST"
+        sudo systemctl daemon-reload
+        sudo systemctl enable "$SERVICE_NAME"
+        echo "$SERVICE_NAME installed and enabled for autostart."
+    else
+        echo "Warning: Service file not found at $SERVICE_SRC — skipping installation."
+    fi
+else
+    echo "Systemd service $SERVICE_NAME is already installed."
+fi
+
 # Extract virtual environment path from config.json, exit if no value found
 if echo "$CONFIG" | grep -q '"venv_path":\s*"\K[^"]+'; then
     echo "Error: 'venv_path' not found in config.json!"
