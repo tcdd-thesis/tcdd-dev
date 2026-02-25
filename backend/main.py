@@ -95,6 +95,9 @@ violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
 pairing_manager = None
 hotspot_manager = None
 
+# Lifecycle flag: True only after initialize() completes and server is about to run
+app_ready = False
+
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
 # ============================================================================
@@ -105,6 +108,11 @@ def on_config_change(old_config, new_config):
     This is called automatically when config.json is modified
     """
     global camera, detector, display_controller
+    
+    # Guard: skip live updates if system isn't fully initialized yet
+    if not app_ready:
+        logger.debug("Config changed during startup, skipping live update")
+        return
     
     logger.info("🔄 Configuration changed, updating components...")
     
@@ -157,8 +165,8 @@ def on_config_change(old_config, new_config):
     except Exception as e:
         logger.error(f"❌ Error updating components after config change: {e}")
 
-# Register the config change callback
-config.register_change_callback(on_config_change)
+# NOTE: Config change callback is registered at the end of initialize()
+# to avoid firing during startup when components aren't ready yet.
 
 # ============================================================================
 # INITIALIZATION
@@ -214,6 +222,11 @@ def initialize():
         camera.start()
         is_streaming = True
         socketio.start_background_task(stream_video)
+        
+        # Register config change callback now that all components are ready
+        config.register_change_callback(on_config_change)
+        logger.info("✅ Config change callback registered")
+        
         return True
         
     except Exception as e:
@@ -1263,6 +1276,9 @@ if __name__ == '__main__':
         logger.info(f"Server starting on http://0.0.0.0:{port}")
         logger.info("Press Ctrl+C to stop")
         logger.info("="*60)
+        
+        # Mark system as fully ready — config callbacks can now broadcast
+        app_ready = True
         
         try:
             socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
