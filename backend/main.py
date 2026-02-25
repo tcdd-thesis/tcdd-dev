@@ -5,7 +5,7 @@ Serves both frontend (HTML/CSS/JS) and backend API
 """
 
 from flask import Flask, render_template, jsonify, request, send_from_directory
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 import os
 import sys
@@ -38,7 +38,67 @@ app = Flask(__name__,
 CORS(app)
 
 # Initialize SocketIO for real-time video streaming
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=True)
+# WebSocket session pairing state
+connected_sessions = {}
+
+# ============================================================================
+# WEB ROUTES (Serve Frontend)
+# ============================================================================
+
+# ============================================================================
+# SOCKETIO EVENTS (WebSocket Authentication)
+# ============================================================================
+
+@socketio.on('connect')
+def ws_connect():
+    # Accept connection, but require authentication for sensitive actions
+    emit('connected', {'message': 'WebSocket connected'})
+
+@socketio.on('authenticate')
+def ws_authenticate(data):
+    session_token = data.get('session_token')
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('auth_failed', {'message': 'Invalid or missing session token'})
+        disconnect()
+        return
+    # Store session token for this sid
+    connected_sessions[request.sid] = session_token
+    emit('auth_success', {'message': 'Authenticated'})
+
+@socketio.on('disconnect')
+def ws_disconnect():
+    connected_sessions.pop(request.sid, None)
+
+# Example: Restrict sensitive command (system control)
+@socketio.on('shutdown')
+def ws_shutdown(data):
+    session_token = connected_sessions.get(request.sid)
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('error', {'message': 'Authentication required for shutdown'})
+        return
+    # Only paired device can shutdown
+    shutdown_system()
+
+# Example: Restrict reboot command
+@socketio.on('reboot')
+def ws_reboot(data):
+    session_token = connected_sessions.get(request.sid)
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('error', {'message': 'Authentication required for reboot'})
+        return
+    reboot_system()
+
+# Example: Restrict config update
+@socketio.on('update_config')
+def ws_update_config(data):
+    session_token = connected_sessions.get(request.sid)
+    if not session_token or not pairing_manager.validate_session(session_token):
+        emit('error', {'message': 'Authentication required for config update'})
+        return
+    update_config()
+
+# All other events (e.g., video streaming, status) remain unrestricted
 
 # Load configuration
 config = Config()
