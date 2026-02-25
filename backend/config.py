@@ -370,8 +370,8 @@ def migrate_config(template_path, config_path):
     with open(config_path, 'r') as f:
         current = json.load(f)
 
-    tmpl_ver = template.get('config_version', '0.0.0')
-    conf_ver = current.get('config_version', '0.0.0')
+    tmpl_ver = template.get('version', '0.0.0')
+    conf_ver = current.get('version', '0.0.0')
 
     # Compare versions — only migrate if template is strictly newer
     if _parse_version(tmpl_ver) <= _parse_version(conf_ver):
@@ -384,7 +384,7 @@ def migrate_config(template_path, config_path):
     merged = _merge_configs(template, current)
 
     # Ensure version is updated to the template's version
-    merged['config_version'] = tmpl_ver
+    merged['version'] = tmpl_ver
 
     # Backup old config
     backup_path = f"{config_path}.backup"
