@@ -54,17 +54,17 @@ body {
     background: #1a1a1a;
     color: white;
     line-height: 1.4;
-    overflow: hidden;
     width: 100vw;
     height: 100vh;
-    max-width: 640px;
-    max-height: 480px;
     margin: 0 auto;
     touch-action: auto;
     position: relative;
 }
 
 body.touchscreen {
+    overflow: hidden;
+    max-width: 640px;
+    max-height: 480px;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -73,13 +73,16 @@ body.touchscreen {
 .home-container {
     width: 100%;
     height: 100%;
-    max-width: 640px;
-    max-height: 480px;
     display: flex;
     flex-direction: column;
     padding: 15px;
     background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
     box-sizing: border-box;
+}
+
+.touchscreen .home-container {
+    max-width: 640px;
+    max-height: 480px;
 }
 
 .home-header {
@@ -532,17 +535,27 @@ body.touchscreen {
     display: none;
     width: 100%;
     height: 100%;
-    max-width: 640px;
-    max-height: 480px;
     background: #1a1a1a;
     box-sizing: border-box;
     overflow: hidden;
+}
+
+.touchscreen .page {
+    max-width: 640px;
+    max-height: 480px;
 }
 
 .page.active {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+/* Allow scrolling on settings and logs pages when not on touchscreen */
+body:not(.touchscreen) #page-settings.active,
+body:not(.touchscreen) #page-logs.active {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ========== Page Header ========== */

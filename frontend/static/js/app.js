@@ -145,8 +145,15 @@ function initTouchScroll(element) {
 
 /**
  * Initialize all scrollable containers
+ * Only needed on touchscreen (RPi) — mobile uses native CSS scrolling
  */
 function initAllTouchScrolling() {
+    // Skip manual touch-scroll on non-touchscreen devices (mobile uses native scroll)
+    if (!document.body.classList.contains('touchscreen')) {
+        console.log('Non-touchscreen device: using native scrolling');
+        return;
+    }
+
     const scrollables = document.querySelectorAll(
         '.settings-container-compact, .violations-log-container, #wifi-networks-list, #wifi-saved-list, .modal-content'
     );
