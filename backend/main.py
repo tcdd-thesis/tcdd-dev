@@ -35,9 +35,47 @@ import io
 import qrcode
 from flask import send_file
 
-# ----------------------------------------------------------------------------
-# HOTSPOT QR CODE IMAGE API (moved for clarity)
-# ----------------------------------------------------------------------------
+
+#!/usr/bin/env python3
+"""
+Sign Detection System - Main Flask Application
+Serves both frontend (HTML/CSS/JS) and backend API
+"""
+
+from flask import Flask, render_template, jsonify, request, send_from_directory
+from flask_socketio import SocketIO, emit, disconnect
+from flask_cors import CORS
+import os
+import sys
+import logging
+from datetime import datetime
+from pathlib import Path
+
+# Set project root directory (parent of backend/)
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+os.chdir(PROJECT_ROOT)
+
+# Import local modules
+from camera import Camera
+from detector import Detector
+from config import Config
+from metrics_logger import MetricsLogger
+from violations_logger import ViolationsLogger
+from display import DisplayController
+from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP, HOTSPOT_DOMAIN
+from hotspot import HotspotManager, get_hotspot_manager
+import psutil
+
+# For QR code image generation
+import io
+import qrcode
+from flask import send_file
+
+# Initialize Flask app
+app = Flask(__name__,
+            static_folder='../frontend/static',
+            static_url_path='/static',
+            template_folder='../frontend/templates')
 
 @app.route('/api/hotspot/qr')
 def get_hotspot_qr():
