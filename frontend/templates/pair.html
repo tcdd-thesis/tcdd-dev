@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pair Device — TCDD</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f0f;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .card {
+            background: #1a1a1a;
+            border-radius: 16px;
+            padding: 32px 24px;
+            width: 100%;
+            max-width: 380px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 8px;
+        }
+
+        .title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 28px;
+        }
+
+        .token-input {
+            width: 100%;
+            padding: 16px;
+            font-size: 24px;
+            font-family: 'Courier New', monospace;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-align: center;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.06);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            color: #fff;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .token-input:focus {
+            border-color: #4a9eff;
+        }
+
+        .token-input::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+            letter-spacing: 2px;
+            font-size: 18px;
+        }
+
+        .btn-pair {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            margin-top: 16px;
+            background: #4a9eff;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-pair:active {
+            transform: scale(0.97);
+        }
+
+        .btn-pair:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .status.error {
+            display: block;
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .status.success {
+            display: block;
+            background: rgba(74, 222, 128, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+
+        .status.loading {
+            display: block;
+            background: rgba(74, 158, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Success screen */
+        .success-screen {
+            display: none;
+        }
+
+        .success-icon {
+            font-size: 64px;
+            margin-bottom: 12px;
+        }
+
+        .success-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #4ade80;
+            margin-bottom: 8px;
+        }
+
+        .success-msg {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .btn-open {
+            display: inline-block;
+            padding: 14px 32px;
+            background: #4ade80;
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .btn-open:active {
+            transform: scale(0.97);
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <!-- Pairing form -->
+        <div id="pair-form">
+            <div class="logo">🔗</div>
+            <div class="title">Pair Device</div>
+            <div class="subtitle">Enter the code shown on the display</div>
+
+            <input type="text" id="token-input" class="token-input" placeholder="ENTER CODE" maxlength="8"
+                autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+
+            <button id="btn-pair" class="btn-pair" onclick="submitToken()">
+                Pair Now
+            </button>
+
+            <div id="status" class="status"></div>
+        </div>
+
+        <!-- Success screen -->
+        <div id="success-screen" class="success-screen">
+            <div class="success-icon">✅</div>
+            <div class="success-title">Paired!</div>
+            <div class="success-msg">Your device is now connected</div>
+            <a href="/" class="btn-open">Open App</a>
+        </div>
+    </div>
+
+    <script>
+        const tokenInput = document.getElementById('token-input');
+        const btnPair = document.getElementById('btn-pair');
+        const statusDiv = document.getElementById('status');
+
+        // Auto-fill token from URL if present
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('token');
+        if (urlToken) {
+            tokenInput.value = urlToken.toUpperCase();
+            // Auto-submit after a brief delay so user sees the page
+            setTimeout(() => submitToken(), 600);
+        }
+
+        // Focus input on load
+        tokenInput.focus();
+
+        // Allow Enter key to submit
+        tokenInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submitToken();
+        });
+
+        // Detect device name from User-Agent
+        function getDeviceName() {
+            const ua = navigator.userAgent;
+            if (/iPhone/.test(ua)) return 'iPhone';
+            if (/iPad/.test(ua)) return 'iPad';
+            if (/Android/.test(ua)) {
+                const match = ua.match(/;\s*([^;)]+)\s*Build/);
+                return match ? match[1].trim() : 'Android Device';
+            }
+            if (/Mac/.test(ua)) return 'Mac';
+            if (/Windows/.test(ua)) return 'Windows PC';
+            return 'Unknown Device';
+        }
+
+        async function submitToken() {
+            const token = tokenInput.value.trim().toUpperCase();
+            if (!token) {
+                showStatus('Please enter a pairing code', 'error');
+                tokenInput.focus();
+                return;
+            }
+
+            // Disable UI
+            btnPair.disabled = true;
+            btnPair.innerHTML = '<span class="spinner"></span> Pairing...';
+            showStatus('Connecting...', 'loading');
+
+            try {
+                const res = await fetch('/api/pair/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        device_name: getDeviceName(),
+                        device_id: getOrCreateDeviceId()
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // Store session token
+                    localStorage.setItem('tcdd_session_token', data.session_token);
+
+                    // Show success screen
+                    document.getElementById('pair-form').style.display = 'none';
+                    document.getElementById('success-screen').style.display = 'block';
+                } else {
+                    showStatus(data.message || 'Invalid code. Try again.', 'error');
+                    btnPair.disabled = false;
+                    btnPair.textContent = 'Pair Now';
+                    tokenInput.select();
+                }
+            } catch (err) {
+                showStatus('Connection failed. Are you on the hotspot?', 'error');
+                btnPair.disabled = false;
+                btnPair.textContent = 'Pair Now';
+            }
+        }
+
+        function showStatus(msg, type) {
+            statusDiv.textContent = msg;
+            statusDiv.className = 'status ' + type;
+        }
+
+        // Generate or retrieve a persistent device ID
+        function getOrCreateDeviceId() {
+            let id = localStorage.getItem('tcdd_device_id');
+            if (!id) {
+                id = 'dev_' + Math.random().toString(36).slice(2, 14);
+                localStorage.setItem('tcdd_device_id', id);
+            }
+            return id;
+        }
+    </script>
+</body>
+
+</html>

@@ -918,9 +918,7 @@ def pair_landing_page():
     Accessed when phone scans QR code.
     """
     token = request.args.get('token', '')
-    # For now, redirect to main page with token
-    # Phase 5 will add a dedicated mobile pairing UI
-    return render_template('index.html')
+    return render_template('pair.html')
 
 @app.route('/api/pair/qr')
 def get_pairing_qr():
