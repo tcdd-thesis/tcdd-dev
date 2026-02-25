@@ -30,6 +30,38 @@ from pairing import PairingManager, get_pairing_manager, HOTSPOT_IP, HOTSPOT_DOM
 from hotspot import HotspotManager, get_hotspot_manager
 import psutil
 
+# For QR code image generation
+import io
+import qrcode
+from flask import send_file
+
+# ----------------------------------------------------------------------------
+# HOTSPOT QR CODE IMAGE API (moved for clarity)
+# ----------------------------------------------------------------------------
+
+@app.route('/api/hotspot/qr')
+def get_hotspot_qr():
+    """
+    Serve QR code image for WiFi or webapp access.
+    Query params:
+        type: 'wifi' or 'webapp' (default: wifi)
+    """
+    qr_type = request.args.get('type', 'wifi')
+    creds = hotspot_manager.get_credentials()
+    ip = creds.get('ip', HOTSPOT_IP)
+    ssid = creds.get('ssid')
+    password = creds.get('password')
+    if qr_type == 'webapp':
+        qr_data = f"http://{ip}:5000/"
+    else:
+        # WiFi QR code format
+        qr_data = f"WIFI:T:WPA;S:{ssid};P:{password};;"
+    img = qrcode.make(qr_data)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png', as_attachment=False, download_name=f"hotspot_{qr_type}_qr.png")
+
 # Initialize Flask app
 app = Flask(__name__,
             static_folder='../frontend/static',

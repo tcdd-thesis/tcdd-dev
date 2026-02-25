@@ -179,19 +179,16 @@
                         <span id="hotspot-ssid" class="hotspot-ssid">---</span>
                     </div>
                     <div class="setting-row">
-                        <label>Enable Hotspot</label>
-                        <input type="checkbox" id="hotspot-toggle" onchange="toggleHotspotUI(this)">
+                        <button class="btn btn-hotspot-toggle btn-touch" id="hotspot-toggle-btn" onclick="toggleHotspotUI()">
+                            <i class="fa-solid fa-wifi"></i> <span id="hotspot-toggle-label">Enable Hotspot</span>
+                        </button>
                         <span class="setting-desc">Share WiFi for phone/tablet access</span>
-                    </div>
-                    <div class="setting-row">
-                        <span class="setting-desc">When enabled, your phone/tablet can connect to this device's WiFi hotspot and access the web app.</span>
-                    </div>
                     <div class="setting-row">
                         <button class="btn btn-primary btn-touch" id="btn-show-hotspot-qr" onclick="showHotspotQR()">
                             <i class="fa-solid fa-qrcode"></i> Show QR Codes
                         </button>
                     </div>
-                    <!-- Placeholder for QR modal -->
+                    <!-- QR modal with image display -->
                     <div id="hotspot-qr-modal" class="modal" style="display:none;">
                         <div class="modal-content">
                             <div class="modal-header">
@@ -200,9 +197,9 @@
                             </div>
                             <div class="modal-body">
                                 <div class="setting-desc">Scan to join WiFi hotspot:</div>
-                                <div id="hotspot-wifi-qr"></div>
+                                <div id="hotspot-wifi-qr" class="qr-image"></div>
                                 <div class="setting-desc" style="margin-top:10px;">Scan to access web app:</div>
-                                <div id="hotspot-webapp-qr"></div>
+                                <div id="hotspot-webapp-qr" class="qr-image"></div>
                                 <div style="margin-top:10px;">
                                     <span id="hotspot-ssid-info"></span>
                                     <span id="hotspot-password-info"></span>

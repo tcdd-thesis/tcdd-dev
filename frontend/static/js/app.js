@@ -1714,7 +1714,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('\u2713 Application ready!');
 });
 
-// QR code display logic for Hotspot modal
+// QR code display logic for Hotspot modal (server-generated images)
 function showHotspotQR() {
     const modal = document.getElementById('hotspot-qr-modal');
     if (!modal) return;
@@ -1726,23 +1726,16 @@ function showHotspotQR() {
     document.getElementById('hotspot-ssid-info').textContent = '';
     document.getElementById('hotspot-password-info').textContent = '';
 
-    // Fetch hotspot credentials
+    // Fetch hotspot credentials for SSID/password display
     api.get('/hotspot/credentials').then(data => {
-        // WiFi QR code (WIFI:T:WPA;S:SSID;P:PASSWORD;;)
-        const wifiQR = `WIFI:T:WPA;S:${data.ssid};P:${data.password};;`;
-        renderQRCode('hotspot-wifi-qr', wifiQR);
-
-        // Web app QR code (URL)
-        const webappURL = `http://${data.ip}:5000/`;
-        renderQRCode('hotspot-webapp-qr', webappURL);
-
         // Show SSID and password
         document.getElementById('hotspot-ssid-info').textContent = `SSID: ${data.ssid}`;
         document.getElementById('hotspot-password-info').textContent = `Password: ${data.password}`;
-    }).catch(err => {
-        document.getElementById('hotspot-wifi-qr').innerHTML = '<div class="qr-error">Failed to load hotspot info</div>';
-        document.getElementById('hotspot-webapp-qr').innerHTML = '';
     });
+
+    // Set QR code images (served by backend)
+    renderQRCodeImage('hotspot-wifi-qr', '/api/hotspot/qr?type=wifi');
+    renderQRCodeImage('hotspot-webapp-qr', '/api/hotspot/qr?type=webapp');
 }
 
 function closeHotspotQR() {
@@ -1750,24 +1743,11 @@ function closeHotspotQR() {
     if (modal) modal.style.display = 'none';
 }
 
-// Render QR code using qrcode.js (assumed loaded)
-function renderQRCode(elementId, text) {
+// Render QR code as <img> from backend
+function renderQRCodeImage(elementId, imgUrl) {
     const el = document.getElementById(elementId);
     if (!el) return;
-    el.innerHTML = '';
-    // If qrcode.js is available
-    if (window.QRCode) {
-        new QRCode(el, {
-            text: text,
-            width: 128,
-            height: 128,
-            colorDark: '#000',
-            colorLight: '#fff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
-    } else {
-        el.textContent = text;
-    }
+    el.innerHTML = `<img src="${imgUrl}" alt="QR Code" style="width:128px;height:128px;">`;
 }
 
 // Add instructions for users in modal
