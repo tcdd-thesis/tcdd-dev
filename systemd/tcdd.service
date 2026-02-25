@@ -9,8 +9,6 @@ User=tcdd-thesis
 WorkingDirectory=/home/tcdd-thesis/tcdd-dev
 ExecStartPre=/bin/chmod +x /home/tcdd-thesis/tcdd-dev/start.sh
 ExecStart=/bin/bash /home/tcdd-thesis/tcdd-dev/start.sh
-Restart=on-failure
-RestartSec=5
 Environment=DISPLAY=:0
 StandardOutput=journal
 StandardError=journal
