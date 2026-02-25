@@ -8,7 +8,7 @@ import requests
 import sys
 import os
 import time
-from flask_socketio import SocketIO, Client
+import socketio
 
 API_URL = 'http://localhost:5000'
 WS_URL = 'ws://localhost:5000/socket.io/'
@@ -47,7 +47,7 @@ def test_pairing_api():
     print(f"  Paired device: {status['paired_device']}")
 
     # 4. WebSocket authentication
-    sio = Client()
+    sio = socketio.Client()
     auth_success = False
     auth_failed = False
 
