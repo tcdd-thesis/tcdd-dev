@@ -73,6 +73,26 @@ TRAFFIC_ALERTS = {
     "keep_right":                        "Keep right.",
     "keep_left":                         "Keep left.",
     "road_split":                        "Road split ahead.",
+
+    # =================================================================
+    # OLD MODEL LABELS  (remove this section when switching to the
+    # latest model that uses the labels above)
+    # =================================================================
+    "Stop":                              "Stop sign ahead. Prepare to stop.",
+    "Red Light":                         "Red light ahead. Please stop.",
+    "Green Light":                       "Green light. You may proceed.",
+    "Speed Limit 10":                    "Speed limit ten kilometers per hour.",
+    "Speed Limit 20":                    "Speed limit twenty kilometers per hour.",
+    "Speed Limit 30":                    "Speed limit thirty kilometers per hour.",
+    "Speed Limit 40":                    "Speed limit forty kilometers per hour.",
+    "Speed Limit 50":                    "Speed limit fifty kilometers per hour.",
+    "Speed Limit 60":                    "Speed limit sixty kilometers per hour.",
+    "Speed Limit 70":                    "Speed limit seventy kilometers per hour.",
+    "Speed Limit 80":                    "Speed limit eighty kilometers per hour.",
+    "Speed Limit 90":                    "Speed limit ninety kilometers per hour.",
+    "Speed Limit 100":                   "Speed limit one hundred kilometers per hour.",
+    "Speed Limit 110":                   "Speed limit one hundred ten kilometers per hour.",
+    "Speed Limit 120":                   "Speed limit one hundred twenty kilometers per hour.",
 }
 
 # =============================================================================
@@ -126,6 +146,26 @@ PRIORITY_TIERS = {
     "keep_right":                        4,
     "keep_left":                         4,
     "road_split":                        4,
+
+    # =================================================================
+    # OLD MODEL LABELS  (remove this section when switching to the
+    # latest model that uses the labels above)
+    # =================================================================
+    "Stop":                              1,   # Critical
+    "Red Light":                         1,   # Critical
+    "Green Light":                       4,   # Informational
+    "Speed Limit 10":                    3,   # Regulatory
+    "Speed Limit 20":                    3,
+    "Speed Limit 30":                    3,
+    "Speed Limit 40":                    3,
+    "Speed Limit 50":                    3,
+    "Speed Limit 60":                    3,
+    "Speed Limit 70":                    3,
+    "Speed Limit 80":                    3,
+    "Speed Limit 90":                    3,
+    "Speed Limit 100":                   3,
+    "Speed Limit 110":                   3,
+    "Speed Limit 120":                   3,
 }
 
 # Fallback priority for any unknown label
