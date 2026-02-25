@@ -1678,6 +1678,31 @@ body:not(.touchscreen) #page-logs.active {
     border-left: 4px solid var(--primary);
 }
 
+/* ========== Hotspot Status ========== */
+.hotspot-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.hotspot-status.active {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.12);
+}
+
+.hotspot-ssid {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+}
+
 /* ========== Device Pairing ========== */
 .pairing-badge {
     display: inline-flex;

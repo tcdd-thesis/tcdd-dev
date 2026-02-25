@@ -69,7 +69,10 @@ function updateHotspotUI(active, ssid) {
     const ssidSpan = document.getElementById('hotspot-ssid');
 
     if (label) label.textContent = active ? 'Disable Hotspot' : 'Enable Hotspot';
-    if (statusText) statusText.textContent = active ? 'Active' : 'Inactive';
+    if (statusText) {
+        statusText.textContent = active ? 'Active' : 'Inactive';
+        statusText.classList.toggle('active', !!active);
+    }
     if (ssidSpan && ssid) ssidSpan.textContent = ssid;
 }
 
