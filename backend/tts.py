@@ -2,24 +2,27 @@
 """
 Text-to-Speech Alert Engine
 Provides real-time spoken alerts for detected traffic control devices.
-Uses pyttsx3 (offline TTS via espeak) with a dedicated background thread
-to avoid blocking the detection loop.
+Uses espeak/espeak-ng directly via subprocess with a dedicated background
+thread to avoid blocking the detection loop.
+
+No Python TTS library needed — just the system ``espeak`` package.
 """
 
 import logging
+import os
+import shutil
+import subprocess
 import time
 import threading
 from queue import Queue, Empty
 
 logger = logging.getLogger(__name__)
 
-# Try importing pyttsx3
-try:
-    import pyttsx3
-    HAS_TTS = True
-except ImportError:
-    HAS_TTS = False
-    logger.warning("pyttsx3 not available — TTS alerts will be disabled")
+# Check if espeak (or espeak-ng) is available on the system
+_ESPEAK_BIN = shutil.which("espeak-ng") or shutil.which("espeak")
+HAS_TTS = _ESPEAK_BIN is not None
+if not HAS_TTS:
+    logger.warning("Neither espeak-ng nor espeak found on PATH — TTS alerts will be disabled")
 
 
 # =============================================================================
@@ -176,6 +179,10 @@ class TTSEngine:
     """
     Threaded Text-to-Speech engine for real-time driver alerts.
 
+    Uses ``espeak`` / ``espeak-ng`` via subprocess — no Python TTS library
+    required.  Each speech request is executed as a short-lived subprocess
+    on a dedicated background thread so the detection loop is never blocked.
+
     Features:
         - Dedicated background thread so speech never blocks detection.
         - Per-label cooldown to avoid repetitive announcements.
@@ -206,7 +213,7 @@ class TTSEngine:
         self._engine_ready = False
 
         if not HAS_TTS:
-            logger.warning("TTS engine disabled — pyttsx3 is not installed")
+            logger.warning("TTS engine disabled — espeak is not installed")
             self.enabled = False
             return
 
@@ -232,7 +239,7 @@ class TTSEngine:
     # -----------------------------------------------------------------
 
     def _start_worker(self):
-        """Spin up the daemon thread that owns the pyttsx3 engine."""
+        """Spin up the daemon thread that processes the speech queue."""
         self._running = True
         self._thread = threading.Thread(target=self._worker_loop, daemon=True, name="tts-worker")
         self._thread.start()
@@ -240,20 +247,22 @@ class TTSEngine:
 
     def _worker_loop(self):
         """
-        Runs on its own thread.  Creates the pyttsx3 engine here so all
-        engine calls happen on the same thread (required by pyttsx3).
+        Runs on its own thread.  Pulls messages from the queue and speaks
+        them via ``espeak`` subprocess calls.
         """
+        # Quick sanity check — make sure espeak actually works
         try:
-            engine = pyttsx3.init()
-            engine.setProperty("rate", self.speech_rate)
-            engine.setProperty("volume", self.volume)
-            self._engine_ready = True
-            logger.info(
-                f"✅ TTS engine initialised  —  rate={self.speech_rate}, "
-                f"volume={self.volume}, cooldown={self.cooldown_seconds}s"
+            result = subprocess.run(
+                [_ESPEAK_BIN, "--version"],
+                capture_output=True, text=True, timeout=5
             )
+            logger.info(f"✅ TTS engine ready  —  {_ESPEAK_BIN}  |  "
+                        f"rate={self.speech_rate}, volume={self.volume}, "
+                        f"cooldown={self.cooldown_seconds}s")
+            logger.info(f"   espeak version: {result.stdout.strip()}")
+            self._engine_ready = True
         except Exception as e:
-            logger.error(f"❌ Failed to initialise pyttsx3: {e}")
+            logger.error(f"❌ espeak sanity check failed: {e}")
             self._engine_ready = False
             self._running = False
             return
@@ -265,24 +274,41 @@ class TTSEngine:
                     # Poison pill — shut down
                     break
 
-                # Re-apply settings in case they were changed at runtime
-                engine.setProperty("rate", self.speech_rate)
-                engine.setProperty("volume", self.volume)
-
-                engine.say(message)
-                engine.runAndWait()
+                self._speak_subprocess(message)
 
             except Empty:
                 continue
             except Exception as e:
                 logger.error(f"TTS worker error: {e}")
 
-        # Clean up
-        try:
-            engine.stop()
-        except Exception:
-            pass
         logger.info("TTS background worker stopped")
+
+    def _speak_subprocess(self, text: str):
+        """
+        Speak *text* by invoking espeak as a subprocess.
+
+        espeak flags used:
+            -s <wpm>    speech rate in words-per-minute
+            -a <0-200>  amplitude (volume); we map our 0.0-1.0 to 0-200
+            -v en       English voice
+        """
+        # Map volume 0.0–1.0  →  espeak amplitude 0–200
+        amplitude = int(max(0.0, min(1.0, self.volume)) * 200)
+
+        cmd = [
+            _ESPEAK_BIN,
+            "-v", "en",
+            "-s", str(int(self.speech_rate)),
+            "-a", str(amplitude),
+            "--", text          # '--' so text starting with '-' is safe
+        ]
+
+        try:
+            subprocess.run(cmd, timeout=15, capture_output=True)
+        except subprocess.TimeoutExpired:
+            logger.warning(f"TTS subprocess timed out for: {text!r}")
+        except Exception as e:
+            logger.error(f"TTS subprocess error: {e}")
 
     # -----------------------------------------------------------------
     # Public API
@@ -299,7 +325,6 @@ class TTSEngine:
             detections: List of detection dicts from Detector.detect().
         """
         if not self.enabled or not self._engine_ready:
-            logger.warning(f"TTS: early return — enabled={self.enabled}, engine_ready={self._engine_ready}")
             return
 
         if not detections:
