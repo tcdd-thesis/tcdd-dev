@@ -298,6 +298,40 @@ def ws_update_config(data):
     update_config()
 
 # ============================================================================
+# PAIRING HELPERS (must be defined before API routes that use @require_pairing)
+# ============================================================================
+
+def is_local_request():
+    """Check if request is from local machine (touchscreen)"""
+    return pairing_manager.is_local_request(request.remote_addr)
+
+def require_pairing(f):
+    """
+    Decorator to require pairing for remote requests.
+    Local (touchscreen) requests always bypass.
+    """
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Touchscreen bypass
+        if is_local_request():
+            return f(*args, **kwargs)
+        
+        # Check session token in header or cookie
+        session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
+        
+        if not session_token:
+            return jsonify({'error': 'Authentication required', 'code': 'NO_TOKEN'}), 401
+        
+        if not pairing_manager.validate_session(session_token):
+            return jsonify({'error': 'Invalid or expired session', 'code': 'INVALID_TOKEN'}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
+# ============================================================================
 # API ROUTES
 # ============================================================================
 
@@ -763,36 +797,6 @@ def get_violations():
 # ----------------------------------------------------------------------------
 # PAIRING API
 # ----------------------------------------------------------------------------
-
-def is_local_request():
-    """Check if request is from local machine (touchscreen)"""
-    return pairing_manager.is_local_request(request.remote_addr)
-
-def require_pairing(f):
-    """
-    Decorator to require pairing for remote requests.
-    Local (touchscreen) requests always bypass.
-    """
-    from functools import wraps
-    
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        # Touchscreen bypass
-        if is_local_request():
-            return f(*args, **kwargs)
-        
-        # Check session token in header or cookie
-        session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
-        
-        if not session_token:
-            return jsonify({'error': 'Authentication required', 'code': 'NO_TOKEN'}), 401
-        
-        if not pairing_manager.validate_session(session_token):
-            return jsonify({'error': 'Invalid or expired session', 'code': 'INVALID_TOKEN'}), 401
-        
-        return f(*args, **kwargs)
-    
-    return decorated
 
 @app.route('/api/pair/generate', methods=['POST'])
 def generate_pairing_token():
