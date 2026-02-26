@@ -2283,4 +2283,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target === qrModal) closeHotspotQR();
         });
     }
+
+    // Modal close handler for Pairing Wizard modal
+    const wizardModal = document.getElementById('pairing-wizard-modal');
+    if (wizardModal) {
+        wizardModal.addEventListener('click', (e) => {
+            // If they click on the dark overlay (the modal background itself)
+            if (e.target === wizardModal) {
+                closePairingWizard();
+            }
+        });
+    }
 });
