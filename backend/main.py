@@ -738,6 +738,7 @@ def stream_video():
     jpeg_quality = int(config.get('streaming.quality', 85))
     encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]  # fallback for cv2
     process = psutil.Process(os.getpid())
+    metrics_interval = max(1, int(config.get('streaming.metrics_interval', 30)))
     _prev_infer_id = -1
 
     if HAS_SIMPLEJPEG:
@@ -814,32 +815,33 @@ def stream_video():
             except Exception as e:
                 logger.debug(f"Violation logging skipped: {e}")
 
-            # Metrics
+            # Metrics (only every N frames to reduce psutil overhead)
             frame_count += 1
             total_detections += len(detections)
-            now = datetime.now()
-            elapsed = (now - last_fps_time).total_seconds()
-            fps = (frame_count / elapsed) if elapsed > 0 else 0.0
-            inference_time_ms = 0.0  # measured inside inference thread in future
-            camera_frame_time_ms = 0.0  # measured inside camera thread in future
-            jpeg_encode_time_ms = (jpeg_end - jpeg_start).total_seconds() * 1000.0
-            cpu_usage_percent = psutil.cpu_percent(interval=None)
-            ram_usage_mb = process.memory_info().rss / (1024 * 1024)
-            queue_size = 0
+            if frame_count % metrics_interval == 0:
+                now = datetime.now()
+                elapsed = (now - last_fps_time).total_seconds()
+                fps = (frame_count / elapsed) if elapsed > 0 else 0.0
+                inference_time_ms = 0.0  # measured inside inference thread in future
+                camera_frame_time_ms = 0.0  # measured inside camera thread in future
+                jpeg_encode_time_ms = (jpeg_end - jpeg_start).total_seconds() * 1000.0
+                cpu_usage_percent = psutil.cpu_percent(interval=None)
+                ram_usage_mb = process.memory_info().rss / (1024 * 1024)
+                queue_size = 0
 
-            metrics_logger.log(
-                timestamp_iso=now.isoformat(),
-                fps=fps,
-                inference_time_ms=inference_time_ms,
-                detections_count=len(detections),
-                cpu_usage_percent=cpu_usage_percent,
-                ram_usage_mb=ram_usage_mb,
-                camera_frame_time_ms=camera_frame_time_ms,
-                jpeg_encode_time_ms=jpeg_encode_time_ms,
-                total_detections=total_detections,
-                dropped_frames=dropped_frames,
-                queue_size=queue_size
-            )
+                metrics_logger.log(
+                    timestamp_iso=now.isoformat(),
+                    fps=fps,
+                    inference_time_ms=inference_time_ms,
+                    detections_count=len(detections),
+                    cpu_usage_percent=cpu_usage_percent,
+                    ram_usage_mb=ram_usage_mb,
+                    camera_frame_time_ms=camera_frame_time_ms,
+                    jpeg_encode_time_ms=jpeg_encode_time_ms,
+                    total_detections=total_detections,
+                    dropped_frames=dropped_frames,
+                    queue_size=queue_size
+                )
 
             # Yield to other greenlets (no artificial FPS cap)
             socketio.sleep(0)
