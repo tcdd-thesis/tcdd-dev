@@ -1155,6 +1155,8 @@ async function unpairDevice() {
 
         if (result.success) {
             showToast('Device unpaired', 'success');
+            // Also stop the hotspot automatically to return to WiFi
+            await api.post('/hotspot/stop').catch(e => console.warn('Failed to stop hotspot after unpair', e));
         } else {
             showToast(result.message || 'Nothing to unpair', 'info');
         }
@@ -1938,6 +1940,10 @@ function connectWebSocket() {
     state.socket.on('device_paired', (data) => {
         console.log('Device paired:', data);
         showToast(`${data.device_name || 'Device'} paired!`, 'success');
+
+        // Close the wizard modal if it's open
+        closePairingWizard();
+
         if (state.currentPage === 'settings') loadPairingStatus();
     });
 
