@@ -1663,7 +1663,7 @@ body:not(.touchscreen) #page-logs.active {
   justify-content: center;
   margin: 15px auto 20px;
   padding: 0 20px;
-  max-width: 250px;
+  max-width: 400px;
 }
 
 .wizard-step {
