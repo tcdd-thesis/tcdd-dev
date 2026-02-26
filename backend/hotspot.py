@@ -372,6 +372,58 @@ bind-interfaces
                     'message': str(e)
                 }
     
+    def _reconnect_wifi(self):
+        """
+        Reconnect WiFi to the best available known network.
+        Called after stopping the hotspot to restore regular WiFi connectivity.
+        """
+        try:
+            import time
+            
+            logger.info("📶 Attempting to reconnect WiFi...")
+            
+            # Ensure autoconnect is enabled on the interface
+            self._run_nmcli([
+                'device', 'set', self._interface, 'autoconnect', 'yes'
+            ], timeout=5)
+            
+            # Small delay to let the interface settle after hotspot teardown
+            time.sleep(1)
+            
+            # Tell NetworkManager to connect the device (picks best known network)
+            stdout, stderr, code = self._run_nmcli([
+                'device', 'connect', self._interface
+            ], timeout=15)
+            
+            if code == 0:
+                logger.info(f"✅ WiFi reconnected: {stdout.strip()}")
+            else:
+                # Fallback: try to activate the most recent WiFi connection
+                logger.warning(f"⚠️ Auto-connect failed ({stderr.strip()}), trying saved connections...")
+                
+                # List saved WiFi connections
+                stdout2, _, code2 = self._run_nmcli([
+                    '-t', '-f', 'NAME,TYPE', 'connection', 'show'
+                ], timeout=5)
+                
+                if code2 == 0:
+                    for line in stdout2.strip().split('\n'):
+                        if ':802-11-wireless' in line:
+                            conn_name = line.split(':')[0]
+                            if conn_name and conn_name != self.HOTSPOT_CONNECTION_NAME:
+                                logger.info(f"📶 Trying saved connection: {conn_name}")
+                                _, _, rc = self._run_nmcli([
+                                    'connection', 'up', conn_name
+                                ], timeout=15)
+                                if rc == 0:
+                                    logger.info(f"✅ Connected to: {conn_name}")
+                                    return
+                
+                logger.warning("⚠️ Could not auto-reconnect WiFi. Use the UI to connect manually.")
+                
+        except Exception as e:
+            logger.error(f"❌ WiFi reconnect error: {e}")
+    
     def stop(self) -> Dict[str, Any]:
         """
         Stop the WiFi hotspot.
@@ -400,6 +452,10 @@ bind-interfaces
                 if code == 0:
                     self._is_active = False
                     logger.info("✅ Hotspot stopped")
+                    
+                    # Reconnect WiFi to the best available known network
+                    self._reconnect_wifi()
+                    
                     return {
                         'success': True,
                         'message': 'Hotspot stopped'
@@ -409,6 +465,12 @@ bind-interfaces
                     self._run_nmcli(['radio', 'wifi', 'off'], timeout=5)
                     self._run_nmcli(['radio', 'wifi', 'on'], timeout=5)
                     self._is_active = False
+                    
+                    # Give radio a moment to come back, then reconnect
+                    import time
+                    time.sleep(2)
+                    self._reconnect_wifi()
+                    
                     return {
                         'success': True,
                         'message': 'Hotspot stopped (radio reset)'

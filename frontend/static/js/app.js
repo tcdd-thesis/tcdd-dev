@@ -15,8 +15,13 @@ function toggleHotspotUI() {
         api.post('/hotspot/stop')
             .then(res => {
                 if (res.success) {
-                    showToast('Hotspot disabled', 'info');
+                    showToast('Hotspot disabled. Reconnecting WiFi...', 'info');
                     updateHotspotUI(false);
+                    // Backend auto-reconnects WiFi; refresh status after delay
+                    setTimeout(() => {
+                        loadWifiStatus();
+                        checkWiFiStatus();
+                    }, 3000);
                 } else {
                     showToast('Failed to stop hotspot', 'error');
                 }
@@ -51,6 +56,9 @@ function confirmHotspotEnable() {
             if (result.success) {
                 showToast('Hotspot enabled!', 'success');
                 updateHotspotUI(true, result.ssid);
+                // WiFi is now disconnected — update WiFi UI
+                loadWifiStatus();
+                checkWiFiStatus();
             } else {
                 showToast(result.message || 'Failed to start hotspot', 'error');
             }
@@ -1924,14 +1932,42 @@ function showHotspotQR() {
 
     // Fetch hotspot credentials for SSID/password display
     api.get('/hotspot/credentials').then(data => {
-        // Show SSID and password
         document.getElementById('hotspot-ssid-info').textContent = `SSID: ${data.ssid}`;
         document.getElementById('hotspot-password-info').textContent = `Password: ${data.password}`;
     });
 
-    // Set QR code images (served by backend)
+    // Set QR code images (served by backend, uses CSS sizing)
     renderQRCodeImage('hotspot-wifi-qr', '/api/hotspot/qr?type=wifi');
     renderQRCodeImage('hotspot-webapp-qr', '/api/hotspot/qr?type=webapp');
+
+    // Default to WiFi tab
+    switchHotspotQR('wifi');
+}
+
+/**
+ * Switch between WiFi and Web App QR code tabs
+ */
+function switchHotspotQR(type) {
+    const wifiQr = document.getElementById('hotspot-wifi-qr');
+    const webappQr = document.getElementById('hotspot-webapp-qr');
+    const tabs = document.querySelectorAll('.hotspot-qr-tab');
+
+    if (type === 'wifi') {
+        if (wifiQr) wifiQr.style.display = 'flex';
+        if (webappQr) webappQr.style.display = 'none';
+    } else {
+        if (wifiQr) wifiQr.style.display = 'none';
+        if (webappQr) webappQr.style.display = 'flex';
+    }
+
+    // Update tab active states
+    tabs.forEach((tab, i) => {
+        if ((type === 'wifi' && i === 0) || (type === 'webapp' && i === 1)) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
 }
 
 function closeHotspotQR() {
@@ -1939,15 +1975,12 @@ function closeHotspotQR() {
     if (modal) modal.style.display = 'none';
 }
 
-// Render QR code as <img> from backend
+// Render QR code as <img> from backend (sizing handled by CSS .qr-image class)
 function renderQRCodeImage(elementId, imgUrl) {
     const el = document.getElementById(elementId);
     if (!el) return;
-    el.innerHTML = `<img src="${imgUrl}" alt="QR Code" style="width:128px;height:128px;">`;
+    el.innerHTML = `<img src="${imgUrl}" alt="QR Code">`;
 }
-
-// Add instructions for users in modal
-// Instructions are already present in index.html modal body
 
 document.addEventListener('DOMContentLoaded', () => {
     // Modal close handler for QR modal
