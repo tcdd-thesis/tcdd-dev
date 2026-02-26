@@ -10,6 +10,9 @@ from flask_cors import CORS
 import os
 import sys
 import logging
+import threading
+import cv2
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -67,6 +70,15 @@ display_controller = None
 is_streaming = True  # Always streaming in backend
 metrics_logger = MetricsLogger(log_dir='data/logs', prefix='metrics', interval=1)
 violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
+
+# ── Threaded pipeline shared state ──────────────────────────────────────────
+_latest_frame = None            # Most recent raw frame from camera thread
+_latest_frame_lock = threading.Lock()
+_latest_detections = []         # Most recent detection results
+_latest_annotated = None        # Most recent annotated frame
+_latest_result_lock = threading.Lock()
+_pipeline_frame_count = 0       # Frames captured by camera thread
+_pipeline_infer_count = 0       # Frames processed by inference thread
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -154,6 +166,15 @@ def initialize():
         # Start camera and detection immediately
         camera.start()
         is_streaming = True
+
+        # Launch threaded pipeline:
+        # 1. Camera capture thread (daemon) – grabs frames continuously
+        # 2. Inference thread (daemon) – runs detection on latest frame
+        # 3. SocketIO greenlet – encodes JPEG & emits to clients
+        cam_thread = threading.Thread(target=_camera_capture_loop, daemon=True, name="CamThread")
+        infer_thread = threading.Thread(target=_inference_loop, daemon=True, name="InferThread")
+        cam_thread.start()
+        infer_thread.start()
         socketio.start_background_task(stream_video)
         return True
         
@@ -640,43 +661,100 @@ def get_violations():
 # STREAMING LOOP WITH METRICS
 # ============================================================================
 
+# ---------------------------------------------------------------------------
+# THREADED PIPELINE  (Camera → Inference → Emit)
+# ---------------------------------------------------------------------------
+# Thread 1 – camera_capture_thread:
+#     Continuously grabs frames from the camera and stores the latest one.
+# Thread 2 – inference_thread:
+#     Reads the latest frame, runs Hailo / NCNN / YOLO inference, annotates,
+#     and stores the result.
+# Background task – stream_video (socketio greenlet):
+#     Encodes the latest annotated frame to JPEG, emits it via WebSocket,
+#     and logs metrics + violations.
+# ---------------------------------------------------------------------------
+
+def _camera_capture_loop():
+    """Producer thread: grab frames as fast as the camera delivers them."""
+    global _latest_frame, _pipeline_frame_count, is_streaming
+    logger.info("[CamThread] Camera capture thread started")
+    while is_streaming:
+        try:
+            frame = camera.get_frame()
+            if frame is None:
+                continue
+            with _latest_frame_lock:
+                _latest_frame = frame
+            _pipeline_frame_count += 1
+        except Exception as e:
+            logger.error(f"[CamThread] Error: {e}")
+            import time; time.sleep(0.05)
+    logger.info("[CamThread] Camera capture thread stopped")
+
+
+def _inference_loop():
+    """Inference thread: detect objects on the latest camera frame."""
+    global _latest_detections, _latest_annotated, _pipeline_infer_count, is_streaming
+    logger.info("[InferThread] Inference thread started")
+    _prev_frame_id = -1
+    while is_streaming:
+        try:
+            # Grab the most recent frame
+            with _latest_frame_lock:
+                frame = _latest_frame
+                cur_id = _pipeline_frame_count
+            if frame is None or cur_id == _prev_frame_id:
+                import time; time.sleep(0.001)  # Yield briefly
+                continue
+            _prev_frame_id = cur_id
+
+            detections = detector.detect(frame)
+            annotated = detector.draw_detections(frame, detections)
+
+            with _latest_result_lock:
+                _latest_detections = detections
+                _latest_annotated = annotated
+            _pipeline_infer_count += 1
+        except Exception as e:
+            logger.error(f"[InferThread] Error: {e}")
+            import time; time.sleep(0.05)
+    logger.info("[InferThread] Inference thread stopped")
+
+
 def stream_video():
-    """Stream video frames with detections and log C++-style metrics to CSV"""
+    """SocketIO greenlet: encode + emit the latest annotated frame."""
     global is_streaming
-    logger.info("Starting video stream...")
+    logger.info("[StreamLoop] Starting emit loop...")
     frame_count = 0
     total_detections = 0
     dropped_frames = 0
     last_fps_time = datetime.now()
     jpeg_quality = config.get('streaming.quality', 85)
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)]
     process = psutil.Process(os.getpid())
+    _prev_infer_id = -1
 
     while is_streaming:
         try:
-            # Capture frame timing
-            frame_capture_start = datetime.now()
-            frame = camera.get_frame()
-            frame_capture_end = datetime.now()
-            if frame is None:
+            # Grab latest annotated frame + detections
+            with _latest_result_lock:
+                annotated_frame = _latest_annotated
+                detections = list(_latest_detections)
+                cur_infer_id = _pipeline_infer_count
+
+            if annotated_frame is None or cur_infer_id == _prev_infer_id:
+                # No new inference result yet — yield and retry
+                socketio.sleep(0.005)
                 dropped_frames += 1
-                socketio.sleep(0)
                 continue
+            _prev_infer_id = cur_infer_id
 
-            # Inference timing
-            inference_start = datetime.now()
-            detections = detector.detect(frame)
-            inference_end = datetime.now()
-
-            annotated_frame = detector.draw_detections(frame, detections)
-
-            # JPEG encode timing
-            import cv2
+            # JPEG encode
             jpeg_start = datetime.now()
-            _, buffer = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)])
+            _, buffer = cv2.imencode('.jpg', annotated_frame, encode_params)
             jpeg_end = datetime.now()
 
             # Emit to clients
-            import base64
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             socketio.emit('video_frame', {
                 'frame': frame_base64,
@@ -690,9 +768,7 @@ def stream_video():
                 'count': len(detections)
             })
 
-            # Simple example: derive and log violation events (stub)
-            # In a real implementation, this would use tracked vehicles, signal state, and rules.
-            # Here we log a synthetic violation when a STOP sign is detected with high confidence.
+            # Violation logging (stub)
             try:
                 stop_dets = [d for d in detections if d.get('class_name', '').lower() in ('stop', 'stop_sign')]
                 if stop_dets:
@@ -727,8 +803,8 @@ def stream_video():
             now = datetime.now()
             elapsed = (now - last_fps_time).total_seconds()
             fps = (frame_count / elapsed) if elapsed > 0 else 0.0
-            camera_frame_time_ms = (frame_capture_end - frame_capture_start).total_seconds() * 1000.0
-            inference_time_ms = (inference_end - inference_start).total_seconds() * 1000.0
+            inference_time_ms = 0.0  # measured inside inference thread in future
+            camera_frame_time_ms = 0.0  # measured inside camera thread in future
             jpeg_encode_time_ms = (jpeg_end - jpeg_start).total_seconds() * 1000.0
             cpu_usage_percent = psutil.cpu_percent(interval=None)
             ram_usage_mb = process.memory_info().rss / (1024 * 1024)
@@ -748,13 +824,14 @@ def stream_video():
                 queue_size=queue_size
             )
 
-            socketio.sleep(1.0 / config.get('camera.fps', 30))
+            # Yield to other greenlets (no artificial FPS cap)
+            socketio.sleep(0)
 
         except Exception as e:
-            logger.error(f"Error in video stream: {e}")
+            logger.error(f"[StreamLoop] Error: {e}")
             socketio.sleep(0.1)
 
-    logger.info("Video stream stopped")
+    logger.info("[StreamLoop] Emit loop stopped")
     metrics_logger.close()
 
 # ============================================================================

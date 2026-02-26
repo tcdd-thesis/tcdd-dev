@@ -114,6 +114,11 @@ class Camera:
         self.config = config_obj
         self._camera = None
         self._running = False
+        self._manual_awb = config_obj.get('camera.manual_awb', False)
+        if self._manual_awb:
+            logger.info("Manual (CPU-based) white balance correction ENABLED")
+        else:
+            logger.info("Manual AWB disabled — using camera hardware AWB")
     
     def start(self):
         """Start the camera"""
@@ -151,7 +156,7 @@ class Camera:
         """Get a frame from the camera"""
         if not self._running:
             return None
-        return get_frame()
+        return get_frame(manual_awb=self._manual_awb)
 
 
 def initialize_camera():
@@ -268,8 +273,13 @@ def apply_white_balance(frame):
         return frame
 
 
-def get_frame():
-    """Capture frame from camera with error handling and apply white balance correction."""
+def get_frame(manual_awb=False):
+    """Capture frame from camera with error handling.
+    
+    Args:
+        manual_awb: If True, apply CPU-based LAB white balance correction.
+                    If False (default), rely on camera hardware AWB.
+    """
     global camera
     
     if camera is None:
@@ -287,9 +297,10 @@ def get_frame():
             ret, frame = camera.read()
             frame = frame if ret else None
         
-        # Apply automatic white balance correction to remove color cast
         if frame is not None:
-            frame = apply_white_balance(frame)
+            # Only apply manual white balance when explicitly enabled
+            if manual_awb:
+                frame = apply_white_balance(frame)
             
             # Convert back to RGB for Picamera2 compatibility if needed
             if USE_PICAMERA and isinstance(camera, Picamera2):

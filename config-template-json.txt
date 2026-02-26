@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-b20260226-2",
+  "version": "0.1.1-b202602262133",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -18,8 +18,8 @@
   
   "camera": {
     // Resolution
-    "width": 1920,                  // 320, 640, 1280, 1920
-    "height": 1080,                 // 240, 480, 720, 1080
+    "width": 640,                   // 320, 640, 1280, 1920
+    "height": 480,                  // 240, 480, 720, 1080
     "fps": 30,                     // Target frames per second (1-60)
     
     // Image Adjustments
@@ -32,7 +32,12 @@
     
     // Camera Control
     "auto_exposure": true,         // Automatic exposure
-    "use_mock": false              // Force mock camera (for testing)
+    "use_mock": false,             // Force mock camera (for testing)
+    
+    // White Balance
+    "manual_awb": false            // Enable manual (CPU-based) white balance correction
+                                   // false = use camera hardware AWB (faster, recommended)
+                                   // true  = apply LAB-space color correction per frame (slower)
   },
   
   // =============================================================================
