@@ -122,23 +122,24 @@ class HotspotManager:
         try:
             # Create dnsmasq config content - DNS ONLY, no DHCP
             # NetworkManager handles DHCP for hotspot clients
-            config_content = f"""# TCDD Hotspot DNS Configuration
+            config_content = f"""# TCDD Hotspot Captive Portal DNS Configuration
 # Auto-generated - do not edit manually
-# Maps {self._domain} to {HOTSPOT_IP}
+# Redirects ALL DNS queries to {HOTSPOT_IP} for captive portal
 
-# DNS entries for local access
+# Resolve ALL domains to hotspot IP (captive portal)
+address=/#/{HOTSPOT_IP}
+
+# Also explicitly map local domain
 address=/{self._domain}/{HOTSPOT_IP}
-
-# Also handle common subdomains
 address=/www.{self._domain}/{HOTSPOT_IP}
 
-# Don't forward queries for local domain
-local=/{self._domain}/
+# Don't forward any queries upstream — full captive portal
+no-resolv
 
 # Don't run DHCP - NetworkManager handles that for the hotspot
 no-dhcp-interface={self._interface}
 
-# Listen on all interfaces for DNS
+# Listen on hotspot interface
 listen-address={HOTSPOT_IP}
 listen-address=127.0.0.1
 bind-interfaces

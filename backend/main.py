@@ -236,15 +236,71 @@ def initialize():
 
 @app.route('/')
 def index():
-    """Serve the main application page (RPi touchscreen)"""
-    return render_template('index.html', is_touchscreen=True)
+    """Serve the main application page (RPi touchscreen) or redirect mobile to pair"""
+    if is_local_request():
+        return render_template('index.html', is_touchscreen=True)
+    # External device hitting root — check if already paired
+    session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
+    if session_token and pairing_manager and pairing_manager.validate_session(session_token):
+        return render_template('index.html', is_touchscreen=False)
+    return redirect('/pair')
+
+@app.route('/pair')
+def pair_page():
+    """Serve the pairing page for mobile devices"""
+    return render_template('pair.html')
+
+@app.route('/mobile')
+def mobile_page():
+    """Serve the mobile app page (after pairing)"""
+    return render_template('index.html', is_touchscreen=False)
+
+# ============================================================================
+# CAPTIVE PORTAL DETECTION
+# Phones check these URLs when connecting to WiFi. Redirect to /pair.
+# ============================================================================
+
+# Android captive portal checks
+@app.route('/generate_204')
+@app.route('/gen_204')
+def captive_android():
+    return redirect('/pair', code=302)
+
+# iOS / macOS captive portal checks
+@app.route('/hotspot-detect.html')
+@app.route('/library/test/success.html')
+def captive_ios():
+    return redirect('/pair', code=302)
+
+# Windows captive portal check
+@app.route('/connecttest.txt')
+@app.route('/ncsi.txt')
+def captive_windows():
+    return redirect('/pair', code=302)
+
+# Microsoft captive portal
+@app.route('/redirect')
+def captive_redirect():
+    return redirect('/pair', code=302)
 
 @app.route('/<path:path>')
 def catch_all(path):
-    """Catch-all route for client-side routing"""
-    if path.startswith('static/') or '.' in path:
-        return send_from_directory(app.static_folder, path)
-    return render_template('index.html', is_touchscreen=True)
+    """Catch-all: serve static files, or redirect external requests to /pair"""
+    if path.startswith('static/') or path.startswith('api/'):
+        if path.startswith('static/'):
+            return send_from_directory(app.static_folder, path.replace('static/', '', 1))
+        abort(404)
+    
+    # Known app routes — serve normally
+    if path in ('pair', 'mobile'):
+        return redirect(f'/{path}')
+    
+    # Local (touchscreen) — serve the app
+    if is_local_request():
+        return render_template('index.html', is_touchscreen=True)
+    
+    # External device hitting unknown path — likely captive portal probe
+    return redirect('/pair')
 
 # ============================================================================
 # SOCKETIO EVENTS (WebSocket Authentication)
