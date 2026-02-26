@@ -245,10 +245,7 @@ def index():
         return render_template('index.html', is_touchscreen=False)
     return redirect('/pair')
 
-@app.route('/pair')
-def pair_page():
-    """Serve the pairing page for mobile devices"""
-    return render_template('pair.html')
+
 
 @app.route('/mobile')
 def mobile_page():
@@ -359,6 +356,8 @@ def ws_update_config(data):
 
 def is_local_request():
     """Check if request is from local machine (touchscreen)"""
+    if pairing_manager is None:
+        return request.remote_addr in ('127.0.0.1', '::1', 'localhost')
     return pairing_manager.is_local_request(request.remote_addr)
 
 def require_pairing(f):
@@ -995,13 +994,9 @@ def get_pairing_qr():
     if not token:
         return jsonify({'error': 'Token is required'}), 400
     
-    # Build the pairing URL
+    # Build the pairing URL explicitly with IP to avoid DNS_PROBE_FINISHED_NXDOMAIN
     port = config.get('port', 5000)
-    domain = hotspot_manager.get_domain() if hotspot_manager else None
-    if domain:
-        qr_data = f"http://{domain}:{port}/pair?token={token}"
-    else:
-        qr_data = f"http://{HOTSPOT_IP}:{port}/pair?token={token}"
+    qr_data = f"http://{HOTSPOT_IP}:{port}/pair?token={token}"
     
     if qrcode is None:
         return jsonify({'error': 'qrcode library not installed'}), 500
