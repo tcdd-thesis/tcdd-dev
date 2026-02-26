@@ -729,6 +729,17 @@ def scan_wifi():
     """Scan for available WiFi networks"""
     try:
         import time
+        
+        # Get saved networks first to flag them in the UI
+        stdout, stderr, code = run_nmcli(['-t', '-f', 'NAME,TYPE', 'connection', 'show'])
+        saved_ssids = set()
+        if code == 0:
+            for line in stdout.strip().split('\n'):
+                if line and ':802-11-wireless' in line:
+                    name = line.split(':')[0]
+                    if name:
+                        saved_ssids.add(name)
+        
         # Rescan networks
         run_nmcli(['dev', 'wifi', 'rescan'], timeout=5)
         # Give the hardware a couple of seconds to actually update the BSSID lists
@@ -779,7 +790,8 @@ def scan_wifi():
                             'ssid': ssid,
                             'signal': int(signal_str) if signal_str.isdigit() else 0,
                             'security': security if security and security != '--' else 'Open',
-                            'connected': in_use == '*'
+                            'connected': in_use == '*',
+                            'saved': ssid in saved_ssids
                         })
         
         # Sort by signal strength
@@ -799,8 +811,9 @@ def connect_wifi():
         ssid = data.get('ssid')
         password = data.get('password', '')
         
-        if not ssid:
-            return jsonify({'error': 'SSID is required'}), 400
+        
+        if not ssid or ssid == 'null' or ssid == 'undefined':
+            return jsonify({'error': 'Valid SSID is required'}), 400
         
         logger.info(f"Connecting to WiFi: {ssid}")
         

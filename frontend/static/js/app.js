@@ -1464,19 +1464,33 @@ async function scanWifiNetworks() {
             if (validNetworks.length === 0) {
                 listContainer.innerHTML = '<div class="wifi-empty">No valid networks found</div>';
             } else {
-                listContainer.innerHTML = validNetworks.map(net => {
+                listContainer.innerHTML = validNetworks.map((net, index) => {
                     const hasPassword = !!(net.security && net.security !== '' && net.security !== '--');
                     return `
-                    <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${hasPassword})">
+                    <div class="wifi-network-item" data-index="${index}">
                         <div class="wifi-network-info">
                             <span class="wifi-network-name">${escapeHtml(net.ssid)}</span>
                             <span class="wifi-network-signal">
                                 <i class="fa fa-signal"></i> ${net.signal}%
                                 ${hasPassword ? '<i class="fa fa-lock"></i>' : ''}
+                                ${net.saved ? '<i class="fa fa-bookmark" style="font-size: 0.8em; margin-left: 5px; color: #4db8ff;" title="Saved"></i>' : ''}
                             </span>
                         </div>
                     </div>
                 `}).join('');
+
+                // Attach click listeners safely without inline event handlers
+                const items = listContainer.querySelectorAll('.wifi-network-item');
+                items.forEach(item => {
+                    item.addEventListener('click', function () {
+                        const idx = parseInt(this.getAttribute('data-index'));
+                        const net = validNetworks[idx];
+                        if (net && net.ssid) {
+                            const hasPwd = !!(net.security && net.security !== '' && net.security !== '--');
+                            promptWifiConnect(net.ssid, hasPwd, !!net.saved);
+                        }
+                    });
+                });
             }
         }
     } catch (error) {
@@ -1501,12 +1515,17 @@ function escapeHtml(text) {
 }
 
 /**
- * Prompt for WiFi connection (show password modal if secured)
+ * Prompt for WiFi connection (show password modal if secured and not saved)
  */
-function promptWifiConnect(ssid, hasPassword) {
+function promptWifiConnect(ssid, hasPassword, isSaved = false) {
+    if (!ssid || ssid === 'null' || ssid === 'undefined') {
+        showToast('Invalid network selected', 'error');
+        return;
+    }
+
     wifiConnectingSsid = ssid;
 
-    if (hasPassword) {
+    if (hasPassword && !isSaved) {
         // Show password modal
         const modal = document.getElementById('wifi-password-modal');
         const ssidDisplay = document.getElementById('wifi-connect-ssid');
@@ -1519,7 +1538,7 @@ function promptWifiConnect(ssid, hasPassword) {
         // Focus password input
         setTimeout(() => passwordInput?.focus(), 100);
     } else {
-        // Connect directly without password
+        // Connect directly without password or use saved nmcli credentials
         connectToWifi(ssid, '');
     }
 }
