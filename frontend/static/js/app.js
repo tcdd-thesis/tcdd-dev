@@ -1253,21 +1253,29 @@ function setupWizardStep2(ssid, password) {
     startClientPolling();
 }
 
+let wizardClientConsecutiveChecks = 0;
+
 function startClientPolling() {
     stopPolling(); // Clear any existing
+    wizardClientConsecutiveChecks = 0;
 
     wizardPollingInterval = setInterval(async () => {
         try {
             const res = await api.get('/hotspot/clients');
             if (res && res.count === 1) {
-                // Exactly 1 client connected!
-                stopPolling();
-                wizardAdvanceToStep3();
+                wizardClientConsecutiveChecks++;
+                // Require 2 consecutive checks to ensure it's not a spurious/cached ARP entry ghost
+                if (wizardClientConsecutiveChecks >= 2) {
+                    stopPolling();
+                    wizardAdvanceToStep3();
+                }
+            } else {
+                wizardClientConsecutiveChecks = 0;
             }
         } catch (e) {
             console.error('Polling clients failed', e);
         }
-    }, 3000); // Poll every 3 seconds
+    }, 2500); // Poll every 2.5 seconds
 }
 
 function stopPolling() {

@@ -646,28 +646,51 @@ bind-interfaces
             list: Connected client information
         """
         # This is a best-effort attempt to get connected clients
-        # May not work on all systems
+        # Use ip neigh on Linux to only get REACHABLE or STALE clients,
+        # ignoring old FAILED or INCOMPLETE arp cache entries.
         clients = []
         
         try:
-            # Try to read from arp table
+            # Try to read from ip neigh (Linux)
             result = subprocess.run(
-                ['arp', '-a'],
+                ['ip', 'neigh', 'show', 'dev', self._interface],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
             
             if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    # Parse ARP entries for 10.42.0.x (hotspot subnet)
-                    if '10.42.0.' in line and '10.42.0.1' not in line:
+                for line in result.stdout.strip().split('\n'):
+                    # Match entries like: 10.42.0.123 lladdr aa:bb:cc:dd:ee:ff REACHABLE
+                    if '10.42.0.' in line and '10.42.0.1 ' not in line:
                         parts = line.split()
-                        if len(parts) >= 3:
+                        # Only count if state is REACHABLE or STALE (recently seen)
+                        if len(parts) >= 5 and parts[-1] in ['REACHABLE', 'STALE', 'DELAY']:
                             clients.append({
-                                'ip': parts[1].strip('()'),
-                                'mac': parts[3] if len(parts) > 3 else 'unknown'
+                                'ip': parts[0],
+                                'mac': parts[4] if parts[3] == 'lladdr' else 'unknown'
                             })
+                            
+            # Fallback for non-Linux or if ip command fails
+            if not clients:
+                result = subprocess.run(
+                    ['arp', '-a'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if '10.42.0.' in line and '10.42.0.1' not in line:
+                            # Only include Dynamic/active looking IPs in windows fallback
+                            if 'dynamic' in line.lower() or 'ether' in line.lower():
+                                parts = line.split()
+                                if len(parts) >= 3:
+                                    clients.append({
+                                        'ip': parts[0] if not parts[0].startswith('(') else parts[1].strip('()'),
+                                        'mac': parts[1] if not parts[0].startswith('(') else parts[3]
+                                    })
         except:
             pass
         
