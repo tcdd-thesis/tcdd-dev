@@ -399,16 +399,16 @@ body.touchscreen {
 .audio-gate-content {
     max-width: 420px;
     width: 90%;
-    padding: 32px 24px;
+    padding: 20px 20px;
     text-align: center;
     border: 2px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
 }
 
 .audio-gate-icon {
-    font-size: 56px;
+    font-size: 40px;
     color: var(--warning);
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .audio-gate-icon-success {
@@ -416,23 +416,23 @@ body.touchscreen {
 }
 
 .audio-gate-title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 
 .audio-gate-text {
-    font-size: 14px;
+    font-size: 13px;
     color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 24px;
-    line-height: 1.5;
+    margin-bottom: 14px;
+    line-height: 1.4;
 }
 
 .audio-gate-options {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 12px;
 }
 
 .audio-gate-btn {
@@ -440,11 +440,12 @@ body.touchscreen {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 14px 20px;
-    font-size: 15px;
+    padding: 10px 16px;
+    font-size: 14px;
     font-weight: 600;
-    border-radius: 12px;
+    border-radius: 10px;
     width: 100%;
+    min-height: 40px;
 }
 
 .audio-gate-btn i {
@@ -521,9 +522,11 @@ body.touchscreen {
 }
 
 .audio-gate-dismiss-btn {
-    margin-top: 12px;
+    margin-top: 8px;
     opacity: 0.6;
-    font-size: 13px;
+    font-size: 12px;
+    min-height: 36px;
+    padding: 6px 16px;
 }
 
 .audio-gate-dismiss-btn:hover {
