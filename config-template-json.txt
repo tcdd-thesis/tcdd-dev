@@ -1,5 +1,5 @@
 {
-  "version": "0.1.1-b202602262133",
+  "version": "0.1.1-b202602262135",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -173,7 +173,7 @@
   "pairing":
   {
     "enabled": true,
-    "auto_start": true,
+    "auto_start": false,
     "ssid": "",
     "password": "",
     "interface": "wlan0",
