@@ -1,105 +1,3 @@
-// ============================================================================
-// HOTSPOT TOGGLE LOGIC
-// ============================================================================
-
-/**
- * Toggle hotspot on/off via the button.
- * Reads current state from the button label text.
- */
-function toggleHotspotUI() {
-    const label = document.getElementById('hotspot-toggle-label');
-    const isCurrentlyEnabled = label && label.textContent.trim().startsWith('Disable');
-
-    if (isCurrentlyEnabled) {
-        // Stop hotspot
-        api.post('/hotspot/stop')
-            .then(res => {
-                if (res.success) {
-                    showToast('Hotspot disabled. Reconnecting WiFi...', 'info');
-                    updateHotspotUI(false);
-                    // Backend auto-reconnects WiFi; refresh status after delay
-                    setTimeout(() => {
-                        loadWifiStatus();
-                        checkWiFiStatus();
-                    }, 3000);
-                } else {
-                    showToast('Failed to stop hotspot', 'error');
-                }
-            })
-            .catch(err => {
-                showToast('Failed to disable hotspot', 'error');
-            });
-    } else {
-        // Prompt user about WiFi disconnect before enabling
-        showHotspotPrompt();
-    }
-}
-
-function showHotspotPrompt() {
-    const modal = document.getElementById('hotspot-prompt-modal');
-    if (modal) modal.style.display = 'flex';
-}
-
-function closeHotspotPrompt() {
-    const modal = document.getElementById('hotspot-prompt-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function confirmHotspotEnable() {
-    closeHotspotPrompt();
-    showToast('Starting hotspot...', 'info');
-
-    // Enable + start hotspot
-    api.post('/hotspot/toggle', { enabled: true })
-        .then(() => api.post('/hotspot/start'))
-        .then(result => {
-            if (result.success) {
-                showToast('Hotspot enabled!', 'success');
-                updateHotspotUI(true, result.ssid);
-                // WiFi is now disconnected — update WiFi UI
-                loadWifiStatus();
-                checkWiFiStatus();
-            } else {
-                showToast(result.message || 'Failed to start hotspot', 'error');
-            }
-        })
-        .catch(err => {
-            showToast('Failed to enable hotspot', 'error');
-        });
-}
-
-/**
- * Update hotspot UI elements (button label, status text, SSID)
- */
-function updateHotspotUI(active, ssid) {
-    const label = document.getElementById('hotspot-toggle-label');
-    const statusText = document.getElementById('hotspot-status-text');
-    const ssidSpan = document.getElementById('hotspot-ssid');
-
-    if (label) label.textContent = active ? 'Disable Hotspot' : 'Enable Hotspot';
-    if (statusText) {
-        statusText.textContent = active ? 'Active' : 'Inactive';
-        statusText.classList.toggle('active', !!active);
-    }
-    if (ssidSpan && ssid) ssidSpan.textContent = ssid;
-}
-
-/**
- * Load current hotspot status from backend and update UI.
- * Called from loadSettings().
- */
-function loadHotspotStatus() {
-    api.get('/hotspot/status').then(status => {
-        updateHotspotUI(status.active, status.ssid);
-        const ssidSpan = document.getElementById('hotspot-ssid');
-        if (ssidSpan) ssidSpan.textContent = status.ssid || '---';
-    }).catch(err => {
-        console.error('Failed to load hotspot status:', err);
-        const statusText = document.getElementById('hotspot-status-text');
-        if (statusText) statusText.textContent = 'Unavailable';
-    });
-}
-
 /**
  * Sign Detection System - Touchscreen Application
  * Optimized for 2.8" LCD (640x480)
@@ -1176,7 +1074,36 @@ async function unpairDevice() {
 
 let wizardPollingInterval = null;
 
-async function startPairingWizard() {
+function showHotspotPrompt() {
+    const modal = document.getElementById('hotspot-prompt-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeHotspotPrompt() {
+    const modal = document.getElementById('hotspot-prompt-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function confirmStartPairing() {
+    closeHotspotPrompt();
+    startPairingWizard(true); // Force it this time
+}
+
+async function startPairingWizard(force = false) {
+    // If not forcing, check if we might need the prompt first
+    if (!force) {
+        try {
+            const status = await api.get('/wifi/status');
+            if (status && status.connected) {
+                // Currently on WiFi. Show warning prompt instead of opening wizard.
+                showHotspotPrompt();
+                return;
+            }
+        } catch (e) {
+            console.warn("Failed to check WiFi status before pairing wizard", e);
+        }
+    }
+
     const modal = document.getElementById('pairing-wizard-modal');
     if (!modal) return;
 
@@ -1193,11 +1120,6 @@ async function startPairingWizard() {
             // Successfully started hotspot, setup Step 2 UI
             setupWizardStep2(response.ssid, response.password);
             setWizardStep(2);
-        } else if (response.prompt) {
-            // If it asks for confirmation (e.g. WiFi is connected)
-            showToast('Disconnecting WiFi to enable Hotspot...', 'info');
-            closePairingWizard();
-            document.getElementById('hotspot-prompt-modal').style.display = 'flex';
         } else {
             throw new Error(response.message || 'Failed to start hotspot');
         }
@@ -1319,13 +1241,21 @@ function closePairingWizard() {
     const modal = document.getElementById('pairing-wizard-modal');
     if (modal) modal.style.display = 'none';
 
-    // Check if we are actually paired. If not, we cancelled the wizard 
-    // and should stop the hotspot to return to regular WiFi.
+    // Aggressively shut down the hotspot if it's open, unless we are CERTAIN we just successfully paired.
     api.get('/pair/status').then(res => {
-        if (!res.is_paired) {
-            api.post('/hotspot/stop').catch(e => console.warn('Failed to stop hotspot on wizard close', e));
+        // If there is no paired device at all, we must be aborting the wizard. Close the hotspot.
+        if (res && res.is_paired === true) {
+            console.log("Wizard closed after successful pair.");
+        } else {
+            console.log("Wizard cancelled or closed without pair. Stopping hotspot...");
+            api.post('/hotspot/stop').then(() => {
+                showToast('Pairing cancelled. Reconnecting to WiFi...', 'info');
+            }).catch(e => console.warn('Failed to stop hotspot on wizard close', e));
         }
-    }).catch(e => console.error('Failed to check pair status on close', e));
+    }).catch(e => {
+        console.error('Failed to check pair status on close, tearing down hotspot anyway', e);
+        api.post('/hotspot/stop').catch(err => console.error(err));
+    });
 
     loadPairingStatus();
 }
@@ -1366,9 +1296,6 @@ async function loadSettings() {
 
         // Load WiFi status
         await loadWifiStatus();
-
-        // Load hotspot status
-        loadHotspotStatus();
 
         // Load pairing status
         await loadPairingStatus();
@@ -2207,83 +2134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('\u2713 Application ready!');
 });
 
-// QR code display logic for Hotspot modal (server-generated images)
-function showHotspotQR() {
-    const modal = document.getElementById('hotspot-qr-modal');
-    if (!modal) return;
-    modal.style.display = 'flex';
-
-    // Clear previous QR codes
-    document.getElementById('hotspot-wifi-qr').innerHTML = '';
-    document.getElementById('hotspot-webapp-qr').innerHTML = '';
-    document.getElementById('hotspot-ssid-info').textContent = '';
-    document.getElementById('hotspot-password-info').textContent = '';
-
-    // Fetch hotspot credentials for SSID/password display
-    api.get('/hotspot/credentials').then(data => {
-        document.getElementById('hotspot-ssid-info').textContent = `SSID: ${data.ssid}`;
-        document.getElementById('hotspot-password-info').textContent = `Password: ${data.password}`;
-    });
-
-    // Set QR code images (served by backend, uses CSS sizing)
-    renderQRCodeImage('hotspot-wifi-qr', '/api/hotspot/qr?type=wifi');
-    renderQRCodeImage('hotspot-webapp-qr', '/api/hotspot/qr?type=webapp');
-
-    // Default to WiFi tab
-    switchHotspotQR('wifi');
-}
-
-/**
- * Switch between WiFi and Web App QR code tabs
- */
-function switchHotspotQR(type) {
-    const wifiQr = document.getElementById('hotspot-wifi-qr');
-    const webappQr = document.getElementById('hotspot-webapp-qr');
-    const tabs = document.querySelectorAll('.hotspot-qr-tab');
-
-    if (type === 'wifi') {
-        if (wifiQr) wifiQr.style.display = 'flex';
-        if (webappQr) webappQr.style.display = 'none';
-    } else {
-        if (wifiQr) wifiQr.style.display = 'none';
-        if (webappQr) webappQr.style.display = 'flex';
-    }
-
-    // Update tab active states
-    tabs.forEach((tab, i) => {
-        if ((type === 'wifi' && i === 0) || (type === 'webapp' && i === 1)) {
-            tab.classList.add('active');
-        } else {
-            tab.classList.remove('active');
-        }
-    });
-}
-
-function closeHotspotQR() {
-    const modal = document.getElementById('hotspot-qr-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-// Render QR code as <img> from backend (sizing handled by CSS .qr-image class)
-function renderQRCodeImage(elementId, imgUrl) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    el.innerHTML = `<img src="${imgUrl}" alt="QR Code">`;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-    // Modal close handler for QR modal
-    const qrModal = document.getElementById('hotspot-qr-modal');
-    if (qrModal) {
-        const closeBtn = qrModal.querySelector('.btn-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', closeHotspotQR);
-        }
-        qrModal.addEventListener('click', (e) => {
-            if (e.target === qrModal) closeHotspotQR();
-        });
-    }
-
     // Modal close handler for Pairing Wizard modal
     const wizardModal = document.getElementById('pairing-wizard-modal');
     if (wizardModal) {

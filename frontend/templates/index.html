@@ -298,48 +298,24 @@
         </div>
     </div>
 
-    <!-- Hotspot QR Modal -->
-    <div id="hotspot-qr-modal" class="modal" style="display:none;">
-        <div class="modal-content pairing-modal-content">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-wifi"></i> Hotspot QR</h3>
-                <button class="btn-close" onclick="closeHotspotQR()"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="modal-body pairing-modal-body">
-                <div class="hotspot-qr-tabs">
-                    <button class="hotspot-qr-tab active" onclick="switchHotspotQR('wifi')">
-                        <i class="fa-solid fa-wifi"></i> WiFi
-                    </button>
-                    <button class="hotspot-qr-tab" onclick="switchHotspotQR('webapp')">
-                        <i class="fa-solid fa-globe"></i> Web App
-                    </button>
-                </div>
-                <div id="hotspot-wifi-qr" class="pairing-qr-container"></div>
-                <div id="hotspot-webapp-qr" class="pairing-qr-container" style="display:none;"></div>
-                <div class="hotspot-creds">
-                    <span id="hotspot-ssid-info"></span>
-                    <span id="hotspot-password-info"></span>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Hotspot Prompt Modal -->
     <div id="hotspot-prompt-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Enable Hotspot</h3>
+                <h3>Start Pairing?</h3>
                 <button class="btn-close" onclick="closeHotspotPrompt()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="modal-body">
-                <p>This will disconnect WiFi. Proceed?</p>
+                <p>This will temporarily disconnect the system from WiFi to broadcast the pairing signal. Proceed?</p>
                 <div style="margin-top: 15px; display: flex; gap: 10px;">
                     <button class="btn btn-secondary btn-touch" onclick="closeHotspotPrompt()">Cancel</button>
-                    <button class="btn btn-success btn-touch" onclick="confirmHotspotEnable()">Enable Hotspot</button>
+                    <button class="btn btn-success btn-touch" onclick="confirmStartPairing()">Start</button>
                 </div>
             </div>
         </div>
     </div>
+
     <!-- Pairing Wizard Modal -->
     <div id="pairing-wizard-modal" class="modal" style="display:none;">
         <div class="modal-content pairing-wizard-content">

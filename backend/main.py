@@ -1253,7 +1253,6 @@ def start_hotspot():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/hotspot/stop', methods=['POST'])
-@require_pairing
 def stop_hotspot():
     """
     Stop the WiFi hotspot.
