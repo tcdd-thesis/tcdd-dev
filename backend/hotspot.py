@@ -301,6 +301,20 @@ bind-interfaces
         
         return False
     
+    def _get_active_wifi_ssid(self) -> Optional[str]:
+        """Get the currently connected WiFi SSID, if any."""
+        try:
+            stdout, stderr, code = self._run_nmcli(['-t', '-f', 'NAME,TYPE', 'connection', 'show', '--active'])
+            if code == 0:
+                for line in stdout.strip().split('\n'):
+                    if ':802-11-wireless' in line:
+                        conn_name = line.split(':')[0]
+                        if conn_name != self.HOTSPOT_CONNECTION_NAME:
+                            return conn_name
+        except Exception as e:
+            logger.error(f"Error checking active WiFi: {e}")
+        return None
+
     def start(self) -> Dict[str, Any]:
         """
         Start the WiFi hotspot.
@@ -321,6 +335,14 @@ bind-interfaces
             try:
                 logger.info(f"Starting hotspot: {self._ssid}")
                 
+                # Record current WiFi network before disconnecting so we can revert back cleanly
+                active_wifi = self._get_active_wifi_ssid()
+                if active_wifi and active_wifi != self.HOTSPOT_CONNECTION_NAME:
+                    logger.info(f"Saving active WiFi network '{active_wifi}' to config before hotspot start")
+                    if self.config:
+                        self.config.set('wifi.last_ssid', active_wifi, save=True)
+                        self._last_ssid = active_wifi
+
                 # Stop dnsmasq first to avoid DHCP conflicts with NetworkManager
                 subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], 
                               capture_output=True, timeout=10)
