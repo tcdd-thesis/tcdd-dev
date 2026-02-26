@@ -529,9 +529,9 @@ class Detector:
             # Hailo Model Zoo YOLO models expect BGR input; camera provides RGB
             resized_bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
             
-            # Normalize to float32 [0, 1]
-            input_data = resized_bgr.astype(np.float32) / 255.0
-            input_data = np.expand_dims(input_data, axis=0)
+            # HEF models have quantization built-in: send uint8 [0-255] directly
+            # Do NOT normalize to float32 — the NPU handles quantization on-chip
+            input_data = np.expand_dims(resized_bgr, axis=0)  # shape: (1, 640, 640, 3), dtype: uint8
             
             # Get stream parameters
             input_vstream_info = self.hailo_network_group.get_input_vstream_infos()[0]
