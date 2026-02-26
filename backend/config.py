@@ -8,7 +8,7 @@ Supports real-time updates and file watching
 import json
 import os
 import logging
-from threading import Lock
+from threading import Lock, RLock
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ class Config:
         """
         self.config_file = config_file
         self.config = self._load_config()
-        self._lock = Lock()  # Thread-safe access
+        self._lock = RLock()  # Thread-safe access (reentrant for nested set→save calls)
         self._last_modified = self._get_file_mtime()
         self._change_callbacks = []  # Callbacks to notify on changes
     
