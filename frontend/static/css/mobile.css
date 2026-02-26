@@ -189,10 +189,10 @@ body {
 /* ========== Menu Buttons ========== */
 .menu-buttons {
     flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
-    align-content: center;
+    justify-content: center;
 }
 
 .menu-btn {
@@ -867,11 +867,12 @@ body {
     }
 
     .menu-buttons {
-        grid-template-columns: repeat(4, 1fr);
+        flex-direction: row;
         gap: 10px;
     }
 
     .menu-btn {
+        flex: 1;
         padding: 16px 12px;
     }
 
