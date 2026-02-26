@@ -73,6 +73,13 @@ else
     exit 1
 fi
 
+# Get which port is configured in config.json
+if echo "$CONFIG" | grep -q '"port":\s*"\K[^"]+'; then
+    echo "Error: 'port' not found in config.json!"
+    exit 1
+fi
+PORT=$(echo "$CONFIG" | grep -oP '"port":\s*\K\d+')
+
 # Create necessary directories
 mkdir -p data/logs
 mkdir -p data/captures
@@ -94,7 +101,7 @@ chromium-browser \
     --disable-pinch \
     --overscroll-history-navigation=0 \
     --password-store=basic \
-    http://localhost:5000 &
+    http://localhost:$PORT &
 
 # Bring Python logs back to foreground
 wait $BACKEND_PID
