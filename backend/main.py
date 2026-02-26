@@ -975,7 +975,14 @@ def unpair_device():
         logger.error(f"Error unpairing device: {e}")
         return jsonify({'error': str(e)}), 500
 
-
+@app.route('/pair')
+def pair_landing_page():
+    """
+    Mobile landing page for pairing.
+    Accessed when phone scans QR code.
+    """
+    token = request.args.get('token', '')
+    return render_template('pair.html')
 
 @app.route('/api/pair/qr')
 def get_pairing_qr():
