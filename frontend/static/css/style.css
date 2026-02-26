@@ -1649,6 +1649,94 @@ body:not(.touchscreen) #page-logs.active {
 .modal-header h3 {
     margin: 0;
     font-size: 18px;
+    font-weight: 600;
+}
+
+/* ========== Pairing Wizard Styles ========== */
+.wizard-modal-content {
+    max-width: 450px !important;
+}
+
+.wizard-steps-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0 30px;
+    padding: 0 20px;
+}
+
+.wizard-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+}
+
+.step-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #2d2d2d;
+    border: 3px solid #4a4a4a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #888;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.step-circle.step-active {
+    background: var(--primary);
+    border-color: #64b5f6;
+    color: white;
+    box-shadow: 0 0 15px var(--primary);
+}
+
+.step-circle.step-completed {
+    background: var(--success);
+    border-color: #81c784;
+    color: white;
+}
+
+.step-line {
+    flex: 1;
+    height: 4px;
+    background: #4a4a4a;
+    margin: 0 -5px;
+    z-index: 1;
+    transition: all 0.3s ease;
+}
+
+.step-line.line-active {
+    background: var(--primary);
+}
+
+.step-line.line-completed {
+    background: var(--success);
+}
+
+.wizard-content {
+    animation: fadeIn 0.4s ease;
+}
+
+.wizard-creds-box {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    text-align: center;
+}
+
+.wizard-loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
 .btn-close {

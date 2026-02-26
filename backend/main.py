@@ -1227,6 +1227,9 @@ def start_hotspot():
     if not config.get('pairing.enabled', True):
         return jsonify({'error': 'Hotspot is disabled in settings'}), 403
     try:
+        # Regenerate credentials to ensure old devices cannot auto-connect (enforces 1-device limit)
+        hotspot_manager.regenerate_credentials()
+
         # Check if WiFi is connected and prompt user (frontend handles prompt)
         wifi_status = hotspot_manager.is_wifi_connected() if hasattr(hotspot_manager, 'is_wifi_connected') else False
         if wifi_status:

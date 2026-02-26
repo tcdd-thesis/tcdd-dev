@@ -1147,78 +1147,6 @@ async function loadPairingStatus() {
 }
 
 /**
- * Generate a new pairing code and show the QR modal
- */
-async function generatePairingCode() {
-    const btn = document.getElementById('btn-generate-pairing');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating...';
-    }
-
-    try {
-        const data = await api.post('/pair/generate');
-
-        if (data.success) {
-            showPairingQRModal(data);
-        } else {
-            showToast(data.error || 'Failed to generate code', 'error');
-        }
-    } catch (error) {
-        console.error('Failed to generate pairing code:', error);
-        showToast('Failed to generate pairing code', 'error');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Pair Device';
-        }
-    }
-}
-
-/**
- * Show the pairing QR code modal with the generated data.
- * Uses server-side QR image generation (works offline, no CDN needed).
- */
-function showPairingQRModal(data) {
-    const modal = document.getElementById('pairing-qr-modal');
-    const qrContainer = document.getElementById('pairing-qr-image');
-    const tokenDisplay = document.getElementById('pairing-token-display');
-    const ipInfo = document.getElementById('pairing-ip-info');
-
-    if (!modal) return;
-
-    // Display the token
-    if (tokenDisplay) tokenDisplay.textContent = data.token || '--------';
-
-    // Display IP / URL info
-    if (ipInfo) {
-        const url = data.url || data.ip_url || '';
-        const ip = data.ip || '';
-        const port = data.port || 5000;
-        if (url) {
-            ipInfo.innerHTML = `Open on phone: <strong>${url}</strong>`;
-        } else if (ip) {
-            ipInfo.innerHTML = `Open on phone: <strong>http://${ip}:${port}/pair</strong>`;
-        }
-    }
-
-    // Use server-generated QR code image
-    if (qrContainer) {
-        const qrUrl = `/api/pair/qr?token=${encodeURIComponent(data.token)}`;
-        qrContainer.innerHTML = `<img src="${qrUrl}" alt="Pairing QR Code">`;
-    }
-
-    modal.style.display = 'flex';
-}
-
-function closePairingQR() {
-    const modal = document.getElementById('pairing-qr-modal');
-    if (modal) modal.style.display = 'none';
-    // Refresh status in case device paired while modal was open
-    loadPairingStatus();
-}
-
-/**
  * Unpair the currently paired device
  */
 async function unpairDevice() {
@@ -1236,6 +1164,149 @@ async function unpairDevice() {
         console.error('Failed to unpair:', error);
         showToast('Failed to unpair device', 'error');
     }
+}
+
+// ============================================================================
+// PAIRING WIZARD LOGIC
+// ============================================================================
+
+let wizardPollingInterval = null;
+
+async function startPairingWizard() {
+    const modal = document.getElementById('pairing-wizard-modal');
+    if (!modal) return;
+
+    // Reset Wizard State
+    setWizardStep(1);
+    modal.style.display = 'flex';
+
+    try {
+        // Step 1: Start Hotspot
+        // Auto-triggers API which now regenerates credentials automatically
+        const response = await api.post('/hotspot/start');
+
+        if (response.success || response.ssid) {
+            // Successfully started hotspot, setup Step 2 UI
+            setupWizardStep2(response.ssid, response.password);
+            setWizardStep(2);
+        } else if (response.prompt) {
+            // If it asks for confirmation (e.g. WiFi is connected)
+            showToast('Disconnecting WiFi to enable Hotspot...', 'info');
+            closePairingWizard();
+            document.getElementById('hotspot-prompt-modal').style.display = 'flex';
+        } else {
+            throw new Error(response.message || 'Failed to start hotspot');
+        }
+    } catch (e) {
+        console.error('Wizard Step 1 failed:', e);
+        showToast('Failed to start hotspot for pairing', 'error');
+        closePairingWizard();
+    }
+}
+
+function setWizardStep(stepNum) {
+    // Update Circles and Lines
+    for (let i = 1; i <= 3; i++) {
+        const circle = document.querySelector(`#wizard-step-${i} .step-circle`);
+        const line = document.getElementById(`wizard-line-${i}`);
+
+        if (circle) {
+            circle.className = 'step-circle';
+            if (i < stepNum) circle.classList.add('step-completed');
+            if (i === stepNum) circle.classList.add('step-active');
+        }
+
+        if (line) {
+            line.className = 'step-line';
+            if (i < stepNum) line.classList.add('line-completed');
+            if (i === stepNum) line.classList.add('line-active');
+        }
+    }
+
+    // Show corresponding content
+    for (let i = 1; i <= 3; i++) {
+        const content = document.getElementById(`wizard-content-step${i}`);
+        if (content) {
+            if (i === stepNum) {
+                content.style.display = 'block';
+                content.classList.add('active');
+            } else {
+                content.style.display = 'none';
+                content.classList.remove('active');
+            }
+        }
+    }
+}
+
+function setupWizardStep2(ssid, password) {
+    document.getElementById('wizard-hotspot-ssid').textContent = `SSID: ${ssid}`;
+    document.getElementById('wizard-hotspot-password').textContent = `Password: ${password}`;
+
+    const qrContainer = document.getElementById('wizard-hotspot-qr');
+    // Random cache buster to ensure new QR is loaded since credentials change
+    const cacheBuster = new Date().getTime();
+    qrContainer.innerHTML = `<img src="/api/hotspot/qr?type=wifi&_t=${cacheBuster}" alt="WiFi QR">`;
+
+    // Start polling for connected clients
+    startClientPolling();
+}
+
+function startClientPolling() {
+    stopPolling(); // Clear any existing
+
+    wizardPollingInterval = setInterval(async () => {
+        try {
+            const res = await api.get('/hotspot/clients');
+            if (res && res.count === 1) {
+                // Exactly 1 client connected!
+                stopPolling();
+                wizardAdvanceToStep3();
+            }
+        } catch (e) {
+            console.error('Polling clients failed', e);
+        }
+    }, 3000); // Poll every 3 seconds
+}
+
+function stopPolling() {
+    if (wizardPollingInterval) {
+        clearInterval(wizardPollingInterval);
+        wizardPollingInterval = null;
+    }
+}
+
+async function wizardAdvanceToStep3() {
+    stopPolling(); // In case manual Next was clicked
+    setWizardStep(3);
+
+    try {
+        const data = await api.post('/pair/generate');
+        if (data.success) {
+            document.getElementById('wizard-webapp-token').textContent = data.token;
+
+            const url = data.url || data.ip_url || '';
+            const ip = data.ip || '';
+            const port = data.port || 5000;
+            const finalUrl = url ? url : (ip ? `http://${ip}:${port}/pair` : '');
+
+            document.getElementById('wizard-webapp-url').textContent = finalUrl;
+
+            const qrContainer = document.getElementById('wizard-webapp-qr');
+            qrContainer.innerHTML = `<img src="/api/pair/qr?token=${encodeURIComponent(data.token)}" alt="Web App QR">`;
+        } else {
+            throw new Error(data.error || 'Failed to generate code');
+        }
+    } catch (e) {
+        console.error('Wizard Step 3 failed:', e);
+        showToast('Failed to generate pairing token', 'error');
+    }
+}
+
+function closePairingWizard() {
+    stopPolling();
+    const modal = document.getElementById('pairing-wizard-modal');
+    if (modal) modal.style.display = 'none';
+    loadPairingStatus();
 }
 
 // ============================================================================
