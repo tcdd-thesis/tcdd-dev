@@ -34,6 +34,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 os.chdir(PROJECT_ROOT)
 
 # Import local modules
+from config import Config
 from camera import Camera
 from detector import Detector
 from display import DisplayController
