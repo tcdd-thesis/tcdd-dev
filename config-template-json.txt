@@ -1,6 +1,6 @@
 {
 
-  "version": "0.1.1-b202602262135",
+  "version": "0.2.0-b202602270155",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -111,6 +111,17 @@
   },
   
   
+  // =============================================================================
+  // BLUETOOTH AUDIO SETTINGS
+  // Routes TTS and system audio to a connected Bluetooth device
+  // =============================================================================
+  
+  "bluetooth": {
+    "enabled": false,              // Enable Bluetooth audio routing
+    "auto_connect": true,          // Try to connect to preferred_mac on startup
+    "preferred_mac": ""            // MAC address of the default Bluetooth speaker
+  },
+
   // =============================================================================
   // DISPLAY SETTINGS (Waveshare 2.8" LCD)
   // Controls the LCD backlight brightness via GPIO PWM
