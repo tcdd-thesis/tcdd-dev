@@ -236,15 +236,15 @@ def initialize():
 
 @app.route('/')
 def index():
-    """Serve the main application page"""
-    return render_template('index.html')
+    """Serve the main application page (RPi touchscreen)"""
+    return render_template('index.html', is_touchscreen=True)
 
 @app.route('/<path:path>')
 def catch_all(path):
     """Catch-all route for client-side routing"""
     if path.startswith('static/') or '.' in path:
         return send_from_directory(app.static_folder, path)
-    return render_template('index.html')
+    return render_template('index.html', is_touchscreen=True)
 
 # ============================================================================
 # SOCKETIO EVENTS (WebSocket Authentication)
@@ -919,6 +919,14 @@ def pair_landing_page():
     """
     token = request.args.get('token', '')
     return render_template('pair.html')
+
+@app.route('/mobile')
+def mobile_page():
+    """
+    Mobile-optimized UI for paired phone/tablet.
+    Same template, no touchscreen constraints.
+    """
+    return render_template('index.html', is_touchscreen=False)
 
 @app.route('/api/pair/qr')
 def get_pairing_qr():

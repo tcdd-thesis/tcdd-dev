@@ -1811,3 +1811,284 @@ body:not(.touchscreen) #page-logs.active {
     color: var(--primary);
     user-select: all;
 }
+
+/* ============================================================================
+   MOBILE RESPONSIVE STYLES
+   Overrides for non-touchscreen devices (phones/tablets via /mobile route)
+   All scoped with body:not(.touchscreen) — RPi kiosk layout is unaffected.
+   ============================================================================ */
+
+/* ========== Landscape Prompt Overlay ========== */
+.landscape-prompt {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.92);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+}
+
+.landscape-prompt-content {
+    max-width: 320px;
+}
+
+.landscape-icon {
+    font-size: 48px;
+    color: #4a9eff;
+    margin-bottom: 16px;
+    animation: rotate-hint 2s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+
+    0%,
+    100% {
+        transform: rotate(0deg);
+    }
+
+    50% {
+        transform: rotate(90deg);
+    }
+}
+
+.landscape-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.landscape-subtitle {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 24px;
+}
+
+.landscape-btn {
+    padding: 14px 28px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.landscape-btn:active {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(0.97);
+}
+
+/* ========== Mobile Base Layout ========== */
+body:not(.touchscreen) {
+    overflow: hidden;
+}
+
+body:not(.touchscreen) .page {
+    width: 100%;
+    height: 100%;
+}
+
+body:not(.touchscreen) .page.active {
+    display: flex;
+    flex-direction: column;
+}
+
+body:not(.touchscreen) #page-settings.active,
+body:not(.touchscreen) #page-logs.active {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ========== Mobile Home Page ========== */
+body:not(.touchscreen) .home-container {
+    height: 100%;
+    width: 100%;
+    padding: 16px;
+}
+
+body:not(.touchscreen) .menu-buttons {
+    gap: 12px;
+}
+
+body:not(.touchscreen) .menu-btn {
+    min-height: 80px;
+    border-radius: 12px;
+}
+
+/* ========== Mobile Settings ========== */
+body:not(.touchscreen) .settings-container-compact {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px;
+    flex: 1;
+    min-height: 0;
+}
+
+body:not(.touchscreen) .settings-group {
+    margin-bottom: 12px;
+    padding: 14px;
+    border-radius: 12px;
+}
+
+body:not(.touchscreen) .setting-row {
+    padding: 10px 0;
+    min-height: 44px;
+}
+
+/* ========== Mobile Controls ========== */
+body:not(.touchscreen) .btn-touch {
+    min-height: 48px;
+    font-size: 16px;
+    border-radius: 10px;
+}
+
+body:not(.touchscreen) .controls-compact {
+    padding: 10px 12px;
+    gap: 8px;
+}
+
+/* ========== Mobile Modals ========== */
+body:not(.touchscreen) .modal-content {
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 16px;
+}
+
+/* ========== Mobile Stats Bar ========== */
+body:not(.touchscreen) .stats-bar-compact {
+    padding: 8px 16px;
+}
+
+/* ========== Mobile Video ========== */
+body:not(.touchscreen) .video-container-compact {
+    flex: 1;
+    min-height: 0;
+}
+
+body:not(.touchscreen) .video-container-compact canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* ========== Mobile Violations Log ========== */
+body:not(.touchscreen) .violations-log-container {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+}
+
+/* ============================================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================================ */
+
+/* Portrait phones (< 480px wide) */
+@media screen and (max-width: 480px) {
+    body:not(.touchscreen) .menu-buttons {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    body:not(.touchscreen) .menu-btn {
+        min-height: 100px;
+    }
+
+    body:not(.touchscreen) .menu-btn .icon {
+        font-size: 32px;
+    }
+
+    body:not(.touchscreen) .menu-btn .label {
+        font-size: 13px;
+    }
+
+    body:not(.touchscreen) .page-header {
+        padding: 10px 12px;
+    }
+
+    body:not(.touchscreen) .page-header h2 {
+        font-size: 18px;
+    }
+
+    body:not(.touchscreen) .settings-container-compact {
+        padding: 10px;
+    }
+
+    body:not(.touchscreen) .settings-group {
+        padding: 12px;
+    }
+
+    body:not(.touchscreen) .setting-row label {
+        font-size: 13px;
+    }
+}
+
+/* Landscape phones */
+@media screen and (max-width: 900px) and (orientation: landscape) {
+    body:not(.touchscreen) .home-container {
+        padding: 10px 16px;
+    }
+
+    body:not(.touchscreen) .home-header {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+    }
+
+    body:not(.touchscreen) .menu-buttons {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+    }
+
+    body:not(.touchscreen) .menu-btn {
+        min-height: 70px;
+    }
+
+    body:not(.touchscreen) .page-header {
+        padding: 8px 12px;
+    }
+
+    body:not(.touchscreen) .settings-container-compact {
+        padding: 8px 12px;
+    }
+
+    body:not(.touchscreen) .settings-group {
+        padding: 10px;
+        margin-bottom: 8px;
+    }
+
+    body:not(.touchscreen) .setting-row {
+        padding: 6px 0;
+        min-height: 36px;
+    }
+
+    body:not(.touchscreen) .controls-compact {
+        padding: 6px 12px;
+    }
+
+    body:not(.touchscreen) .btn-touch {
+        min-height: 40px;
+        font-size: 14px;
+    }
+}
+
+/* Tablets (wider screens) */
+@media screen and (min-width: 768px) {
+    body:not(.touchscreen) .settings-container-compact {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    body:not(.touchscreen) .modal-content {
+        max-width: 500px;
+    }
+}

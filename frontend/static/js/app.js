@@ -218,8 +218,18 @@ function getScreenBrightness() {
 const api = {
     baseUrl: '/api',
 
+    // Build headers with optional session token for mobile auth
+    _headers() {
+        const headers = { 'Content-Type': 'application/json' };
+        const token = localStorage.getItem('tcdd_session_token');
+        if (token) headers['X-Session-Token'] = token;
+        return headers;
+    },
+
     async get(endpoint) {
-        const response = await fetch(`${this.baseUrl}${endpoint}`);
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            headers: this._headers()
+        });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
     },
@@ -227,7 +237,7 @@ const api = {
     async post(endpoint, data = {}) {
         const response = await fetch(`${this.baseUrl}${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this._headers(),
             body: JSON.stringify(data)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -237,7 +247,7 @@ const api = {
     async put(endpoint, data = {}) {
         const response = await fetch(`${this.baseUrl}${endpoint}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this._headers(),
             body: JSON.stringify(data)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
