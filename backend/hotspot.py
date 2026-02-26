@@ -69,6 +69,7 @@ class HotspotManager:
             self._auto_start = self.config.get('pairing.auto_start', True)
             self._enabled = self.config.get('pairing.enabled', True)
             self._domain = self.config.get('pairing.domain', HOTSPOT_DOMAIN)
+            self._last_ssid = self.config.get('wifi.last_ssid', '')
             
             # Generate credentials if not set
             if not self._ssid or not self._password:
@@ -81,8 +82,7 @@ class HotspotManager:
             self._auto_start = True
             self._enabled = True
             self._domain = HOTSPOT_DOMAIN
-            self._generate_credentials()
-            self._enabled = True
+            self._last_ssid = ''
             self._generate_credentials()
     
     def _save_to_config(self):
@@ -390,6 +390,23 @@ bind-interfaces
             
             # Small delay to let the interface settle after hotspot teardown
             time.sleep(1)
+
+            # Reload to get the latest last_ssid in case it changed
+            if self.config:
+                self._last_ssid = self.config.get('wifi.last_ssid', '')
+            
+            if self._last_ssid:
+                logger.info(f"Attempting to reconnect to last known SSID: {self._last_ssid}")
+                stdout, stderr, code = self._run_nmcli([
+                    'connection', 'up', self._last_ssid
+                ], timeout=15)
+                
+                if code == 0:
+                    logger.info(f"Successfully reconnected to last SSID: {self._last_ssid}")
+                    return
+                else:
+                    logger.warning(f"Failed to reconnect to last SSID ({stderr.strip()}), falling back to auto-connect...")
+
             
             # Tell NetworkManager to connect the device (picks best known network)
             stdout, stderr, code = self._run_nmcli([

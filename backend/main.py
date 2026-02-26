@@ -825,6 +825,8 @@ def connect_wifi():
         
         if code == 0:
             logger.info(f"Connected to WiFi: {ssid}")
+            # Save the connected SSID to config
+            config.set('wifi.last_ssid', ssid, save=True)
             return jsonify({'message': f'Connected to {ssid}', 'connected': True}), 200
         else:
             logger.error(f"Failed to connect to WiFi: {stderr}")
