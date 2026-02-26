@@ -1,4 +1,5 @@
 {
+
   "version": "0.1.1-b202602262135",
 
   // =============================================================================
@@ -141,6 +142,31 @@
   },
   
   // =============================================================================
+  // TEXT-TO-SPEECH SETTINGS
+  // Real-time spoken alerts for detected traffic control devices
+  // Uses espeak / espeak-ng via subprocess — outputs to default audio sink
+  // Install MBROLA for higher-quality voices:
+  //   sudo apt install mbrola mbrola-us2
+  // =============================================================================
+  
+  "tts": {
+    "enabled": true,               // Enable/disable TTS alerts
+    "voice": "en+f3",             // espeak voice to use
+                                    // "en+f3"   = built-in female (no mbrola needed)
+                                    // "en+m3"   = built-in male   (no mbrola needed)
+                                    // "mb-us2"  = MBROLA US English female (best, needs mbrola)
+                                    // "mb-us1"  = MBROLA US English male   (needs mbrola)
+                                    // "mb-en1"  = MBROLA British English female (needs mbrola)
+                                    // "en"      = default espeak voice
+    "speech_rate": 160,            // Speech speed (words per minute)
+                                    // 120 = slow, 160 = normal, 200 = fast
+    "volume": 1.0,                 // Volume: 0.0 (mute) to 1.0 (max)
+    "cooldown_seconds": 10         // Seconds before same alert can repeat
+                                    // Prevents repetitive announcements
+  },
+
+
+  // =============================================================================
   // ALERT SYSTEM
   // Send notifications when detection threshold is reached
   // =============================================================================
@@ -181,5 +207,5 @@
     "require_confirmation": true,
     "touchscreen_bypass": true
   }
-
+  
 }
