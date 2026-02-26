@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TCDD — Mobile</title>
+    <link rel="stylesheet" href="/static/css/fontawesome-local.css">
+    <link rel="stylesheet" href="/static/css/mobile.css">
+</head>
+
+<body>
+    <!-- Landscape Prompt Overlay -->
+    <div id="landscape-prompt" class="landscape-prompt">
+        <div class="landscape-prompt-content">
+            <div class="landscape-icon"><i class="fa-solid fa-mobile-screen-button"></i></div>
+            <div class="landscape-title">Rotate for best experience</div>
+            <div class="landscape-subtitle">This app works best in landscape</div>
+            <button class="landscape-btn" onclick="dismissLandscapePrompt()">Continue Anyway</button>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- HOME PAGE                                                         -->
+    <!-- ================================================================= -->
+    <div id="page-home" class="page active">
+        <div class="home-container">
+            <div class="home-header">
+                <div class="home-title">
+                    <span class="home-logo">🚗</span>
+                    <span>TCDD</span>
+                </div>
+                <div class="status-panel">
+                    <div class="status-item" id="status-connection">
+                        <span class="status-dot"></span>
+                        <span class="status-label">Server</span>
+                    </div>
+                    <div class="status-item" id="status-phone-audio">
+                        <i class="fa-solid fa-volume-high phone-audio-indicator" style="display:none;"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="menu-buttons">
+                <button class="menu-btn" data-page="live">
+                    <span class="icon"><i class="fa-solid fa-play"></i></span>
+                    <span class="label">Live Feed</span>
+                </button>
+
+                <button class="menu-btn" data-page="settings">
+                    <span class="icon"><i class="fa-solid fa-gear"></i></span>
+                    <span class="label">Settings</span>
+                </button>
+
+                <button class="menu-btn" data-page="logs">
+                    <span class="icon"><i class="fa-solid fa-list"></i></span>
+                    <span class="label">Logs</span>
+                </button>
+
+                <button class="menu-btn menu-btn-audio" onclick="openAudioModal()">
+                    <span class="icon"><i class="fa-solid fa-volume-high"></i></span>
+                    <span class="label">Audio Output</span>
+                    <span id="audio-badge" class="audio-badge" style="display:none;">ON</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- LIVE FEED PAGE                                                    -->
+    <!-- ================================================================= -->
+    <div id="page-live" class="page">
+        <div class="page-header">
+            <button class="btn-back" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+            <h2>Live Feed</h2>
+        </div>
+
+        <div class="video-container">
+            <canvas id="video-canvas"></canvas>
+            <div id="no-feed" class="no-feed">
+                <i class="fa-solid fa-video-slash"></i>
+                <span>Waiting for feed...</span>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat">
+                <span class="label">FPS:</span>
+                <span id="fps-value" class="value">0</span>
+            </div>
+            <div class="stat">
+                <span class="label">Detected:</span>
+                <span id="detection-count" class="value">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- SETTINGS PAGE                                                     -->
+    <!-- ================================================================= -->
+    <div id="page-settings" class="page">
+        <div class="page-header">
+            <button class="btn-back" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+            <h2>Settings</h2>
+        </div>
+
+        <div class="settings-container">
+            <div class="settings-group">
+                <h3>Detection Settings</h3>
+                <div class="setting-row">
+                    <label>Detection Confidence</label>
+                    <div class="slider-container">
+                        <input type="range" id="setting-confidence" class="slider" min="0" max="100" value="50"
+                            step="5">
+                        <span id="confidence-display" class="slider-value">50%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>TTS Settings</h3>
+                <div class="setting-row">
+                    <label>TTS Enabled</label>
+                    <span id="tts-status" class="setting-value">—</span>
+                </div>
+                <div class="setting-row">
+                    <label>Speech Rate</label>
+                    <span id="tts-rate" class="setting-value">—</span>
+                </div>
+                <div class="setting-row">
+                    <label>Cooldown</label>
+                    <span id="tts-cooldown" class="setting-value">—</span>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>System Info</h3>
+                <div class="setting-row">
+                    <label>Version</label>
+                    <span class="setting-value">1.0.0</span>
+                </div>
+                <div class="setting-row">
+                    <label>Model</label>
+                    <span id="model-name" class="setting-value">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-footer">
+            <button id="btn-save-settings" class="btn btn-success"><i class="fa-solid fa-floppy-disk"></i>
+                Save</button>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- LOGS PAGE                                                         -->
+    <!-- ================================================================= -->
+    <div id="page-logs" class="page">
+        <div class="page-header">
+            <button class="btn-back" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+            <h2>Violation Logs</h2>
+        </div>
+
+        <div class="controls-bar">
+            <button class="btn btn-primary" onclick="loadViolations()"><i class="fa-solid fa-rotate-right"></i>
+                Refresh</button>
+            <button class="btn btn-secondary" onclick="clearViolationsDisplay()"><i class="fa-solid fa-xmark"></i>
+                Clear</button>
+        </div>
+
+        <div class="violations-container">
+            <div id="violations-list" class="violations-list"></div>
+        </div>
+
+        <!-- Violation Detail Modal -->
+        <div id="violation-detail-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Violation Details</h3>
+                    <button class="btn-close" onclick="closeViolationDetail()"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="violation-detail-content" class="modal-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- PHONE AUDIO MODAL                                                 -->
+    <!-- ================================================================= -->
+    <div id="audio-modal" class="modal" style="display:none;">
+        <div class="modal-content audio-modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-volume-high"></i> Phone Audio Output</h3>
+                <button class="btn-close" onclick="closeAudioModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body audio-modal-body">
+                <div class="audio-explanation">
+                    Use this phone as a speaker for traffic alerts.
+                    The system will announce detected signs through your phone.
+                </div>
+
+                <div class="audio-volume-prompt">
+                    <div class="volume-icon"><i class="fa-solid fa-volume-high"></i></div>
+                    <div class="volume-text">
+                        <strong>Please increase your phone volume</strong>
+                        <span>Make sure media volume is turned up</span>
+                    </div>
+                </div>
+
+                <div class="audio-controls">
+                    <button id="btn-test-speaker" class="btn btn-primary btn-block" onclick="testPhoneAudio()">
+                        <i class="fa-solid fa-play"></i> Test Speaker
+                    </button>
+
+                    <div class="audio-toggle-row">
+                        <span class="audio-toggle-label" id="audio-toggle-label">Audio Output Disabled</span>
+                        <button id="btn-audio-toggle" class="toggle-btn" onclick="togglePhoneAudio()">
+                            <span class="toggle-knob"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="audio-status" class="audio-status" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TOAST NOTIFICATIONS                                               -->
+    <!-- ================================================================= -->
+    <div id="toast-container"></div>
+
+    <!-- Load SocketIO (bundled locally for offline/hotspot use) -->
+    <script src="/static/js/socket.io.min.js"></script>
+    <!-- Load mobile app JS -->
+    <script src="/static/js/mobile.js?v=1.0.0"></script>
+    <script>
+        // Landscape prompt logic
+        function dismissLandscapePrompt() {
+            document.getElementById('landscape-prompt').style.display = 'none';
+            localStorage.setItem('tcdd_landscape_dismissed', 'true');
+        }
+
+        function checkLandscapePrompt() {
+            const dismissed = localStorage.getItem('tcdd_landscape_dismissed');
+            const prompt = document.getElementById('landscape-prompt');
+            if (!prompt) return;
+            if (dismissed === 'true' || window.innerWidth > window.innerHeight) {
+                prompt.style.display = 'none';
+            } else {
+                prompt.style.display = 'flex';
+            }
+        }
+
+        window.addEventListener('resize', checkLandscapePrompt);
+        window.addEventListener('orientationchange', () => setTimeout(checkLandscapePrompt, 200));
+        document.addEventListener('DOMContentLoaded', checkLandscapePrompt);
+    </script>
+</body>
+
+</html>
