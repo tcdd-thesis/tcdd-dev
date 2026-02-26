@@ -97,10 +97,12 @@ def bench_camera():
             cam = Picamera2()
             cam_cfg = cam.create_preview_configuration(
                 main={"size": (CAM_W, CAM_H), "format": "RGB888"},
-                buffer_count=2,
+                buffer_count=4,
             )
             cam.configure(cam_cfg)
-            cam.set_controls({"AwbEnable": True, "AwbMode": 0})
+            frame_dur = int(1_000_000 / CAM_FPS)
+            cam.set_controls({"AwbEnable": True, "AwbMode": 0,
+                              "FrameDurationLimits": (frame_dur, frame_dur)})
             cam.start()
             time.sleep(1.0)
 
@@ -387,10 +389,12 @@ def main():
             cam = Picamera2()
             cam_cfg = cam.create_preview_configuration(
                 main={"size": (CAM_W, CAM_H), "format": "RGB888"},
-                buffer_count=2,
+                buffer_count=4,
             )
             cam.configure(cam_cfg)
-            cam.set_controls({"AwbEnable": True, "AwbMode": 0})
+            frame_dur = int(1_000_000 / CAM_FPS)
+            cam.set_controls({"AwbEnable": True, "AwbMode": 0,
+                              "FrameDurationLimits": (frame_dur, frame_dur)})
             cam.start()
             time.sleep(1.0)
             def grab():

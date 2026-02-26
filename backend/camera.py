@@ -171,22 +171,27 @@ def initialize_camera():
             # Configure camera with auto white balance enabled
             config = camera.create_preview_configuration(
                 main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
-                buffer_count=4  # ≥4 buffers to sustain full frame rate
+                buffer_count=2  # ≥4 buffers to sustain full frame rate
                                 # (2 buffers causes ping-pong that halves FPS)
             )
             camera.configure(config)
             
-            # Set automatic white balance mode for better color accuracy
-            # Available modes: 'auto', 'tungsten', 'fluorescent', 'indoor', 'daylight', 'cloudy'
+            # Set controls for target frame rate and white balance
+            # FrameDurationLimits (min, max) in microseconds — forces the ISP to
+            # deliver at the desired FPS instead of letting auto-exposure extend
+            # frame time (common on NoIR sensors in lower light).
+            frame_duration_us = int(1_000_000 / CAMERA_FPS)  # e.g. 33333 µs for 30 FPS
             camera.set_controls({
-                "AwbEnable": True,  # Enable auto white balance
-                "AwbMode": 0        # 0 = Auto mode for adaptive color correction
+                "AwbEnable": True,           # Enable auto white balance
+                "AwbMode": 0,                # 0 = Auto mode for adaptive color correction
+                "FrameDurationLimits": (frame_duration_us, frame_duration_us),
             })
             
             camera.start()
             # Warm up camera and let AWB stabilize
-            time.sleep(1.0)  # Increased to let AWB converge
-            logger.info(f"Raspberry Pi Camera initialized with Auto White Balance ({CAMERA_WIDTH}x{CAMERA_HEIGHT})")
+            time.sleep(1.0)
+            logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
+                         f"FrameDuration={frame_duration_us}µs)")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Pi Camera: {e}")
