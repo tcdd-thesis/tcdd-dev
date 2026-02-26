@@ -63,12 +63,12 @@ class HotspotManager:
     def _load_from_config(self):
         """Load hotspot settings from config.json."""
         if self.config:
-            self._ssid = self.config.get('hotspot.ssid', '')
-            self._password = self.config.get('hotspot.password', '')
-            self._interface = self.config.get('hotspot.interface', 'wlan0')
-            self._auto_start = self.config.get('hotspot.auto_start', True)
-            self._enabled = self.config.get('hotspot.enabled', True)
-            self._domain = self.config.get('hotspot.domain', HOTSPOT_DOMAIN)
+            self._ssid = self.config.get('pairing.ssid', '')
+            self._password = self.config.get('pairing.password', '')
+            self._interface = self.config.get('pairing.interface', 'wlan0')
+            self._auto_start = self.config.get('pairing.auto_start', True)
+            self._enabled = self.config.get('pairing.enabled', True)
+            self._domain = self.config.get('pairing.domain', HOTSPOT_DOMAIN)
             
             # Generate credentials if not set
             if not self._ssid or not self._password:
@@ -88,9 +88,9 @@ class HotspotManager:
     def _save_to_config(self):
         """Save hotspot settings to config.json."""
         if self.config:
-            self.config.set('hotspot.ssid', self._ssid, save=False)
-            self.config.set('hotspot.password', self._password, save=False)
-            self.config.set('hotspot.interface', self._interface, save=False)
+            self.config.set('pairing.ssid', self._ssid, save=False)
+            self.config.set('pairing.password', self._password, save=False)
+            self.config.set('pairing.interface', self._interface, save=False)
             self.config.save()
             logger.info("💾 Hotspot config saved to config.json")
     
@@ -587,7 +587,7 @@ bind-interfaces
         """
         self._auto_start = enabled
         if self.config:
-            self.config.set('hotspot.auto_start', enabled, save=True)
+            self.config.set('pairing.auto_start', enabled, save=True)
         
         return {
             'success': True,

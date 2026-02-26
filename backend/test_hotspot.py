@@ -26,7 +26,7 @@ class MockConfig:
     """Mock config for testing without full config.py dependency."""
     def __init__(self):
         self._data = {
-            'hotspot': {
+            'pairing': {
                 'enabled': True,
                 'auto_start': True,
                 'ssid': '',
@@ -132,8 +132,8 @@ def test_hotspot_manager():
     print("\n[Test 7] Persistence Test (via config)")
     hm.set_credentials(ssid="PersistTest", password="persist123")
     # Verify settings were written to mock config
-    assert mock_config.get('hotspot.ssid') == "PersistTest", "SSID should be in config"
-    assert mock_config.get('hotspot.password') == "persist123", "Password should be in config"
+    assert mock_config.get('pairing.ssid') == "PersistTest", "SSID should be in config"
+    assert mock_config.get('pairing.password') == "persist123", "Password should be in config"
     # Create new instance with same config
     hm2 = HotspotManager(config=mock_config)
     creds2 = hm2.get_credentials()

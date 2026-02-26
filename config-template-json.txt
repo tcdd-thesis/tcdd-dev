@@ -157,5 +157,23 @@
     "show_stats": true,            // Display detection stats
     "auto_start_camera": false,    // Auto-start camera on page load
     "notification_duration": 3000  // Toast duration (milliseconds)
+  },
+
+  // =============================================================================
+  // PAIRING AND HOTSPOT SETTINGS
+  // Used for secure pairing between camera and client devices
+  // =============================================================================
+
+  "pairing":
+  {
+    "enabled": true,
+    "auto_start": true,
+    "ssid": "",
+    "password": "",
+    "interface": "wlan0",
+    "domain": "tcdd.local",
+    "require_confirmation": true,
+    "touchscreen_bypass": true
   }
+
 }

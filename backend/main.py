@@ -1062,7 +1062,7 @@ def toggle_hotspot():
     try:
         data = request.get_json()
         enabled = data.get('enabled', False)
-        config.set('hotspot.enabled', enabled, save=True)
+        config.set('pairing.enabled', enabled, save=True)
         hotspot_manager._enabled = enabled
         logger.info(f"Hotspot enabled set to {enabled}")
         return jsonify({'success': True, 'enabled': enabled}), 200
@@ -1075,9 +1075,9 @@ def toggle_hotspot():
 def start_hotspot():
     """
     Start the WiFi hotspot.
-    Checks hotspot.enabled config.
+    Checks pairing.enabled config.
     """
-    if not config.get('hotspot.enabled', True):
+    if not config.get('pairing.enabled', True):
         return jsonify({'error': 'Hotspot is disabled in settings'}), 403
     try:
         # Check if WiFi is connected and prompt user (frontend handles prompt)
