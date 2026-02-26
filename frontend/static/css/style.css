@@ -474,15 +474,17 @@ body.touchscreen {
     }
 }
 
-/* ========== Menu Buttons (3 Square Buttons) ========== */
+/* ========== Menu Buttons ========== */
 .menu-buttons {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
     gap: 15px;
     padding: 0 20px;
     height: calc(100% - 60px);
     /* Account for header */
-    align-items: center;
 }
 
 .menu-btn {
@@ -498,7 +500,7 @@ body.touchscreen {
     transition: all 0.2s ease;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     padding: 8px;
-    width: 100%;
+    width: 170px;
     aspect-ratio: 1;
     /* Make buttons square */
     min-height: 0;
@@ -2209,11 +2211,11 @@ body:not(.touchscreen) .violations-log-container {
 /* Portrait phones (< 480px wide) */
 @media screen and (max-width: 480px) {
     body:not(.touchscreen) .menu-buttons {
-        grid-template-columns: 1fr 1fr;
         gap: 10px;
     }
 
     body:not(.touchscreen) .menu-btn {
+        width: 140px;
         min-height: 100px;
     }
 
@@ -2258,7 +2260,6 @@ body:not(.touchscreen) .violations-log-container {
     }
 
     body:not(.touchscreen) .menu-buttons {
-        grid-template-columns: repeat(3, 1fr);
         gap: 10px;
     }
 

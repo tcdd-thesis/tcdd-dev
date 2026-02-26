@@ -868,12 +868,16 @@ body {
 
     .menu-buttons {
         flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        align-content: center;
         gap: 10px;
     }
 
     .menu-btn {
-        flex: 1;
-        padding: 16px 12px;
+        flex: 0 0 auto;
+        padding: 16px 24px;
+        min-width: 120px;
     }
 
     .menu-btn .icon {
