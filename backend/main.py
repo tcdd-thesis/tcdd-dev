@@ -707,16 +707,41 @@ def scan_wifi():
         
         for line in stdout.strip().split('\n'):
             if line:
-                parts = line.split(':')
-                if len(parts) >= 3:
-                    ssid = parts[0]
-                    if ssid and ssid not in seen_ssids:
+                # `nmcli -t` escapes colons in SSID with a backslash if present. Unescaping is complex.
+                # Just split by colon. A limitation is colons in SSID name will break parsing if not handled robustly
+                # A safer split is separating by unescaped colons, or just matching parts from the end.
+                # However, basic parsing is: SSID:SIGNAL:SECURITY:IN-USE
+                
+                # Use maxsplit to handle potential colons in SSID (although nmcli escapes them, this is safer)
+                # First check if the line starts with a colon (empty SSID)
+                if line.startswith(':'):
+                    continue
+                    
+                # Find the last 3 colons which separate SIGNAL, SECURITY, IN-USE
+                parts = []
+                remaining = line
+                for _ in range(3):
+                    idx = remaining.rfind(':')
+                    if idx != -1:
+                        parts.insert(0, remaining[idx+1:])
+                        remaining = remaining[:idx]
+                    else:
+                        break
+                
+                if len(parts) == 3:
+                    ssid = remaining
+                    signal_str, security, in_use = parts
+                    
+                    # Unescape colons in SSID
+                    ssid = ssid.replace('\\:', ':')
+                    
+                    if ssid and ssid != '--' and ssid not in seen_ssids:
                         seen_ssids.add(ssid)
                         networks.append({
                             'ssid': ssid,
-                            'signal': int(parts[1]) if parts[1].isdigit() else 0,
-                            'security': parts[2] if len(parts) > 2 else 'Open',
-                            'connected': parts[3] == '*' if len(parts) > 3 else False
+                            'signal': int(signal_str) if signal_str.isdigit() else 0,
+                            'security': security if security and security != '--' else 'Open',
+                            'connected': in_use == '*'
                         })
         
         # Sort by signal strength

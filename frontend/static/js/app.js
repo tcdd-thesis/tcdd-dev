@@ -1458,19 +1458,26 @@ async function scanWifiNetworks() {
         if (networks.length === 0) {
             listContainer.innerHTML = '<div class="wifi-empty">No networks found</div>';
         } else {
-            listContainer.innerHTML = networks.map(net => {
-                const hasPassword = !!(net.security && net.security !== '' && net.security !== '--');
-                return `
-                <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${hasPassword})">
-                    <div class="wifi-network-info">
-                        <span class="wifi-network-name">${escapeHtml(net.ssid)}</span>
-                        <span class="wifi-network-signal">
-                            <i class="fa fa-signal"></i> ${net.signal}%
-                            ${hasPassword ? '<i class="fa fa-lock"></i>' : ''}
-                        </span>
+            // Filter out empty ssids or the literal 'null' string
+            const validNetworks = networks.filter(net => net.ssid && net.ssid.trim() !== '' && net.ssid !== 'null');
+
+            if (validNetworks.length === 0) {
+                listContainer.innerHTML = '<div class="wifi-empty">No valid networks found</div>';
+            } else {
+                listContainer.innerHTML = validNetworks.map(net => {
+                    const hasPassword = !!(net.security && net.security !== '' && net.security !== '--');
+                    return `
+                    <div class="wifi-network-item" onclick="promptWifiConnect('${escapeHtml(net.ssid)}', ${hasPassword})">
+                        <div class="wifi-network-info">
+                            <span class="wifi-network-name">${escapeHtml(net.ssid)}</span>
+                            <span class="wifi-network-signal">
+                                <i class="fa fa-signal"></i> ${net.signal}%
+                                ${hasPassword ? '<i class="fa fa-lock"></i>' : ''}
+                            </span>
+                        </div>
                     </div>
-                </div>
-            `}).join('');
+                `}).join('');
+            }
         }
     } catch (error) {
         console.error('WiFi scan failed:', error);
@@ -1524,7 +1531,7 @@ async function submitWifiPassword() {
     const passwordInput = document.getElementById('wifi-password-input');
     const password = passwordInput?.value || '';
 
-    if (!wifiConnectingSsid) {
+    if (!wifiConnectingSsid || wifiConnectingSsid === 'null') {
         showToast('No network selected', 'error');
         return;
     }
