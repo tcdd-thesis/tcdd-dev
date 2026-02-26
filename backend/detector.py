@@ -69,6 +69,9 @@ class Detector:
         self.hailo_hef = None
         self.hailo_network_group = None
         self.hailo_network_group_context = None
+        self._hailo_infer_ctx = None
+        self._hailo_pipeline = None
+        self._hailo_input_names = []
         
         # Parse model path(s) based on engine
         model_config = config.get('detection.model', [])
@@ -209,12 +212,23 @@ class Detector:
             network_groups = self.hailo_device.configure(self.hailo_hef, configure_params)
             self.hailo_network_group = network_groups[0]
             
-            # Activate network group (keep active for entire session for performance)
-            self.hailo_network_group_context = self.hailo_network_group.activate()
+            # Activate network group (keep active for entire session)
+            self._hailo_activation_ctx = self.hailo_network_group.activate()
+            self.hailo_network_group_context = self._hailo_activation_ctx.__enter__()
+            
+            # Create persistent InferVStreams pipeline (reused for all frames)
+            input_params = InputVStreamParams.make(self.hailo_network_group)
+            output_params = OutputVStreamParams.make(self.hailo_network_group)
+            self._hailo_input_names = list(input_params.keys())
+            
+            self._hailo_infer_ctx = InferVStreams(
+                self.hailo_network_group, input_params, output_params)
+            self._hailo_pipeline = self._hailo_infer_ctx.__enter__()
             
             self.loaded = True
             logger.info("\u2705 HEF model loaded on Hailo NPU!")
             logger.info(f"\u26a1 Running on Hailo AI HAT+ (device={self.device})")
+            logger.info(f"   Input stream(s): {self._hailo_input_names}")
             
         except Exception as e:
             logger.error(f"\u274c Failed to load HEF model: {e}")
@@ -222,10 +236,27 @@ class Detector:
             self._cleanup_hailo()
     
     def _cleanup_hailo(self):
-        """Release Hailo resources"""
+        """Release Hailo resources in reverse order of creation"""
         try:
-            if self.hailo_network_group_context is not None:
-                self.hailo_network_group_context = None
+            # 1. Release inference pipeline
+            if self._hailo_infer_ctx is not None:
+                try:
+                    self._hailo_infer_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
+                self._hailo_infer_ctx = None
+                self._hailo_pipeline = None
+            
+            # 2. Deactivate network group
+            if hasattr(self, '_hailo_activation_ctx') and self._hailo_activation_ctx is not None:
+                try:
+                    self._hailo_activation_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
+                self._hailo_activation_ctx = None
+            self.hailo_network_group_context = None
+            
+            # 3. Release network group, HEF, device
             self.hailo_network_group = None
             self.hailo_hef = None
             if self.hailo_device is not None:
@@ -534,27 +565,15 @@ class Detector:
             input_frame = np.ascontiguousarray(resized_bgr, dtype=np.uint8)
             input_batch = np.expand_dims(input_frame, axis=0)  # (1, 640, 640, 3)
             
-            # Build params — use param dict keys as the canonical stream names
-            input_params = InputVStreamParams.make(self.hailo_network_group)
-            output_params = OutputVStreamParams.make(self.hailo_network_group)
-            
-            # Build input dict keyed by the stream names from input_params
-            input_dict = {}
-            if isinstance(input_params, dict):
-                for stream_name in input_params:
-                    input_dict[stream_name] = input_batch
-            else:
-                # Fallback: query vstream info for names
-                for info in self.hailo_network_group.get_input_vstream_infos():
-                    input_dict[info.name] = input_batch
+            # Build input dict using the stream names stored at init time
+            input_dict = {name: input_batch for name in self._hailo_input_names}
             
             logger.debug(f"Hailo input: keys={list(input_dict.keys())}, "
                          f"shape={input_batch.shape}, dtype={input_batch.dtype}, "
                          f"nbytes={input_batch.nbytes}")
             
-            # Run inference (network group already activated at init)
-            with InferVStreams(self.hailo_network_group, input_params, output_params) as pipeline:
-                raw_output = pipeline.infer(input_dict)
+            # Run inference on the persistent pipeline (created once at init)
+            raw_output = self._hailo_pipeline.infer(input_dict)
             
             # Parse NMS output
             detections = self._parse_hailo_nms_output(raw_output, frame_w, frame_h)
@@ -571,26 +590,24 @@ class Detector:
         """
         Parse Hailo YOLO NMS post-process output.
         
-        Hailo NMS returns a nested list structure:
-            list[class_index] -> list -> ndarray(N, 5)
-        Each detection array row: [y1, x1, y2, x2, confidence] (normalized 0-1)
+        The Python InferVStreams.infer() with tf_nms_format=False returns:
+            dict[output_name] -> list[frame_idx] -> list[class_idx] -> ndarray(N, 5)
+        Each detection row: [y_min, x_min, y_max, x_max, confidence] (normalized 0-1)
         """
         detections = []
         class_names = self.labels if self.labels else []
         
         for output_name, output_data in raw_output.items():
-            # Only process NMS outputs
-            if 'nms' not in output_name.lower():
-                continue
-            
             if not isinstance(output_data, list):
                 continue
             
-            for class_idx, class_detections in enumerate(output_data):
-                if not isinstance(class_detections, list):
+            # Iterate over frames (batch dimension)
+            for frame_detections in output_data:
+                if not isinstance(frame_detections, list):
                     continue
                 
-                for det_array in class_detections:
+                # Iterate over classes — each element is an ndarray(N, 5)
+                for class_idx, det_array in enumerate(frame_detections):
                     if not isinstance(det_array, np.ndarray) or det_array.size == 0:
                         continue
                     
@@ -601,13 +618,13 @@ class Detector:
                         if len(det) < 5:
                             continue
                         
-                        # Hailo NMS format: [y1, x1, y2, x2, confidence]
+                        # Hailo NMS format: [y_min, x_min, y_max, x_max, confidence]
                         y1, x1, y2, x2, confidence = det[:5]
                         
                         if confidence < self.confidence:
                             continue
                         
-                        # Scale normalized coords to frame size
+                        # Scale normalized coords to original frame size
                         x1_scaled = int(max(0, min(frame_w - 1, x1 * frame_w)))
                         y1_scaled = int(max(0, min(frame_h - 1, y1 * frame_h)))
                         x2_scaled = int(max(0, min(frame_w - 1, x2 * frame_w)))
