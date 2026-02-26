@@ -693,8 +693,11 @@ def get_wifi_status():
 def scan_wifi():
     """Scan for available WiFi networks"""
     try:
+        import time
         # Rescan networks
         run_nmcli(['dev', 'wifi', 'rescan'], timeout=5)
+        # Give the hardware a couple of seconds to actually update the BSSID lists
+        time.sleep(2)
         
         # Get list of networks
         stdout, stderr, code = run_nmcli(['-t', '-f', 'SSID,SIGNAL,SECURITY,IN-USE', 'dev', 'wifi', 'list'])
