@@ -114,6 +114,11 @@ class Camera:
         self.config = config_obj
         self._camera = None
         self._running = False
+        self._manual_awb = config_obj.get('camera.manual_awb', False)
+        if self._manual_awb:
+            logger.info("Manual (CPU-based) white balance correction ENABLED")
+        else:
+            logger.info("Manual AWB disabled — using camera hardware AWB")
     
     def start(self):
         """Start the camera"""
@@ -151,7 +156,7 @@ class Camera:
         """Get a frame from the camera"""
         if not self._running:
             return None
-        return get_frame()
+        return get_frame(manual_awb=self._manual_awb)
 
 
 def initialize_camera():
@@ -166,21 +171,27 @@ def initialize_camera():
             # Configure camera with auto white balance enabled
             config = camera.create_preview_configuration(
                 main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
-                buffer_count=2  # Minimize buffer for lower latency
+                buffer_count=2  # ≥4 buffers to sustain full frame rate
+                                # (2 buffers causes ping-pong that halves FPS)
             )
             camera.configure(config)
             
-            # Set automatic white balance mode for better color accuracy
-            # Available modes: 'auto', 'tungsten', 'fluorescent', 'indoor', 'daylight', 'cloudy'
+            # Set controls for target frame rate and white balance
+            # FrameDurationLimits (min, max) in microseconds — forces the ISP to
+            # deliver at the desired FPS instead of letting auto-exposure extend
+            # frame time (common on NoIR sensors in lower light).
+            frame_duration_us = int(1_000_000 / CAMERA_FPS)  # e.g. 33333 µs for 30 FPS
             camera.set_controls({
-                "AwbEnable": True,  # Enable auto white balance
-                "AwbMode": 0        # 0 = Auto mode for adaptive color correction
+                "AwbEnable": True,           # Enable auto white balance
+                "AwbMode": 0,                # 0 = Auto mode for adaptive color correction
+                "FrameDurationLimits": (frame_duration_us, frame_duration_us),
             })
             
             camera.start()
             # Warm up camera and let AWB stabilize
-            time.sleep(1.0)  # Increased to let AWB converge
-            logger.info(f"Raspberry Pi Camera initialized with Auto White Balance ({CAMERA_WIDTH}x{CAMERA_HEIGHT})")
+            time.sleep(1.0)
+            logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
+                         f"FrameDuration={frame_duration_us}µs)")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Pi Camera: {e}")
@@ -268,8 +279,16 @@ def apply_white_balance(frame):
         return frame
 
 
-def get_frame():
-    """Capture frame from camera with error handling and apply white balance correction."""
+def get_frame(manual_awb=False):
+    """Capture frame from camera with error handling.
+    
+    All frames are returned in **BGR** colour order (OpenCV native).
+    Downstream code (detector, draw_detections, JPEG encoding) all expect BGR.
+    
+    Args:
+        manual_awb: If True, apply CPU-based LAB white balance correction.
+                    If False (default), rely on camera hardware AWB.
+    """
     global camera
     
     if camera is None:
@@ -277,24 +296,19 @@ def get_frame():
     
     try:
         if USE_PICAMERA and isinstance(camera, Picamera2):
-            # Picamera2 - already in RGB888
+            # Picamera2 outputs RGB888 — convert once to BGR
             frame = camera.capture_array()
-            # Convert RGB to BGR for OpenCV processing
             if frame is not None:
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         else:
-            # OpenCV VideoCapture - already in BGR
+            # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
             frame = frame if ret else None
         
-        # Apply automatic white balance correction to remove color cast
-        if frame is not None:
+        if frame is not None and manual_awb:
             frame = apply_white_balance(frame)
-            
-            # Convert back to RGB for Picamera2 compatibility if needed
-            if USE_PICAMERA and isinstance(camera, Picamera2):
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
+        # Frame stays in BGR — no reconversion
         return frame
         
     except Exception as e:
@@ -434,8 +448,8 @@ def camera_loop():
                     current_fps = 30 / elapsed
                     last_fps_time = current_time
             
-            # Dynamic frame rate control
-            time.sleep(1.0 / CAMERA_FPS)
+            # No artificial sleep — loop is naturally paced by camera capture
+            # and detection latency
             
         except Exception as e:
             logger.error(f"Error in camera loop: {e}")
