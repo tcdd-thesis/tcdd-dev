@@ -212,6 +212,7 @@ class TTSEngine:
         self._running = False
         self._thread: threading.Thread | None = None
         self._engine_ready = False
+        self._on_speak_callback = None  # Called with (text, label, priority) when alert fires
 
         if not HAS_TTS:
             logger.warning("TTS engine disabled — espeak is not installed")
@@ -376,6 +377,14 @@ class TTSEngine:
         self._queue.put(message)
         logger.debug(f"TTS queued: [{best_label}] \"{message}\"")
 
+        # Fire the on_speak callback (used by phone audio relay)
+        if self._on_speak_callback:
+            try:
+                priority = PRIORITY_TIERS.get(best_label, DEFAULT_PRIORITY)
+                self._on_speak_callback(message, best_label, priority)
+            except Exception as e:
+                logger.error(f"TTS on_speak callback error: {e}")
+
     def speak(self, text: str):
         """
         Directly speak arbitrary text (bypasses priority/cooldown).
@@ -387,6 +396,24 @@ class TTSEngine:
         if not self.enabled or not self._engine_ready:
             return
         self._queue.put(text)
+
+        # Fire the on_speak callback for phone audio relay
+        if self._on_speak_callback:
+            try:
+                self._on_speak_callback(text, 'system', 0)
+            except Exception as e:
+                logger.error(f"TTS on_speak callback error: {e}")
+
+    def set_on_speak_callback(self, callback):
+        """
+        Register a callback invoked whenever TTS wants to speak.
+        The callback receives (text: str, label: str, priority: int).
+
+        Args:
+            callback: Function(text, label, priority) -> None, or None to clear.
+        """
+        self._on_speak_callback = callback
+        logger.info(f"TTS on_speak callback {'set' if callback else 'cleared'}")
 
     def stop(self):
         """Shut down the TTS worker thread gracefully."""

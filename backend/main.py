@@ -117,6 +117,9 @@ violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
 pairing_manager = None
 hotspot_manager = None
 
+# Phone audio relay: when True, TTS alerts are emitted via socket to the paired phone
+phone_audio_enabled = False
+
 # Lifecycle flag: True only after initialize() completes and server is about to run
 app_ready = False
 # ── Threaded pipeline shared state ──────────────────────────────────────────
@@ -261,6 +264,19 @@ def initialize():
         
         logger.info("Initializing TTS engine...")
         tts_engine = TTSEngine(config)
+
+        # Register TTS callback: relay alerts to phone when phone audio is enabled
+        def on_tts_speak(text, label, priority):
+            if phone_audio_enabled:
+                socketio.emit('tts_alert', {
+                    'text': text,
+                    'label': label,
+                    'priority': priority
+                })
+                logger.debug(f"Phone audio relay: [{label}] \"{text}\"")
+
+        tts_engine.set_on_speak_callback(on_tts_speak)
+
         if tts_engine.is_ready():
             tts_engine.speak("System ready. Driver assistance activated.")
         
@@ -298,10 +314,10 @@ def index():
     """Serve the main application page (RPi touchscreen) or redirect mobile to pair"""
     if is_local_request():
         return render_template('index.html', is_touchscreen=True)
-    # External device hitting root — check if already paired
+    # External device hitting root — redirect to mobile view if paired
     session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
     if session_token and pairing_manager and pairing_manager.validate_session(session_token):
-        return render_template('index.html', is_touchscreen=False)
+        return redirect('/mobile')
     return redirect('/pair')
 
 
@@ -309,7 +325,7 @@ def index():
 @app.route('/mobile')
 def mobile_page():
     """Serve the mobile app page (after pairing)"""
-    return render_template('index.html', is_touchscreen=False)
+    return render_template('mobile.html')
 
 # ============================================================================
 # CAPTIVE PORTAL DETECTION
@@ -473,7 +489,10 @@ def get_status():
 @app.route('/api/shutdown', methods=['POST'])
 @require_pairing
 def shutdown_system():
-    """Shutdown the Raspberry Pi with a 2-second delay for UI feedback"""
+    """Shutdown the Raspberry Pi with a 2-second delay for UI feedback.
+    Only allowed from local (touchscreen) requests."""
+    if not is_local_request():
+        return jsonify({'error': 'Shutdown can only be triggered from the touchscreen'}), 403
     import subprocess
     import threading
     
@@ -490,7 +509,10 @@ def shutdown_system():
 @app.route('/api/reboot', methods=['POST'])
 @require_pairing
 def reboot_system():
-    """Reboot the Raspberry Pi using detached process"""
+    """Reboot the Raspberry Pi using detached process.
+    Only allowed from local (touchscreen) requests."""
+    if not is_local_request():
+        return jsonify({'error': 'Reboot can only be triggered from the touchscreen'}), 403
     import subprocess
     
     logger.info("Reboot requested via API")
@@ -517,7 +539,10 @@ def reboot_system():
 @app.route('/api/close-app', methods=['POST'])
 @require_pairing
 def close_app():
-    """Close the application: kill Chromium browser then stop the Flask server"""
+    """Close the application: kill Chromium browser then stop the Flask server.
+    Only allowed from local (touchscreen) requests."""
+    if not is_local_request():
+        return jsonify({'error': 'Close app can only be triggered from the touchscreen'}), 403
     import subprocess
     import threading
     import signal
@@ -936,6 +961,50 @@ def get_violations():
         }), 200
     except Exception as e:
         logger.error(f"Error getting violations: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ----------------------------------------------------------------------------
+# PHONE AUDIO RELAY API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/phone-audio/status', methods=['GET'])
+@require_pairing
+def get_phone_audio_status():
+    """Get current phone audio relay status."""
+    return jsonify({'enabled': phone_audio_enabled}), 200
+
+
+@app.route('/api/phone-audio/toggle', methods=['POST'])
+@require_pairing
+def toggle_phone_audio():
+    """Enable or disable phone audio relay."""
+    global phone_audio_enabled
+    try:
+        data = request.get_json()
+        phone_audio_enabled = bool(data.get('enabled', False))
+        logger.info(f"Phone audio relay {'enabled' if phone_audio_enabled else 'disabled'}")
+        socketio.emit('phone_audio_state', {'enabled': phone_audio_enabled})
+        return jsonify({'success': True, 'enabled': phone_audio_enabled}), 200
+    except Exception as e:
+        logger.error(f"Error toggling phone audio: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/phone-audio/test', methods=['POST'])
+@require_pairing
+def test_phone_audio():
+    """Send a test TTS alert to the paired phone."""
+    try:
+        test_text = 'This is a test alert. Phone audio is working.'
+        socketio.emit('tts_alert', {
+            'text': test_text,
+            'label': 'test',
+            'priority': 0
+        })
+        logger.info("Phone audio test alert sent")
+        return jsonify({'success': True, 'text': test_text}), 200
+    except Exception as e:
+        logger.error(f"Error sending phone audio test: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ----------------------------------------------------------------------------
