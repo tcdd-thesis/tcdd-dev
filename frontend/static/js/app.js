@@ -392,6 +392,215 @@ function switchPage(pageName) {
 
     // Re-initialize touch scrolling for newly visible containers
     setTimeout(initAllTouchScrolling, 100);
+
+    // Check audio device when returning to home page
+    if (pageName === 'home') {
+        checkAudioDevice();
+    }
+}
+
+// ============================================================================
+// AUDIO DEVICE GATE
+// ============================================================================
+
+let _audioCheckInterval = null;
+let _audioGateActive = false;
+let _audioGateDismissedUntil = 0; // Timestamp until which the modal is temporarily dismissed
+
+/**
+ * Check if an audio output device is available.
+ * Shows the audio-required modal if none is connected.
+ */
+async function checkAudioDevice() {
+    try {
+        const data = await api.get('/audio/check');
+        const modal = document.getElementById('audio-required-modal');
+        const statusDot = modal ? modal.querySelector('.audio-gate-status-dot') : null;
+        const statusText = modal ? modal.querySelector('.audio-gate-status-text') : null;
+
+        if (data.audio_ready) {
+            // Audio is available — hide modals, stop polling
+            hideAudioGateModals();
+            updateAudioGateStatus(statusDot, statusText, 'connected', 'Audio device connected');
+            _audioGateActive = false;
+            _audioGateDismissedUntil = 0;
+            stopAudioCheckPolling();
+        } else {
+            // No audio — show the gate modal (unless temporarily dismissed)
+            const now = Date.now();
+            if (_audioGateDismissedUntil > now) {
+                // Still in dismiss cooldown — don't show modal
+                return;
+            }
+
+            if (modal && state.currentPage === 'home') {
+                modal.style.display = 'flex';
+                _audioGateActive = true;
+                startAudioCheckPolling();
+            }
+
+            // Update status text with details
+            let detail = 'No audio output device detected';
+            if (data.bluetooth && data.bluetooth.enabled && !data.bluetooth.connected) {
+                detail = 'Bluetooth enabled but no speaker connected';
+            }
+            if (data.phone_audio && data.phone_audio.paired && !data.phone_audio.audio_enabled) {
+                detail = 'Mobile paired but audio output not enabled';
+            }
+            updateAudioGateStatus(statusDot, statusText, 'waiting', detail);
+        }
+    } catch (err) {
+        console.error('Audio check failed:', err);
+    }
+}
+
+/**
+ * Update the status indicator inside an audio gate modal.
+ */
+function updateAudioGateStatus(dotEl, textEl, state, message) {
+    if (dotEl) {
+        dotEl.className = 'audio-gate-status-dot';
+        if (state === 'connected') dotEl.classList.add('connected');
+        else if (state === 'waiting') dotEl.classList.add('waiting');
+    }
+    if (textEl) textEl.textContent = message;
+}
+
+/**
+ * Hide both audio gate modals.
+ */
+function hideAudioGateModals() {
+    const m1 = document.getElementById('audio-required-modal');
+    const m2 = document.getElementById('enable-audio-prompt-modal');
+    if (m1) m1.style.display = 'none';
+    if (m2) m2.style.display = 'none';
+}
+
+/**
+ * Start periodic audio check polling (every 5 seconds).
+ */
+function startAudioCheckPolling() {
+    if (_audioCheckInterval) return; // Already polling
+    _audioCheckInterval = setInterval(async () => {
+        try {
+            const data = await api.get('/audio/check');
+            if (data.audio_ready) {
+                hideAudioGateModals();
+                _audioGateActive = false;
+                stopAudioCheckPolling();
+            } else {
+                // Update status in whichever modal is visible
+                updateAudioGateVisibleStatus(data);
+            }
+        } catch (e) {
+            console.error('Audio poll error:', e);
+        }
+    }, 5000);
+}
+
+/**
+ * Stop periodic audio check polling.
+ */
+function stopAudioCheckPolling() {
+    if (_audioCheckInterval) {
+        clearInterval(_audioCheckInterval);
+        _audioCheckInterval = null;
+    }
+}
+
+/**
+ * Update the status text in whichever audio gate modal is currently visible.
+ */
+function updateAudioGateVisibleStatus(data) {
+    // Check the enable-audio-prompt modal first (shown after pairing)
+    const promptModal = document.getElementById('enable-audio-prompt-modal');
+    if (promptModal && promptModal.style.display === 'flex') {
+        const dot = promptModal.querySelector('.audio-gate-status-dot');
+        const text = promptModal.querySelector('.audio-gate-status-text');
+        if (data.phone_audio && data.phone_audio.paired && !data.phone_audio.audio_enabled) {
+            updateAudioGateStatus(dot, text, 'waiting', 'Waiting for audio output to be enabled...');
+        }
+        return;
+    }
+    // Otherwise update the main audio-required modal
+    const mainModal = document.getElementById('audio-required-modal');
+    if (mainModal && mainModal.style.display === 'flex') {
+        const dot = mainModal.querySelector('.audio-gate-status-dot');
+        const text = mainModal.querySelector('.audio-gate-status-text');
+        let detail = 'No audio output device detected';
+        if (data.phone_audio && data.phone_audio.paired && !data.phone_audio.audio_enabled) {
+            detail = 'Mobile paired but audio output not enabled';
+        }
+        updateAudioGateStatus(dot, text, 'waiting', detail);
+    }
+}
+
+/**
+ * Audio gate: redirect to Settings page (Bluetooth section).
+ */
+function audioGateBluetooth() {
+    const modal = document.getElementById('audio-required-modal');
+    if (modal) modal.style.display = 'none';
+    switchPage('settings');
+    showToast('Connect a Bluetooth speaker in the Bluetooth section below', 'info');
+}
+
+/**
+ * Audio gate: trigger the pairing flow.
+ * On successful pairing, show the enable-audio-output prompt.
+ */
+function audioGatePairPhone() {
+    const modal = document.getElementById('audio-required-modal');
+    if (modal) modal.style.display = 'none';
+
+    // Use the existing generate-and-show pairing flow
+    if (typeof generatePairingCode === 'function') {
+        generatePairingCode();
+    } else {
+        showToast('Pairing flow not available yet', 'error');
+    }
+}
+
+/**
+ * Show the "enable audio output" prompt after successful pairing.
+ * Called after the pairing modal completes.
+ */
+function showEnableAudioPrompt() {
+    const promptModal = document.getElementById('enable-audio-prompt-modal');
+    if (promptModal) promptModal.style.display = 'flex';
+    // Ensure polling is running to detect when audio gets enabled
+    startAudioCheckPolling();
+}
+
+/**
+ * Dismiss the enable-audio prompt and go back to the audio required modal.
+ */
+function dismissAudioPrompt() {
+    const promptModal = document.getElementById('enable-audio-prompt-modal');
+    if (promptModal) promptModal.style.display = 'none';
+    // Re-check — if still no audio, show the main modal again
+    checkAudioDevice();
+}
+
+/**
+ * Temporarily dismiss the audio required modal for 60 seconds.
+ * The modal will reappear on goHome() or after the timeout.
+ */
+function audioGateDismiss() {
+    const DISMISS_SECONDS = 60;
+    _audioGateDismissedUntil = Date.now() + (DISMISS_SECONDS * 1000);
+    hideAudioGateModals();
+    _audioGateActive = false;
+    stopAudioCheckPolling();
+    showToast(`Audio setup skipped for ${DISMISS_SECONDS}s`, 'info');
+
+    // Re-check after the dismiss period expires
+    setTimeout(() => {
+        _audioGateDismissedUntil = 0;
+        if (state.currentPage === 'home') {
+            checkAudioDevice();
+        }
+    }, DISMISS_SECONDS * 1000);
 }
 
 // ============================================================================
@@ -1918,6 +2127,12 @@ function connectWebSocket() {
         closePairingWizard();
 
         if (state.currentPage === 'settings') loadPairingStatus();
+
+        // If audio gate was active, close pairing modal and show enable-audio prompt
+        if (_audioGateActive) {
+            closePairingQR();
+            showEnableAudioPrompt();
+        }
     });
 
     state.socket.on('device_unpaired', () => {
@@ -2157,6 +2372,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Start on home page
     switchPage('home');
+
+    // Audio device gate: check on startup (fires after switchPage triggers it too)
+    checkAudioDevice();
 
     console.log('\u2713 Application ready!');
 });

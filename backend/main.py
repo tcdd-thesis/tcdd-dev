@@ -984,6 +984,50 @@ def get_violations():
         return jsonify({'error': str(e)}), 500
 
 # ----------------------------------------------------------------------------
+# AUDIO DEVICE CHECK API
+# ----------------------------------------------------------------------------
+
+@app.route('/api/audio/check', methods=['GET'])
+def check_audio_status():
+    """
+    Check whether any audio output device is available.
+    Returns combined status of Bluetooth audio and phone audio relay.
+    Used by the frontend to enforce audio-required gate on startup.
+    """
+    try:
+        # 1. Check Bluetooth audio
+        bt_info = {'enabled': False, 'connected': False, 'device': None}
+        if bluetooth_manager and bluetooth_manager.enabled:
+            bt_status = bluetooth_manager.status()
+            bt_info = {
+                'enabled': True,
+                'connected': bt_status.get('connected', False),
+                'device': bt_status.get('device') if bt_status.get('connected') else None
+            }
+
+        # 2. Check paired mobile device + phone audio toggle
+        phone_info = {'paired': False, 'audio_enabled': False}
+        if pairing_manager:
+            pair_status = pairing_manager.get_status()
+            is_paired = pair_status.get('is_paired', False)
+            phone_info = {
+                'paired': is_paired,
+                'audio_enabled': phone_audio_enabled if is_paired else False
+            }
+
+        audio_ready = bt_info['connected'] or (phone_info['paired'] and phone_info['audio_enabled'])
+
+        return jsonify({
+            'audio_ready': audio_ready,
+            'bluetooth': bt_info,
+            'phone_audio': phone_info
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error checking audio status: {e}")
+        return jsonify({'error': str(e), 'audio_ready': False}), 500
+
+# ----------------------------------------------------------------------------
 # PHONE AUDIO RELAY API
 # ----------------------------------------------------------------------------
 

@@ -393,6 +393,64 @@
         </div>
     </div>
 
+    <!-- Audio Required Modal (blocking — no close button) -->
+    <div id="audio-required-modal" class="modal audio-gate-modal">
+        <div class="modal-content audio-gate-content">
+            <div class="audio-gate-icon">
+                <i class="fa-solid fa-volume-xmark"></i>
+            </div>
+            <h3 class="audio-gate-title">Audio Device Required</h3>
+            <p class="audio-gate-text">
+                This application requires an audio output device for traffic sign alerts.
+                Please connect a Bluetooth speaker or pair your mobile device.
+            </p>
+            <div class="audio-gate-options">
+                <button class="btn btn-primary btn-touch audio-gate-btn" onclick="audioGateBluetooth()">
+                    <i class="fa-solid fa-bluetooth-b"></i>
+                    <span>Connect Bluetooth Speaker</span>
+                </button>
+                <button class="btn btn-success btn-touch audio-gate-btn" onclick="audioGatePairPhone()">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    <span>Pair Mobile Device</span>
+                </button>
+            </div>
+            <div id="audio-gate-status" class="audio-gate-status">
+                <span class="audio-gate-status-dot"></span>
+                <span class="audio-gate-status-text">Checking audio devices...</span>
+            </div>
+            <button class="btn btn-secondary btn-touch audio-gate-dismiss-btn" onclick="audioGateDismiss()">
+                <i class="fa-solid fa-clock"></i> Setup Later
+            </button>
+        </div>
+    </div>
+
+    <!-- Enable Audio Output Prompt (shown after successful pairing) -->
+    <div id="enable-audio-prompt-modal" class="modal audio-gate-modal">
+        <div class="modal-content audio-gate-content">
+            <div class="audio-gate-icon audio-gate-icon-success">
+                <i class="fa-solid fa-check-circle"></i>
+            </div>
+            <h3 class="audio-gate-title">Device Paired!</h3>
+            <p class="audio-gate-text">
+                Now enable <strong>Audio Output</strong> on your paired mobile device
+                so it can announce traffic alerts.
+            </p>
+            <div class="audio-prompt-image-container">
+                <!-- Placeholder: screenshot showing the mobile Audio Output toggle -->
+                <img src="/static/img/enable-remote-audio-guide.gif" alt="Enable Audio Output on mobile device"
+                    class="audio-prompt-image"
+                    onerror="this.parentElement.innerHTML='<div class=\'audio-prompt-placeholder\'><i class=\'fa-solid fa-image\'></i><span>Open the <strong>Audio Output</strong> menu on your paired phone and tap the toggle to enable it.</span></div>'">
+            </div>
+            <div id="audio-prompt-status" class="audio-gate-status">
+                <span class="audio-gate-status-dot waiting"></span>
+                <span class="audio-gate-status-text">Waiting for audio output to be enabled...</span>
+            </div>
+            <button class="btn btn-secondary btn-touch" onclick="dismissAudioPrompt()" style="margin-top:12px;">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div id="toast-container"></div>
 
