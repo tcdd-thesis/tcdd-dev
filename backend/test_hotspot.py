@@ -76,10 +76,10 @@ def test_hotspot_manager():
     available = hm.is_available()
     print(f"  Hotspot available: {available}")
     if not available:
-        print("  ⚠️  Hotspot not available on this system")
+        print("  Hotspot not available on this system")
         print("  This is expected on Windows or systems without NetworkManager")
         print("  On Raspberry Pi with NetworkManager, this should be True")
-    print("  ✅ PASSED (check only)")
+    print("  PASSED (check only)")
     
     # Test 2: Get credentials
     print("\n[Test 2] Get/Generate Credentials")
@@ -89,7 +89,7 @@ def test_hotspot_manager():
     assert creds['ssid'] is not None, "SSID should not be None"
     assert creds['password'] is not None, "Password should not be None"
     assert len(creds['password']) >= 8, "Password should be at least 8 chars"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 3: Regenerate credentials
     print("\n[Test 3] Regenerate Credentials")
@@ -101,7 +101,7 @@ def test_hotspot_manager():
     print(f"  New Password: {new_creds['password']}")
     assert result['success'] == True, "Regenerate should succeed"
     # Note: There's a small chance the new SSID suffix could be the same
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 4: Set custom credentials
     print("\n[Test 4] Set Custom Credentials")
@@ -110,14 +110,14 @@ def test_hotspot_manager():
     creds = hm.get_credentials()
     assert creds['ssid'] == "TestNetwork", "SSID should be updated"
     assert creds['password'] == "testpass123", "Password should be updated"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 5: Validate password length
     print("\n[Test 5] Validate Password Length")
     result = hm.set_credentials(password="short")  # Too short
     print(f"  Short password result: {result}")
     assert result['success'] == False, "Should reject short password"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 6: Get status
     print("\n[Test 6] Get Status")
@@ -126,7 +126,7 @@ def test_hotspot_manager():
     assert 'available' in status
     assert 'active' in status
     assert 'ssid' in status
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 7: Persistence (via config)
     print("\n[Test 7] Persistence Test (via config)")
@@ -140,7 +140,7 @@ def test_hotspot_manager():
     print(f"  Reloaded SSID: {creds2['ssid']}")
     assert creds2['ssid'] == "PersistTest", "SSID should persist"
     assert creds2['password'] == "persist123", "Password should persist"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     print("\n" + "=" * 60)
     print("Basic tests completed!")
@@ -152,7 +152,7 @@ def test_hotspot_manager():
         print("\n" + "=" * 60)
         print("OPTIONAL: Test Hotspot Start/Stop")
         print("=" * 60)
-        print("\n⚠️  This will actually start a WiFi hotspot!")
+        print("\nWARNING: This will actually start a WiFi hotspot!")
         print("    Make sure you have sudo privileges.")
         
         response = input("\nDo you want to test hotspot start/stop? (y/N): ").strip().lower()
@@ -164,7 +164,7 @@ def test_hotspot_manager():
             print(f"  Result: {result}")
             
             if result['success']:
-                print(f"  ✅ Hotspot started!")
+                print(f"  Hotspot started!")
                 print(f"     SSID: {result.get('ssid')}")
                 print(f"     Password: {result.get('password')}")
                 print(f"     IP: {result.get('ip')}")
@@ -177,19 +177,19 @@ def test_hotspot_manager():
                 print(f"  Result: {result}")
                 
                 if result['success']:
-                    print("  ✅ Hotspot stopped!")
+                    print("  Hotspot stopped!")
                 else:
-                    print("  ⚠️  Stop may have failed, but WiFi should recover")
+                    print("  Stop may have failed, but WiFi should recover")
             else:
-                print(f"  ⚠️  Could not start hotspot: {result.get('message')}")
+                print(f"  Could not start hotspot: {result.get('message')}")
                 print("     This may require sudo privileges")
     else:
-        print("\n💡 To test actual hotspot functionality:")
+        print("\nTo test actual hotspot functionality:")
         print("   1. Run this script on a Raspberry Pi")
         print("   2. Ensure NetworkManager is installed")
         print("   3. Run with sudo: sudo python backend/test_hotspot.py")
     
-    print("\n✅ HotspotManager tests complete!")
+    print("\nHotspotManager tests complete!")
 
 
 def test_pairing_with_ip():
@@ -212,7 +212,7 @@ def test_pairing_with_ip():
     print(f"  Hotspot IP: {ip}")
     assert ip == HOTSPOT_IP, f"IP should be {HOTSPOT_IP}"
     assert ip == '10.42.0.1', "IP should be 10.42.0.1"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test: Generate pairing data
     print("\n[Test] Generate Pairing Data")
@@ -224,7 +224,7 @@ def test_pairing_with_ip():
     assert 'url' in data
     assert data['ip'] == '10.42.0.1', "IP should be hotspot IP"
     assert data['token'] in data['url'], "Token should be in URL"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test: Status includes hotspot IP
     print("\n[Test] Status Includes Hotspot IP")
@@ -232,14 +232,14 @@ def test_pairing_with_ip():
     print(f"  Status: {status}")
     assert 'hotspot_ip' in status, "Status should include hotspot_ip"
     assert status['hotspot_ip'] == '10.42.0.1', "Hotspot IP should be correct"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Cleanup
     import shutil
     if os.path.exists(test_dir):
         shutil.rmtree(test_dir)
     
-    print("\n✅ PairingManager IP tests complete!")
+    print("\nPairingManager IP tests complete!")
 
 
 if __name__ == '__main__':

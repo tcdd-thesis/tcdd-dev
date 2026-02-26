@@ -272,7 +272,7 @@ bind-interfaces
                 for line in stdout.strip().split('\n'):
                     if self.HOTSPOT_CONNECTION_NAME in line:
                         self._is_active = True
-                        logger.info("📶 Hotspot is currently active")
+                        logger.info("Hotspot is currently active")
                         return
             
             self._is_active = False
@@ -319,7 +319,7 @@ bind-interfaces
                 }
             
             try:
-                logger.info(f"📶 Starting hotspot: {self._ssid}")
+                logger.info(f"Starting hotspot: {self._ssid}")
                 
                 # Stop dnsmasq first to avoid DHCP conflicts with NetworkManager
                 subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], 
@@ -381,7 +381,7 @@ bind-interfaces
         try:
             import time
             
-            logger.info("📶 Attempting to reconnect WiFi...")
+            logger.info("Attempting to reconnect WiFi...")
             
             # Ensure autoconnect is enabled on the interface
             self._run_nmcli([
@@ -440,7 +440,7 @@ bind-interfaces
                 }
             
             try:
-                logger.info("📴 Stopping hotspot...")
+                logger.info("Stopping hotspot...")
                 
                 # Clean up DNS config first
                 self._cleanup_dns()

@@ -76,15 +76,15 @@ def test_pairing_api():
     print("  Testing paired device access on protected route (GET /api/config)...")
     resp = requests.get(f'{API_URL}/api/config', headers={'X-Session-Token': session_token})
     assert resp.status_code == 200, "Paired device should access config"
-    print("  ✅ Paired device can access protected routes")
+    print("  Paired device can access protected routes")
 
     # 6. Verify unpaired device CANNOT access protected routes
     resp = requests.post(f'{API_URL}/api/shutdown', headers={'X-Session-Token': 'invalid-token'})
     assert resp.status_code == 401, "Invalid token should be rejected"
-    print("  ✅ Invalid token rejected (401)")
+    print("  Invalid token rejected (401)")
 
     sio.disconnect()
-    print("\n🎉 Integration test PASSED!")
+    print("\nIntegration test PASSED!")
 
 if __name__ == '__main__':
     test_pairing_api()

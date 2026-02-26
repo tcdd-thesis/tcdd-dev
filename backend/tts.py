@@ -257,13 +257,13 @@ class TTSEngine:
                 [_ESPEAK_BIN, "--version"],
                 capture_output=True, text=True, timeout=5
             )
-            logger.info(f"✅ TTS engine ready  —  {_ESPEAK_BIN}  |  "
+            logger.info(f"TTS engine ready  —  {_ESPEAK_BIN}  |  "
                         f"voice={self.voice}, rate={self.speech_rate}, "
                         f"volume={self.volume}, cooldown={self.cooldown_seconds}s")
             logger.info(f"   espeak version: {result.stdout.strip()}")
             self._engine_ready = True
         except Exception as e:
-            logger.error(f"❌ espeak sanity check failed: {e}")
+            logger.error(f"espeak sanity check failed: {e}")
             self._engine_ready = False
             self._running = False
             return
@@ -374,7 +374,7 @@ class TTSEngine:
 
         # Enqueue for the worker thread
         self._queue.put(message)
-        logger.debug(f"🔊 TTS queued: [{best_label}] \"{message}\"")
+        logger.debug(f"TTS queued: [{best_label}] \"{message}\"")
 
     def speak(self, text: str):
         """

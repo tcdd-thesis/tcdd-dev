@@ -112,7 +112,7 @@ class DisplayController:
                     self._pwm.ChangeDutyCycle(brightness)
                 
                 self._current_brightness = brightness
-                logger.info(f"🔆 Display brightness set to {brightness}%")
+                logger.info(f"Display brightness set to {brightness}%")
                 
                 # Save to config if available
                 if self.config:
@@ -227,7 +227,7 @@ class SysfsBacklightController:
                 f.write(str(value))
             
             self._current_brightness = brightness
-            logger.info(f"🔆 Display brightness set to {brightness}%")
+            logger.info(f"Display brightness set to {brightness}%")
             return True
             
         except PermissionError:

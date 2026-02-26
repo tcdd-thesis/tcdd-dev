@@ -146,7 +146,7 @@ def bench_camera():
     cap.set(cv2.CAP_PROP_FPS, CAM_FPS)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
-        print("  ⚠ No camera available — using synthetic frame")
+        print("  No camera available — using synthetic frame")
         return np.random.randint(0, 255, (CAM_H, CAM_W, 3), dtype=np.uint8)
 
     for _ in range(5):

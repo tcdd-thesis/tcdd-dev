@@ -191,12 +191,12 @@ def on_config_change(old_config, new_config):
         
         # Update TTS engine if settings changed
         if tts_changed and tts_engine:
-            logger.info("🔊 TTS settings changed, updating TTS engine...")
+            logger.info("TTS settings changed, updating TTS engine...")
             tts_engine.enabled = new_config.get('tts', {}).get('enabled', True)
             tts_engine.speech_rate = new_config.get('tts', {}).get('speech_rate', 160)
             tts_engine.volume = new_config.get('tts', {}).get('volume', 1.0)
             tts_engine.cooldown_seconds = new_config.get('tts', {}).get('cooldown_seconds', 10)
-            logger.info("✅ TTS settings updated")
+            logger.info("TTS settings updated")
         
         # Broadcast changes to all connected clients
         socketio.emit('config_updated', {
@@ -236,9 +236,9 @@ def initialize():
                     except Exception:
                         pass
                     connected_sessions.pop(sid, None)
-                    logger.info(f"📤 Disconnected session {sid} for token: {session_token[:8]}...")
+                    logger.info(f"Disconnected session {sid} for token: {session_token[:8]}...")
                     return
-            logger.info(f"📤 No active session found for token: {session_token[:8]}...")
+            logger.info(f"No active session found for token: {session_token[:8]}...")
         
         pairing_manager.set_disconnect_callback(disconnect_device)
         
@@ -1144,7 +1144,7 @@ def start_hotspot():
             return jsonify({'prompt': 'Hotspot will disconnect WiFi. Proceed?'}), 200
         result = hotspot_manager.start()
         if result['success']:
-            logger.info(f"📶 Hotspot started via API: {result.get('ssid')}")
+            logger.info(f"Hotspot started via API: {result.get('ssid')}")
             socketio.emit('hotspot_started', {
                 'ssid': result.get('ssid'),
                 'ip': result.get('ip'),
@@ -1166,7 +1166,7 @@ def stop_hotspot():
         result = hotspot_manager.stop()
         
         if result['success']:
-            logger.info("📴 Hotspot stopped via API")
+            logger.info("Hotspot stopped via API")
             socketio.emit('hotspot_stopped', {
                 'timestamp': datetime.now().isoformat()
             })

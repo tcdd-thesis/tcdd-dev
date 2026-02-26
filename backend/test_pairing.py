@@ -36,7 +36,7 @@ def test_pairing_manager():
     print(f"  Pending token: {pm.get_pending_token()}")
     assert pm.is_paired() == False, "Should not be paired initially"
     assert pm.get_pending_token() == None, "Should have no pending token"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 2: Generate token
     print("\n[Test 2] Generate Pairing Token")
@@ -45,7 +45,7 @@ def test_pairing_manager():
     print(f"  Token length: {len(token)}")
     assert len(token) == 8, "Token should be 8 characters"
     assert pm.get_pending_token() == token, "Pending token should match"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 3: Invalid token validation
     print("\n[Test 3] Invalid Token Validation")
@@ -57,7 +57,7 @@ def test_pairing_manager():
     print(f"  Result: {result}")
     assert result['success'] == False, "Should fail with wrong token"
     assert pm.is_paired() == False, "Should still not be paired"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 4: Valid token validation
     print("\n[Test 4] Valid Token Validation")
@@ -74,7 +74,7 @@ def test_pairing_manager():
     
     session_token = result['session_token']
     print(f"  Session token: {session_token[:20]}...")
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 5: Session validation
     print("\n[Test 5] Session Validation")
@@ -85,7 +85,7 @@ def test_pairing_manager():
     is_invalid = pm.validate_session("wrong-session-token")
     print(f"  Invalid session check: {is_invalid}")
     assert is_invalid == False, "Wrong session should be invalid"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 6: Get paired device info
     print("\n[Test 6] Get Paired Device Info")
@@ -94,7 +94,7 @@ def test_pairing_manager():
     print(f"  Device ID: {info['device_id']}")
     print(f"  Paired at: {info['paired_at']}")
     assert 'session_token' not in info, "Session token should not be exposed"
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 7: Pairing persistence (reload from file)
     print("\n[Test 7] Persistence Test")
@@ -103,7 +103,7 @@ def test_pairing_manager():
     info2 = pm2.get_paired_device_info()
     assert info2['device_name'] == 'Test Phone', "Device info should persist"
     print(f"  Reloaded device: {info2['device_name']}")
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 8: Re-pairing (new device replaces old)
     print("\n[Test 8] Re-pairing (Replace Old Device)")
@@ -134,7 +134,7 @@ def test_pairing_manager():
     new_info = pm2.get_paired_device_info()
     assert new_info['device_name'] == 'New Tablet', "New device should be paired"
     print(f"  Now paired to: {new_info['device_name']}")
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 9: Local request detection
     print("\n[Test 9] Local Request Detection")
@@ -143,7 +143,7 @@ def test_pairing_manager():
     assert pm2.is_local_request('192.168.1.100') == False, "192.168.x.x should be remote"
     print("  127.0.0.1 → local: True")
     print("  192.168.1.100 → local: False")
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 10: Unpair
     print("\n[Test 10] Unpair Device")
@@ -152,14 +152,14 @@ def test_pairing_manager():
     assert pm2.is_paired() == False, "Should not be paired after unpair"
     print(f"  Unpaired: {unpaired}")
     print(f"  Is paired now: {pm2.is_paired()}")
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 11: Unpair when not paired
     print("\n[Test 11] Unpair When Not Paired")
     unpaired_again = pm2.unpair()
     assert unpaired_again == False, "Should return False when nothing to unpair"
     print(f"  Unpair result: {unpaired_again}")
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Test 12: Get status
     print("\n[Test 12] Get Full Status")
@@ -168,11 +168,11 @@ def test_pairing_manager():
     assert 'is_paired' in status
     assert 'paired_device' in status
     assert 'has_pending_token' in status
-    print("  ✅ PASSED")
+    print("  PASSED")
     
     # Cleanup test file
     print("\n" + "=" * 60)
-    print("🎉 ALL TESTS PASSED!")
+    print("ALL TESTS PASSED!")
     print("=" * 60)
     
     # Cleanup
@@ -181,7 +181,7 @@ def test_pairing_manager():
         os.remove(test_file)
         print(f"\nCleaned up test file: {test_file}")
     
-    print("\n✅ Phase 1 (PairingManager) is working correctly!")
+    print("\nPhase 1 (PairingManager) is working correctly!")
     print("   You can proceed to Phase 2 (API Endpoints)")
 
 
