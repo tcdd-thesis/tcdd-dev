@@ -10,7 +10,7 @@ Serves both frontend (HTML/CSS/JS) and backend API
 # IMPORTS
 # ============================================================================
 
-from flask import Flask, render_template, jsonify, request, send_from_directory, send_file
+from flask import Flask, render_template, jsonify, request, send_from_directory, send_file, redirect, abort
 from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 import os
@@ -975,22 +975,7 @@ def unpair_device():
         logger.error(f"Error unpairing device: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/pair')
-def pair_landing_page():
-    """
-    Mobile landing page for pairing.
-    Accessed when phone scans QR code.
-    """
-    token = request.args.get('token', '')
-    return render_template('pair.html')
 
-@app.route('/mobile')
-def mobile_page():
-    """
-    Mobile-optimized UI for paired phone/tablet.
-    Same template, no touchscreen constraints.
-    """
-    return render_template('index.html', is_touchscreen=False)
 
 @app.route('/api/pair/qr')
 def get_pairing_qr():
