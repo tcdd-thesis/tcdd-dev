@@ -1281,6 +1281,9 @@ async function loadSettings() {
         // Load pairing status
         await loadPairingStatus();
 
+        // Load Bluetooth status
+        loadBluetoothStatus();
+
     } catch (error) {
         console.error('Failed to load settings:', error);
         showToast('Failed to load settings', 'error');
@@ -1655,6 +1658,157 @@ async function forgetWifi(name) {
     } catch (error) {
         console.error('Failed to forget network:', error);
         showToast('Failed to forget network', 'error');
+    }
+}
+
+// ============================================================================
+// BLUETOOTH AUDIO MANAGEMENT
+// ============================================================================
+
+/**
+ * Load and display current Bluetooth connection status
+ */
+async function loadBluetoothStatus() {
+    const statusText = document.getElementById('bluetooth-status-text');
+    const disconnectBtn = document.getElementById('btn-bluetooth-disconnect');
+    const deviceRow = document.getElementById('bluetooth-device-row');
+    const deviceName = document.getElementById('bluetooth-device-name');
+
+    try {
+        const response = await api.get('/bluetooth/status');
+
+        if (!response.enabled) {
+            statusText.innerHTML = '<span class="bluetooth-disabled"><i class="fa-brands fa-bluetooth"></i> Disabled in config</span>';
+            if (disconnectBtn) disconnectBtn.style.display = 'none';
+            if (deviceRow) deviceRow.style.display = 'none';
+            return;
+        }
+
+        if (response.connected && response.device) {
+            statusText.innerHTML = `
+                <span class="bluetooth-connected">
+                    <i class="fa-brands fa-bluetooth"></i> Connected
+                </span>`;
+            if (deviceName) deviceName.textContent = escapeHtml(response.device);
+            if (deviceRow) deviceRow.style.display = 'flex';
+            if (disconnectBtn) {
+                disconnectBtn.style.display = 'inline-block';
+                disconnectBtn.onclick = () => disconnectBluetooth(response.mac);
+            }
+        } else {
+            statusText.innerHTML = '<span class="bluetooth-disconnected"><i class="fa-brands fa-bluetooth"></i> Ready</span>';
+            if (deviceRow) deviceRow.style.display = 'none';
+            if (disconnectBtn) disconnectBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Failed to load Bluetooth status:', error);
+        statusText.innerHTML = '<span class="bluetooth-error"><i class="fa fa-exclamation-triangle"></i> Error</span>';
+        if (deviceRow) deviceRow.style.display = 'none';
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+    }
+}
+
+/**
+ * Scan for available Bluetooth devices
+ */
+async function scanBluetoothDevices() {
+    const listContainer = document.getElementById('bluetooth-devices-list');
+    const scanBtn = document.getElementById('btn-scan-bluetooth');
+
+    // Show the list container
+    if (listContainer) listContainer.style.display = 'block';
+
+    // Show loading state
+    if (scanBtn) {
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Scanning...';
+    }
+    listContainer.innerHTML = '<div class="bluetooth-loading"><i class="fa fa-spinner fa-spin"></i> Scanning for audio devices... (takes ~5s)</div>';
+
+    try {
+        const response = await api.get('/bluetooth/scan');
+        const devices = response.devices || [];
+
+        if (devices.length === 0) {
+            listContainer.innerHTML = '<div class="bluetooth-empty">No devices found</div>';
+        } else {
+            // Filter out unnamed devices to keep the UI clean, though MAC-only is okay if needed
+            const validDevices = devices.filter(dev => dev.name && dev.name.trim() !== '');
+
+            if (validDevices.length === 0) {
+                listContainer.innerHTML = '<div class="bluetooth-empty">No named devices found</div>';
+            } else {
+                listContainer.innerHTML = validDevices.map(dev => `
+                    <div class="bluetooth-device-item" onclick="connectToBluetooth('${dev.mac}', '${escapeHtml(dev.name)}')">
+                        <div class="bluetooth-device-info">
+                            <span class="bluetooth-device-name">${escapeHtml(dev.name)}</span>
+                            <span class="bluetooth-device-mac">${dev.mac}</span>
+                        </div>
+                        ${dev.known ? '<span class="bluetooth-device-known"><i class="fa fa-check-circle"></i></span>' : ''}
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Bluetooth scan failed:', error);
+        listContainer.innerHTML = '<div class="bluetooth-error">Scan failed. Is Bluetooth enabled?</div>';
+        showToast('Bluetooth scan failed', 'error');
+    } finally {
+        if (scanBtn) {
+            scanBtn.disabled = false;
+            scanBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Scan';
+        }
+    }
+}
+
+/**
+ * Connect to a Bluetooth device
+ */
+async function connectToBluetooth(mac, name) {
+    showToast(`Pairing & Connecting to ${name}...`, 'info');
+
+    // Optional: add loading state to the clicked item
+    document.body.style.cursor = 'wait';
+
+    try {
+        const response = await api.post('/bluetooth/connect', { mac: mac });
+
+        if (response.success) {
+            showToast(`Connected to ${name}! Audio routed.`, 'success');
+            // Hide the list after successful connection
+            const listContainer = document.getElementById('bluetooth-devices-list');
+            if (listContainer) listContainer.style.display = 'none';
+
+            await loadBluetoothStatus();
+        } else {
+            showToast(response.message || 'Connection failed', 'error');
+        }
+    } catch (error) {
+        console.error('Bluetooth connect failed:', error);
+        showToast('Connection failed. Make sure device is in pairing mode.', 'error');
+    } finally {
+        document.body.style.cursor = 'default';
+    }
+}
+
+/**
+ * Disconnect from current Bluetooth device
+ */
+async function disconnectBluetooth(mac) {
+    showToast('Disconnecting Bluetooth...', 'info');
+
+    try {
+        const response = await api.post('/bluetooth/disconnect', { mac: mac });
+
+        if (response.success) {
+            showToast('Bluetooth disconnected', 'success');
+            await loadBluetoothStatus();
+        } else {
+            showToast(response.message || 'Disconnect failed', 'error');
+        }
+    } catch (error) {
+        console.error('Bluetooth disconnect failed:', error);
+        showToast('Disconnect failed', 'error');
     }
 }
 
