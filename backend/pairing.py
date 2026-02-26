@@ -66,7 +66,7 @@ class PairingManager:
                     data = json.load(f)
                     self._paired_device = data.get('paired_device')
                     if self._paired_device:
-                        logger.info(f"✅ Loaded existing pairing: {self._paired_device.get('device_name', 'Unknown')}")
+                        logger.info(f"Loaded existing pairing: {self._paired_device.get('device_name', 'Unknown')}")
             else:
                 logger.info("No existing pairing found")
         except Exception as e:
@@ -82,7 +82,7 @@ class PairingManager:
                     'paired_device': self._paired_device,
                     'updated_at': datetime.now().isoformat()
                 }, f, indent=2)
-            logger.info("💾 Pairing data saved")
+            logger.info("Pairing data saved")
         except Exception as e:
             logger.error(f"Error saving pairing data: {e}")
     
@@ -99,7 +99,7 @@ class PairingManager:
             # Using uppercase + digits, excluding confusing chars (0, O, I, 1, L)
             alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
             self._pending_token = ''.join(secrets.choice(alphabet) for _ in range(8))
-            logger.info(f"🔑 Generated pairing token: {self._pending_token}")
+            logger.info(f"Generated pairing token: {self._pending_token}")
             return self._pending_token
     
     def get_pending_token(self) -> Optional[str]:
@@ -129,7 +129,7 @@ class PairingManager:
                 }
             
             if token.upper() != self._pending_token:
-                logger.warning(f"❌ Invalid pairing token attempt: {token}")
+                logger.warning(f"Invalid pairing token attempt: {token}")
                 return {
                     'success': False,
                     'message': 'Invalid pairing code. Please check and try again.'
@@ -159,13 +159,13 @@ class PairingManager:
             
             # If there was an old device, trigger disconnect
             if old_device and self._disconnect_callback:
-                logger.info(f"🔌 Disconnecting old device: {old_device.get('device_name')}")
+                logger.info(f"Disconnecting old device: {old_device.get('device_name')}")
                 try:
                     self._disconnect_callback(old_device.get('session_token'))
                 except Exception as e:
                     logger.error(f"Error disconnecting old device: {e}")
             
-            logger.info(f"✅ Device paired: {self._paired_device['device_name']}")
+            logger.info(f"Device paired: {self._paired_device['device_name']}")
             
             return {
                 'success': True,
@@ -247,7 +247,7 @@ class PairingManager:
                 except Exception as e:
                     logger.error(f"Error disconnecting device during unpair: {e}")
             
-            logger.info(f"🔓 Device unpaired: {old_device.get('device_name')}")
+            logger.info(f"Device unpaired: {old_device.get('device_name')}")
             return True
     
     def set_disconnect_callback(self, callback):

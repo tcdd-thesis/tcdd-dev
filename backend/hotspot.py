@@ -74,7 +74,7 @@ class HotspotManager:
             if not self._ssid or not self._password:
                 self._generate_credentials()
             else:
-                logger.info(f"✅ Loaded hotspot config: SSID={self._ssid}, domain={self._domain}")
+                logger.info(f"Loaded hotspot config: SSID={self._ssid}, domain={self._domain}")
         else:
             # No config object, generate defaults
             self._interface = 'wlan0'
@@ -92,7 +92,7 @@ class HotspotManager:
             self.config.set('pairing.password', self._password, save=False)
             self.config.set('pairing.interface', self._interface, save=False)
             self.config.save()
-            logger.info("💾 Hotspot config saved to config.json")
+            logger.info("Hotspot config saved to config.json")
     
     def _generate_credentials(self):
         """Generate new hotspot SSID and password."""
@@ -105,7 +105,7 @@ class HotspotManager:
         alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
         self._password = ''.join(secrets.choice(alphabet) for _ in range(self.DEFAULT_PASSWORD_LENGTH))
         
-        logger.info(f"🔑 Generated hotspot credentials: SSID={self._ssid}")
+        logger.info(f"Generated hotspot credentials: SSID={self._ssid}")
         self._save_to_config()
     
     def _setup_dns(self) -> bool:
@@ -176,7 +176,7 @@ bind-interfaces
             )
             
             if result.returncode == 0:
-                logger.info(f"✅ DNS configured: {self._domain} → {HOTSPOT_IP}")
+                logger.info(f"DNS configured: {self._domain} -> {HOTSPOT_IP}")
                 return True
             else:
                 # dnsmasq might not be installed, try to install it
@@ -189,14 +189,14 @@ bind-interfaces
                 )
                 if install_result.returncode == 0:
                     subprocess.run(['sudo', 'systemctl', 'restart', 'dnsmasq'], timeout=30)
-                    logger.info(f"✅ dnsmasq installed and DNS configured")
+                    logger.info(f"dnsmasq installed and DNS configured")
                     return True
                 else:
-                    logger.warning(f"⚠️ Could not setup DNS (dnsmasq not available)")
+                    logger.warning(f"Could not setup DNS (dnsmasq not available)")
                     return False
                 
         except Exception as e:
-            logger.error(f"❌ DNS setup error: {e}")
+            logger.error(f"DNS setup error: {e}")
             return False
     
     def _cleanup_dns(self) -> bool:
@@ -226,7 +226,7 @@ bind-interfaces
                 timeout=30
             )
             
-            logger.info("🧹 DNS config cleaned up")
+            logger.info("DNS config cleaned up")
             return True
             
         except Exception as e:
@@ -344,7 +344,7 @@ bind-interfaces
                 
                 if code == 0:
                     self._is_active = True
-                    logger.info(f"✅ Hotspot started: {self._ssid} (IP: {HOTSPOT_IP})")
+                    logger.info(f"Hotspot started: {self._ssid} (IP: {HOTSPOT_IP})")
                     
                     # Setup DNS for local domain access
                     dns_ok = self._setup_dns()
@@ -360,14 +360,14 @@ bind-interfaces
                     }
                 else:
                     error_msg = stderr.strip() or 'Failed to start hotspot'
-                    logger.error(f"❌ Hotspot start failed: {error_msg}")
+                    logger.error(f"Hotspot start failed: {error_msg}")
                     return {
                         'success': False,
                         'message': error_msg
                     }
                     
             except Exception as e:
-                logger.error(f"❌ Hotspot start error: {e}")
+                logger.error(f"Hotspot start error: {e}")
                 return {
                     'success': False,
                     'message': str(e)
@@ -397,10 +397,10 @@ bind-interfaces
             ], timeout=15)
             
             if code == 0:
-                logger.info(f"✅ WiFi reconnected: {stdout.strip()}")
+                logger.info(f"WiFi reconnected: {stdout.strip()}")
             else:
                 # Fallback: try to activate the most recent WiFi connection
-                logger.warning(f"⚠️ Auto-connect failed ({stderr.strip()}), trying saved connections...")
+                logger.warning(f"Auto-connect failed ({stderr.strip()}), trying saved connections...")
                 
                 # List saved WiFi connections
                 stdout2, _, code2 = self._run_nmcli([
@@ -412,18 +412,18 @@ bind-interfaces
                         if ':802-11-wireless' in line:
                             conn_name = line.split(':')[0]
                             if conn_name and conn_name != self.HOTSPOT_CONNECTION_NAME:
-                                logger.info(f"📶 Trying saved connection: {conn_name}")
+                                logger.info(f"Trying saved connection: {conn_name}")
                                 _, _, rc = self._run_nmcli([
                                     'connection', 'up', conn_name
                                 ], timeout=15)
                                 if rc == 0:
-                                    logger.info(f"✅ Connected to: {conn_name}")
+                                    logger.info(f"Connected to: {conn_name}")
                                     return
                 
-                logger.warning("⚠️ Could not auto-reconnect WiFi. Use the UI to connect manually.")
+                logger.warning("Could not auto-reconnect WiFi. Use the UI to connect manually.")
                 
         except Exception as e:
-            logger.error(f"❌ WiFi reconnect error: {e}")
+            logger.error(f"WiFi reconnect error: {e}")
     
     def stop(self) -> Dict[str, Any]:
         """
@@ -452,7 +452,7 @@ bind-interfaces
                 
                 if code == 0:
                     self._is_active = False
-                    logger.info("✅ Hotspot stopped")
+                    logger.info("Hotspot stopped")
                     
                     # Reconnect WiFi to the best available known network
                     self._reconnect_wifi()
@@ -478,7 +478,7 @@ bind-interfaces
                     }
                     
             except Exception as e:
-                logger.error(f"❌ Hotspot stop error: {e}")
+                logger.error(f"Hotspot stop error: {e}")
                 return {
                     'success': False,
                     'message': str(e)

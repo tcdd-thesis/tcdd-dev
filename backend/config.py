@@ -91,7 +91,7 @@ class Config:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
                     config = json.load(f)
-                logger.info(f"✅ Configuration loaded from {self.config_file}")
+                logger.info(f"Configuration loaded from {self.config_file}")
                 return config
             else:
                 logger.warning(f"Config file not found: {self.config_file}")
@@ -131,7 +131,7 @@ class Config:
         with self._lock:
             current_mtime = self._get_file_mtime()
             if current_mtime and current_mtime != self._last_modified:
-                logger.info("🔄 Config file changed, reloading...")
+                logger.info("Config file changed, reloading...")
                 old_config = self.config.copy()
                 self.config = self._load_config()
                 self._last_modified = current_mtime
@@ -210,7 +210,7 @@ class Config:
             
             # Set the value
             config[keys[-1]] = value
-            logger.info(f"⚙️ Config updated: {key} = {value}")
+            logger.info(f"Config updated: {key} = {value}")
             
             # Save to file if requested
             if save:
@@ -242,7 +242,7 @@ class Config:
         with self._lock:
             old_config = self.config.copy()
             self._deep_update(self.config, data)
-            logger.info(f"⚙️ Config batch update: {len(data)} changes")
+            logger.info(f"Config batch update: {len(data)} changes")
             
             # Save to file if requested
             if save:
@@ -276,11 +276,11 @@ class Config:
             
             # Update modification time
             self._last_modified = self._get_file_mtime()
-            logger.info(f"💾 Configuration saved to {self.config_file}")
+            logger.info(f"Configuration saved to {self.config_file}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error saving config: {e}")
+            logger.error(f"Error saving config: {e}")
             return False
     
     def save(self):

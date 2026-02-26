@@ -140,7 +140,7 @@ def on_config_change(old_config, new_config):
         logger.debug("Config changed during startup, skipping live update")
         return
     
-    logger.info("🔄 Configuration changed, updating components...")
+    logger.info("Configuration changed, updating components...")
     
     try:
         # Check camera settings changes
@@ -160,24 +160,24 @@ def on_config_change(old_config, new_config):
         
         # Restart camera if settings changed
         if camera_changed and camera:
-            logger.info("📷 Camera settings changed, restarting camera...")
+            logger.info("Camera settings changed, restarting camera...")
             camera.stop()
             camera = Camera(config)
             camera.start()
-            logger.info("✅ Camera restarted with new settings")
+            logger.info("Camera restarted with new settings")
         
         # Reload detector if model or confidence changed
         if detector_changed and detector:
-            logger.info("🔍 Detector settings changed, reloading detector...")
+            logger.info("Detector settings changed, reloading detector...")
             detector = Detector(config)
-            logger.info("✅ Detector reloaded with new settings")
+            logger.info("Detector reloaded with new settings")
         
         # Update display brightness if changed
         if display_changed and display_controller:
             new_brightness = new_config.get('display', {}).get('brightness', 100)
             old_brightness = old_config.get('display', {}).get('brightness', 100)
             if new_brightness != old_brightness:
-                logger.info(f"🔆 Display brightness changed: {old_brightness}% → {new_brightness}%")
+                logger.info(f"Display brightness changed: {old_brightness}% -> {new_brightness}%")
                 display_controller.set_brightness(new_brightness)
         
         # Broadcast changes to all connected clients
@@ -186,10 +186,10 @@ def on_config_change(old_config, new_config):
             'config': new_config
         })
         
-        logger.info("✅ Configuration update complete!")
+        logger.info("Configuration update complete")
         
     except Exception as e:
-        logger.error(f"❌ Error updating components after config change: {e}")
+        logger.error(f"Error updating components after config change: {e}")
 
 # NOTE: Config change callback is registered at the end of initialize()
 # to avoid firing during startup when components aren't ready yet.
@@ -257,7 +257,7 @@ def initialize():
         
         # Register config change callback now that all components are ready
         config.register_change_callback(on_config_change)
-        logger.info("✅ Config change callback registered")
+        logger.info("Config change callback registered")
         
         return True
         
@@ -548,7 +548,7 @@ def update_config():
         # Update configuration (this will trigger callbacks and save to file)
         config.update(data, save=True)
         
-        logger.info(f"✅ Configuration updated via API: {list(data.keys())}")
+        logger.info(f"Configuration updated via API: {list(data.keys())}")
         
         return jsonify({
             'message': 'Configuration updated successfully',
@@ -557,7 +557,7 @@ def update_config():
         }), 200
         
     except Exception as e:
-        logger.error(f"❌ Error updating config: {e}")
+        logger.error(f"Error updating config: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/config/reload', methods=['POST'])
@@ -570,7 +570,7 @@ def reload_config():
         reloaded = config.reload()
 
         if reloaded:
-            logger.info("✅ Configuration reloaded from file")
+            logger.info("Configuration reloaded from file")
             return jsonify({
                 'message': 'Configuration reloaded successfully',
                 'config': config.get_all(),
@@ -583,7 +583,7 @@ def reload_config():
             }), 200
 
     except Exception as e:
-        logger.error(f"❌ Error reloading config: {e}")
+        logger.error(f"Error reloading config: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ----------------------------------------------------------------------------
@@ -811,10 +811,10 @@ def connect_wifi():
             stdout, stderr, code = run_nmcli(['dev', 'wifi', 'connect', ssid], timeout=30)
         
         if code == 0:
-            logger.info(f"✅ Connected to WiFi: {ssid}")
+            logger.info(f"Connected to WiFi: {ssid}")
             return jsonify({'message': f'Connected to {ssid}', 'connected': True}), 200
         else:
-            logger.error(f"❌ Failed to connect to WiFi: {stderr}")
+            logger.error(f"Failed to connect to WiFi: {stderr}")
             return jsonify({'error': stderr or 'Connection failed', 'connected': False}), 400
         
     except Exception as e:
@@ -841,7 +841,7 @@ def disconnect_wifi():
         stdout, stderr, code = run_nmcli(['connection', 'down', active_connection], timeout=10)
         
         if code == 0:
-            logger.info(f"✅ Disconnected from WiFi: {active_connection}")
+            logger.info(f"Disconnected from WiFi: {active_connection}")
             return jsonify({'message': f'Disconnected from {active_connection}', 'connected': False}), 200
         else:
             return jsonify({'error': stderr or 'Disconnect failed'}), 400
@@ -885,7 +885,7 @@ def forget_network():
         stdout, stderr, code = run_nmcli(['connection', 'delete', name], timeout=10)
         
         if code == 0:
-            logger.info(f"✅ Forgot network: {name}")
+            logger.info(f"Forgot network: {name}")
             return jsonify({'message': f'Forgot network: {name}'}), 200
         else:
             return jsonify({'error': stderr or 'Failed to forget network'}), 400
@@ -930,7 +930,7 @@ def generate_pairing_token():
         domain = hotspot_manager.get_domain() if hotspot_manager else None
         data = pairing_manager.generate_pairing_data(port=port, domain=domain)
         
-        logger.info(f"🔑 Pairing token generated: {data['token']}")
+        logger.info(f"Pairing token generated: {data['token']}")
         
         return jsonify({
             'success': True,
@@ -994,7 +994,7 @@ def validate_pairing_token():
         result = pairing_manager.validate_and_pair(token, device_info)
         
         if result['success']:
-            logger.info(f"✅ Device paired via API: {device_info['device_name']}")
+            logger.info(f"Device paired via API: {device_info['device_name']}")
             
             # Also emit event for touchscreen to update UI
             socketio.emit('device_paired', {
@@ -1025,7 +1025,7 @@ def unpair_device():
     
     try:
         if pairing_manager.unpair():
-            logger.info("🔓 Device unpaired via API")
+            logger.info("Device unpaired via API")
             socketio.emit('device_unpaired', {
                 'timestamp': datetime.now().isoformat()
             })
@@ -1196,7 +1196,7 @@ def regenerate_hotspot_credentials():
         result = hotspot_manager.regenerate_credentials()
         
         if result['success']:
-            logger.info(f"🔑 Hotspot credentials regenerated: {result.get('ssid')}")
+            logger.info(f"Hotspot credentials regenerated: {result.get('ssid')}")
         
         return jsonify(result), 200 if result['success'] else 400
         

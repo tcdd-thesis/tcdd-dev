@@ -78,12 +78,12 @@ class DisplayController:
             self._pwm.start(self._current_brightness)
             
             self._initialized = True
-            logger.info(f"✅ Display controller initialized on GPIO {self._backlight_pin}")
+            logger.info(f"Display controller initialized on GPIO {self._backlight_pin}")
             logger.info(f"   Brightness: {self._current_brightness}%")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize display controller: {e}")
+            logger.error(f"Failed to initialize display controller: {e}")
             self._initialized = False
             return False
     

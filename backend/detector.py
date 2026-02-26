@@ -142,15 +142,15 @@ class Detector:
                 _ = self.model(dummy_frame, conf=self.confidence, verbose=False)
                 
                 self.loaded = True
-                logger.info(f"✅ Ultralytics model loaded! Classes: {len(self.model.names)}")
+                logger.info(f"Ultralytics model loaded. Classes: {len(self.model.names)}")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to load Ultralytics model: {e}")
+                logger.error(f"Failed to load Ultralytics model: {e}")
                 self.loaded = False
                 
         elif self.engine == 'ncnn':
             if not HAS_NCNN:
-                logger.error("❌ NCNN not available - using mock detector")
+                logger.error("NCNN not available - using mock detector")
                 logger.error("Please install ncnn: python -m pip install ncnn")
                 self.loaded = False
                 return
@@ -172,10 +172,10 @@ class Detector:
                     raise RuntimeError(f"Failed to load NCNN model (param={ret_param}, model={ret_model})")
                 
                 self.loaded = True
-                logger.info("✅ NCNN model loaded successfully!")
+                logger.info("NCNN model loaded successfully")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to load NCNN model: {e}")
+                logger.error(f"Failed to load NCNN model: {e}")
                 self.loaded = False
                 
         elif self.engine == 'hef':
