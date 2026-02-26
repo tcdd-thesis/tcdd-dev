@@ -89,9 +89,10 @@
   "streaming": {
     "enabled": true,               // Enable video streaming
     "quality": 85,                 // JPEG quality: 10-100
-                                    // Higher = better quality, more bandwidth
+                                  // Higher = better quality, more bandwidth
     "max_fps": 30,                 // Max streaming FPS
-    "buffer_size": 2               // Frame buffer size
+    "buffer_size": 2,               // Frame buffer size
+    "metrics_interval": 30           // Frames between performance metrics updates
   },
   
   
