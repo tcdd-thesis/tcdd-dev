@@ -1,0 +1,38 @@
+{
+  "port": 5000,
+  "debug": false,
+  "camera": {
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "detection": {
+    "model": "backend/models/yolov8n.pt",
+    "confidence": 0.5
+  },
+  "display": {
+    "brightness": 50,
+    "backlight_pin": 18,
+    "pwm_frequency": 1000
+  },
+  "hotspot": {
+    "enabled": true,
+    "auto_start": false,
+    "ssid": "",
+    "password": "",
+    "interface": "wlan0",
+    "domain": "tcdd.local"
+  },
+  "pairing": {
+    "require_confirmation": true,
+    "touchscreen_bypass": true,
+    "ssid": "TCDD-BRU7",
+    "password": "ke38sgcj",
+    "interface": "wlan0",
+    "auto_start": false
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "data/logs/app.log"
+  }
+}

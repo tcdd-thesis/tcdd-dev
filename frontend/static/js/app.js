@@ -1155,11 +1155,13 @@ async function unpairDevice() {
 
         if (result.success) {
             showToast('Device unpaired', 'success');
-            // Also stop the hotspot automatically to return to WiFi
-            await api.post('/hotspot/stop').catch(e => console.warn('Failed to stop hotspot after unpair', e));
         } else {
             showToast(result.message || 'Nothing to unpair', 'info');
         }
+
+        // Always attempt to stop the hotspot, in case we are stuck in pairing mode
+        // without an actual completed pairing.
+        await api.post('/hotspot/stop').catch(e => console.warn('Failed to stop hotspot after unpair', e));
 
         loadPairingStatus();
     } catch (error) {
@@ -1316,6 +1318,15 @@ function closePairingWizard() {
     stopPolling();
     const modal = document.getElementById('pairing-wizard-modal');
     if (modal) modal.style.display = 'none';
+
+    // Check if we are actually paired. If not, we cancelled the wizard 
+    // and should stop the hotspot to return to regular WiFi.
+    api.get('/pair/status').then(res => {
+        if (!res.is_paired) {
+            api.post('/hotspot/stop').catch(e => console.warn('Failed to stop hotspot on wizard close', e));
+        }
+    }).catch(e => console.error('Failed to check pair status on close', e));
+
     loadPairingStatus();
 }
 
