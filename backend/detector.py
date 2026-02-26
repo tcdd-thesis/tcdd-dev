@@ -34,6 +34,18 @@ except ImportError:
     HAS_NCNN = False
     logger.warning("ncnn not available, NCNN engine will not work")
 
+# Try importing Hailo Platform
+try:
+    from hailo_platform import (
+        HEF, VDevice, HailoStreamInterface,
+        ConfigureParams, InferVStreams,
+        InputVStreamParams, OutputVStreamParams
+    )
+    HAS_HAILO = True
+except ImportError:
+    HAS_HAILO = False
+    logger.warning("hailo_platform not available, HEF engine will not work")
+
 
 class Detector:
     """Sign detector supporting Ultralytics YOLOv8 and NCNN"""
@@ -46,10 +58,17 @@ class Detector:
             config: Configuration object
         """
         self.config = config
-        self.engine = config.get('detection.engine', 'ultralytics')
+        self.engine = config.get('detection.engine', 'pytorch')
+        self.device = config.get('detection.device', 'cpu')
         self.model = None
         self.net = None
         self.loaded = False
+        
+        # Hailo-specific state
+        self.hailo_device = None
+        self.hailo_hef = None
+        self.hailo_network_group = None
+        self.hailo_network_group_context = None
         
         # Parse model path(s) based on engine
         model_config = config.get('detection.model', [])
@@ -63,6 +82,13 @@ class Detector:
             self.ncnn_bin = model_config[1]
             self.model_path = None
             logger.info(f"NCNN model configured: param={self.ncnn_param}, bin={self.ncnn_bin}")
+        elif self.engine == 'hef':
+            if len(model_config) < 1:
+                raise ValueError("HEF engine requires 1 model file: [hef_path]")
+            self.model_path = model_config[0]
+            self.ncnn_param = None
+            self.ncnn_bin = None
+            logger.info(f"HEF model configured: {self.model_path} (device={self.device})")
         else:  # ultralytics
             if len(model_config) < 1:
                 self.model_path = 'backend/models/best.pt'  # Default fallback
@@ -143,9 +169,70 @@ class Detector:
             except Exception as e:
                 logger.error(f"❌ Failed to load NCNN model: {e}")
                 self.loaded = False
+                
+        elif self.engine == 'hef':
+            self._load_hailo_model()
         else:
             logger.warning(f"Unknown detection engine: {self.engine}")
             self.loaded = False
+    
+    def _load_hailo_model(self):
+        """Load HEF model onto Hailo AI HAT+ NPU"""
+        if not HAS_HAILO:
+            logger.error("\u274c hailo_platform not available - using mock detector")
+            logger.error("Please install hailo-all on your Raspberry Pi")
+            self.loaded = False
+            return
+        
+        if self.device != 'hailo':
+            logger.error(f"\u274c HEF engine requires device=hailo, got device={self.device}")
+            self.loaded = False
+            return
+        
+        logger.info(f"Loading HEF model: {self.model_path}")
+        
+        try:
+            if not os.path.exists(self.model_path):
+                raise FileNotFoundError(f"HEF model file not found: {self.model_path}")
+            
+            # Create virtual device (connects to Hailo NPU)
+            self.hailo_device = VDevice()
+            
+            # Load HEF file
+            self.hailo_hef = HEF(self.model_path)
+            
+            # Configure network on the device
+            configure_params = ConfigureParams.create_from_hef(
+                self.hailo_hef,
+                interface=HailoStreamInterface.PCIe
+            )
+            network_groups = self.hailo_device.configure(self.hailo_hef, configure_params)
+            self.hailo_network_group = network_groups[0]
+            
+            # Activate network group (keep active for entire session for performance)
+            self.hailo_network_group_context = self.hailo_network_group.activate()
+            
+            self.loaded = True
+            logger.info("\u2705 HEF model loaded on Hailo NPU!")
+            logger.info(f"\u26a1 Running on Hailo AI HAT+ (device={self.device})")
+            
+        except Exception as e:
+            logger.error(f"\u274c Failed to load HEF model: {e}")
+            self.loaded = False
+            self._cleanup_hailo()
+    
+    def _cleanup_hailo(self):
+        """Release Hailo resources"""
+        try:
+            if self.hailo_network_group_context is not None:
+                self.hailo_network_group_context = None
+            self.hailo_network_group = None
+            self.hailo_hef = None
+            if self.hailo_device is not None:
+                self.hailo_device.release()
+                self.hailo_device = None
+        except Exception as e:
+            logger.warning(f"Error during Hailo cleanup: {e}")
     
     def detect(self, frame):
         """
@@ -168,6 +255,8 @@ class Detector:
             return self._detect_ultralytics(frame)
         elif self.engine == 'ncnn':
             return self._detect_ncnn(frame)
+        elif self.engine == 'hef':
+            return self._detect_hailo(frame)
         else:
             return self._mock_detect(frame)
     
@@ -429,6 +518,102 @@ class Detector:
         
         return []
     
+    def _detect_hailo(self, frame):
+        """Run YOLO inference on Hailo AI HAT+ NPU via HEF model"""
+        try:
+            frame_h, frame_w = frame.shape[:2]
+            
+            # Preprocess: resize to 640x640
+            resized = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
+            
+            # Hailo Model Zoo YOLO models expect BGR input; camera provides RGB
+            resized_bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
+            
+            # Normalize to float32 [0, 1]
+            input_data = resized_bgr.astype(np.float32) / 255.0
+            input_data = np.expand_dims(input_data, axis=0)
+            
+            # Get stream parameters
+            input_vstream_info = self.hailo_network_group.get_input_vstream_infos()[0]
+            output_vstream_infos = self.hailo_network_group.get_output_vstream_infos()
+            
+            input_params = InputVStreamParams.make(self.hailo_network_group)
+            output_params = OutputVStreamParams.make(self.hailo_network_group)
+            
+            # Prepare input dict
+            input_dict = {input_vstream_info.name: input_data}
+            
+            # Run inference (network group already activated at init)
+            with InferVStreams(self.hailo_network_group, input_params, output_params) as pipeline:
+                raw_output = pipeline.infer(input_dict)
+            
+            # Parse NMS output
+            detections = self._parse_hailo_nms_output(raw_output, frame_w, frame_h)
+            
+            return detections
+            
+        except Exception as e:
+            logger.error(f"Hailo inference error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+    
+    def _parse_hailo_nms_output(self, raw_output, frame_w, frame_h):
+        """
+        Parse Hailo YOLO NMS post-process output.
+        
+        Hailo NMS returns a nested list structure:
+            list[class_index] -> list -> ndarray(N, 5)
+        Each detection array row: [y1, x1, y2, x2, confidence] (normalized 0-1)
+        """
+        detections = []
+        class_names = self.labels if self.labels else []
+        
+        for output_name, output_data in raw_output.items():
+            # Only process NMS outputs
+            if 'nms' not in output_name.lower():
+                continue
+            
+            if not isinstance(output_data, list):
+                continue
+            
+            for class_idx, class_detections in enumerate(output_data):
+                if not isinstance(class_detections, list):
+                    continue
+                
+                for det_array in class_detections:
+                    if not isinstance(det_array, np.ndarray) or det_array.size == 0:
+                        continue
+                    
+                    if det_array.ndim == 1:
+                        det_array = det_array.reshape(1, -1)
+                    
+                    for det in det_array:
+                        if len(det) < 5:
+                            continue
+                        
+                        # Hailo NMS format: [y1, x1, y2, x2, confidence]
+                        y1, x1, y2, x2, confidence = det[:5]
+                        
+                        if confidence < self.confidence:
+                            continue
+                        
+                        # Scale normalized coords to frame size
+                        x1_scaled = int(max(0, min(frame_w - 1, x1 * frame_w)))
+                        y1_scaled = int(max(0, min(frame_h - 1, y1 * frame_h)))
+                        x2_scaled = int(max(0, min(frame_w - 1, x2 * frame_w)))
+                        y2_scaled = int(max(0, min(frame_h - 1, y2 * frame_h)))
+                        
+                        class_name = class_names[class_idx] if class_idx < len(class_names) else f'class_{class_idx}'
+                        
+                        detections.append({
+                            'class_name': class_name,
+                            'confidence': float(confidence),
+                            'bbox': [x1_scaled, y1_scaled, x2_scaled, y2_scaled]
+                        })
+        
+        return detections
+    
     def draw_detections(self, frame, detections):
         """Draw bounding boxes and labels on frame"""
         if not detections:
@@ -478,11 +663,14 @@ class Detector:
         """Get detector information"""
         if self.engine == 'ncnn':
             model_display = f"{self.ncnn_param} + {self.ncnn_bin}"
+        elif self.engine == 'hef':
+            model_display = self.model_path
         else:
             model_display = self.model_path
             
         return {
             'engine': self.engine,
+            'device': self.device,
             'model': model_display,
             'loaded': self.loaded,
             'confidence_threshold': self.confidence,
