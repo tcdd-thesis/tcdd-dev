@@ -530,18 +530,27 @@ class Detector:
             resized_bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
             
             # HEF models have quantization built-in: send uint8 [0-255] directly
-            # Do NOT normalize to float32 — the NPU handles quantization on-chip
-            input_data = np.expand_dims(resized_bgr, axis=0)  # shape: (1, 640, 640, 3), dtype: uint8
+            # Ensure C-contiguous array so Hailo C library can read the buffer
+            input_frame = np.ascontiguousarray(resized_bgr, dtype=np.uint8)
+            input_batch = np.expand_dims(input_frame, axis=0)  # (1, 640, 640, 3)
             
-            # Get stream parameters
-            input_vstream_info = self.hailo_network_group.get_input_vstream_infos()[0]
-            output_vstream_infos = self.hailo_network_group.get_output_vstream_infos()
-            
+            # Build params — use param dict keys as the canonical stream names
             input_params = InputVStreamParams.make(self.hailo_network_group)
             output_params = OutputVStreamParams.make(self.hailo_network_group)
             
-            # Prepare input dict
-            input_dict = {input_vstream_info.name: input_data}
+            # Build input dict keyed by the stream names from input_params
+            input_dict = {}
+            if isinstance(input_params, dict):
+                for stream_name in input_params:
+                    input_dict[stream_name] = input_batch
+            else:
+                # Fallback: query vstream info for names
+                for info in self.hailo_network_group.get_input_vstream_infos():
+                    input_dict[info.name] = input_batch
+            
+            logger.debug(f"Hailo input: keys={list(input_dict.keys())}, "
+                         f"shape={input_batch.shape}, dtype={input_batch.dtype}, "
+                         f"nbytes={input_batch.nbytes}")
             
             # Run inference (network group already activated at init)
             with InferVStreams(self.hailo_network_group, input_params, output_params) as pipeline:
