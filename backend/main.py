@@ -321,6 +321,7 @@ def get_status():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/shutdown', methods=['POST'])
+@require_pairing
 def shutdown_system():
     """Shutdown the Raspberry Pi with a 2-second delay for UI feedback"""
     import subprocess
@@ -337,6 +338,7 @@ def shutdown_system():
     return jsonify({'message': 'Shutting down...'}), 200
 
 @app.route('/api/reboot', methods=['POST'])
+@require_pairing
 def reboot_system():
     """Reboot the Raspberry Pi using detached process"""
     import subprocess
@@ -363,6 +365,7 @@ def reboot_system():
     return jsonify({'message': 'Rebooting...'}), 200
 
 @app.route('/api/close-app', methods=['POST'])
+@require_pairing
 def close_app():
     """Close the application: kill Chromium browser then stop the Flask server"""
     import subprocess
@@ -409,6 +412,7 @@ def get_config():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/config', methods=['PUT'])
+@require_pairing
 def update_config():
     """
     Update configuration
@@ -972,13 +976,11 @@ def get_hotspot_status():
 
 
 @app.route('/api/hotspot/toggle', methods=['POST'])
+@require_pairing
 def toggle_hotspot():
     """
     Toggle hotspot enabled state (for settings UI).
-    Only accessible from touchscreen (local).
     """
-    if not is_local_request():
-        return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
     try:
         data = request.get_json()
         enabled = data.get('enabled', False)
@@ -991,14 +993,12 @@ def toggle_hotspot():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/hotspot/start', methods=['POST'])
+@require_pairing
 def start_hotspot():
     """
     Start the WiFi hotspot.
-    Only accessible from touchscreen (local).
     Checks hotspot.enabled config.
     """
-    if not is_local_request():
-        return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
     if not config.get('hotspot.enabled', True):
         return jsonify({'error': 'Hotspot is disabled in settings'}), 403
     try:
@@ -1020,13 +1020,11 @@ def start_hotspot():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/hotspot/stop', methods=['POST'])
+@require_pairing
 def stop_hotspot():
     """
     Stop the WiFi hotspot.
-    Only accessible from touchscreen (local).
     """
-    if not is_local_request():
-        return jsonify({'error': 'Hotspot control requires touchscreen access'}), 403
     
     try:
         result = hotspot_manager.stop()
@@ -1059,13 +1057,11 @@ def get_hotspot_credentials():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/hotspot/credentials', methods=['POST'])
+@require_pairing
 def set_hotspot_credentials():
     """
     Set custom hotspot credentials.
-    Only accessible from touchscreen (local).
     """
-    if not is_local_request():
-        return jsonify({'error': 'Credential changes require touchscreen access'}), 403
     
     try:
         data = request.get_json()
@@ -1080,13 +1076,11 @@ def set_hotspot_credentials():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/hotspot/regenerate', methods=['POST'])
+@require_pairing
 def regenerate_hotspot_credentials():
     """
     Generate new random hotspot credentials.
-    Only accessible from touchscreen (local).
     """
-    if not is_local_request():
-        return jsonify({'error': 'Credential regeneration requires touchscreen access'}), 403
     
     try:
         result = hotspot_manager.regenerate_credentials()
@@ -1101,13 +1095,11 @@ def regenerate_hotspot_credentials():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/hotspot/autostart', methods=['POST'])
+@require_pairing
 def set_hotspot_autostart():
     """
     Set hotspot auto-start preference.
-    Only accessible from touchscreen (local).
     """
-    if not is_local_request():
-        return jsonify({'error': 'Auto-start setting requires touchscreen access'}), 403
     
     try:
         data = request.get_json()

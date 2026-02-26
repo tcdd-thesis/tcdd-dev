@@ -1674,6 +1674,19 @@ function connectWebSocket() {
         if (state.currentPage === 'settings') loadPairingStatus();
     });
 
+    // Listen for hotspot state changes (sync RPi ↔ mobile)
+    state.socket.on('hotspot_started', (data) => {
+        console.log('Hotspot started:', data);
+        updateHotspotUI(true, data.ssid);
+        showToast('Hotspot started', 'success');
+    });
+
+    state.socket.on('hotspot_stopped', () => {
+        console.log('Hotspot stopped');
+        updateHotspotUI(false);
+        showToast('Hotspot stopped', 'info');
+    });
+
     // Listen for config updates from server
     state.socket.on('config_updated', (data) => {
         console.log('\u21BB Configuration updated from server:', data);

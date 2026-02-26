@@ -451,8 +451,8 @@
         </div>
     </div>
 
-    <!-- Load SocketIO from CDN -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- Load SocketIO (bundled locally for offline/hotspot use) -->
+    <script src="/static/js/socket.io.min.js"></script>
     <!-- Load our app -->
     <script src="/static/js/app.js"></script>
     {% if not is_touchscreen %}
