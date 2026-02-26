@@ -230,8 +230,6 @@
         const urlToken = urlParams.get('token');
         if (urlToken) {
             tokenInput.value = urlToken.toUpperCase();
-            // Auto-submit after a brief delay so user sees the page
-            setTimeout(() => submitToken(), 600);
         }
 
         // Focus input on load

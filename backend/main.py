@@ -1227,13 +1227,18 @@ def start_hotspot():
     if not config.get('pairing.enabled', True):
         return jsonify({'error': 'Hotspot is disabled in settings'}), 403
     try:
+        data = request.get_json(silent=True) or {}
+        force = data.get('force', False)
+        
         # Regenerate credentials to ensure old devices cannot auto-connect (enforces 1-device limit)
         hotspot_manager.regenerate_credentials()
 
         # Check if WiFi is connected and prompt user (frontend handles prompt)
-        wifi_status = hotspot_manager.is_wifi_connected() if hasattr(hotspot_manager, 'is_wifi_connected') else False
-        if wifi_status:
-            return jsonify({'prompt': 'Hotspot will disconnect WiFi. Proceed?'}), 200
+        if not force:
+            wifi_status = hotspot_manager.is_wifi_connected() if hasattr(hotspot_manager, 'is_wifi_connected') else False
+            if wifi_status:
+                return jsonify({'prompt': 'Hotspot will disconnect WiFi. Proceed?'}), 200
+                
         result = hotspot_manager.start()
         if result['success']:
             logger.info(f"Hotspot started via API: {result.get('ssid')}")

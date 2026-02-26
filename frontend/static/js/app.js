@@ -1116,7 +1116,7 @@ async function loadPairingStatus() {
     const infoDiv = document.getElementById('pairing-device-info');
     const nameSpan = document.getElementById('pairing-device-name');
     const unpairBtn = document.getElementById('btn-unpair');
-    const generateBtn = document.getElementById('btn-generate-pairing');
+    const generateBtn = document.getElementById('btn-start-pairing-wizard');
 
     try {
         const status = await api.get('/pair/status');
@@ -1129,7 +1129,7 @@ async function loadPairingStatus() {
             if (nameSpan) nameSpan.textContent = status.paired_device.device_name || 'Unknown';
             if (unpairBtn) unpairBtn.style.display = 'inline-flex';
             if (generateBtn) {
-                generateBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i> New Code';
+                generateBtn.style.display = 'none'; // Hide Start Pairing when paired
             }
         } else {
             // Not paired state
@@ -1138,7 +1138,7 @@ async function loadPairingStatus() {
             if (infoDiv) infoDiv.style.display = 'none';
             if (unpairBtn) unpairBtn.style.display = 'none';
             if (generateBtn) {
-                generateBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Pair Device';
+                generateBtn.style.display = 'inline-flex'; // Show Start Pairing when not paired
             }
         }
     } catch (error) {
@@ -1183,7 +1183,7 @@ async function startPairingWizard() {
     try {
         // Step 1: Start Hotspot
         // Auto-triggers API which now regenerates credentials automatically
-        const response = await api.post('/hotspot/start');
+        const response = await api.post('/hotspot/start', { force: true });
 
         if (response.success || response.ssid) {
             // Successfully started hotspot, setup Step 2 UI

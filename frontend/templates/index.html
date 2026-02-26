@@ -218,52 +218,7 @@
                     <div id="wifi-saved-list" style="display:none;"></div>
                 </div>
 
-                <!-- Section 3: Hotspot -->
-                <div class="settings-group settings-group-touch">
-                    <h3><i class="fa-solid fa-tower-broadcast"></i> Hotspot</h3>
-                    <div class="setting-row">
-                        <label>Status</label>
-                        <span id="hotspot-status-text" class="hotspot-status">Checking...</span>
-                    </div>
-                    <div class="setting-row">
-                        <label>SSID</label>
-                        <span id="hotspot-ssid" class="hotspot-ssid">---</span>
-                    </div>
-                    <div class="setting-row">
-                        <button class="btn btn-hotspot-toggle btn-touch" id="hotspot-toggle-btn"
-                            onclick="toggleHotspotUI()">
-                            <i class="fa-solid fa-wifi"></i> <span id="hotspot-toggle-label">Enable Hotspot</span>
-                        </button>
-                        <button class="btn btn-primary btn-touch" id="btn-show-hotspot-qr" onclick="showHotspotQR()">
-                            <i class="fa-solid fa-qrcode"></i> WiFi QR
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Section 4: Bluetooth Audio -->
-                <div class="settings-group settings-group-touch">
-                    <h3><i class="fa-brands fa-bluetooth"></i> Bluetooth Audio</h3>
-                    <div class="bluetooth-status-row">
-                        <span class="bluetooth-label">Status</span>
-                        <span id="bluetooth-status-text"><i class="fa fa-spinner fa-spin"></i> Checking...</span>
-                    </div>
-                    <div class="setting-row" id="bluetooth-device-row" style="display:none;">
-                        <label>Connected to</label>
-                        <span id="bluetooth-device-name" class="setting-value">—</span>
-                    </div>
-                    <div class="bluetooth-actions">
-                        <button class="btn-bluetooth primary" id="btn-scan-bluetooth" onclick="scanBluetoothDevices()">
-                            <i class="fa-solid fa-magnifying-glass"></i> Scan
-                        </button>
-                        <button class="btn-bluetooth secondary" id="btn-bluetooth-disconnect"
-                            onclick="disconnectBluetooth()" style="display:none;">
-                            <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
-                        </button>
-                    </div>
-                    <div id="bluetooth-devices-list" style="display:none;"></div>
-                </div>
-
-                <!-- Section 5: Device Pairing -->
+                <!-- Section 3: Device Pairing -->
                 <div class="settings-group settings-group-touch">
                     <h3><i class="fa-solid fa-link"></i> Device Pairing</h3>
                     <div class="setting-row">
