@@ -152,12 +152,12 @@
   
   "tts": {
     "enabled": true,               // Enable/disable TTS alerts
-    "voice": "mb-us2",             // espeak voice to use
-                                    // "mb-us2"  = MBROLA US English female (best)
-                                    // "mb-us1"  = MBROLA US English male
-                                    // "mb-en1"  = MBROLA British English female
+    "voice": "en+f3",             // espeak voice to use
                                     // "en+f3"   = built-in female (no mbrola needed)
                                     // "en+m3"   = built-in male   (no mbrola needed)
+                                    // "mb-us2"  = MBROLA US English female (best, needs mbrola)
+                                    // "mb-us1"  = MBROLA US English male   (needs mbrola)
+                                    // "mb-en1"  = MBROLA British English female (needs mbrola)
                                     // "en"      = default espeak voice
     "speech_rate": 160,            // Speech speed (words per minute)
                                     // 120 = slow, 160 = normal, 200 = fast

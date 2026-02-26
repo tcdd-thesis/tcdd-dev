@@ -201,7 +201,7 @@ class TTSEngine:
 
         # Settings (with defaults)
         self.enabled = self._cfg("tts.enabled", True)
-        self.voice = self._cfg("tts.voice", "mb-us2")
+        self.voice = self._cfg("tts.voice", "en+f3")
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
@@ -297,7 +297,7 @@ class TTSEngine:
         amplitude = int(max(0.0, min(1.0, self.volume)) * 200)
 
         # Re-read voice from config in case it was changed at runtime
-        self.voice = self._cfg("tts.voice", "mb-us2")
+        self.voice = self._cfg("tts.voice", "en+f3")
 
         cmd = [
             _ESPEAK_BIN,
@@ -340,7 +340,7 @@ class TTSEngine:
             logger.warning("TTS: disabled via config after reload")
             return
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
-        self.voice = self._cfg("tts.voice", "mb-us2")
+        self.voice = self._cfg("tts.voice", "en+f3")
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
 
