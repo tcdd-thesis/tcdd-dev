@@ -1107,32 +1107,31 @@ async function startPairingWizard(force = false) {
     const modal = document.getElementById('pairing-wizard-modal');
     if (!modal) return;
 
-    // Reset Wizard State
+    // Reset Wizard State — step 1 now shows inline spinner while hotspot starts
+    resetWizardStep1();
     setWizardStep(1);
     modal.style.display = 'flex';
 
     try {
-        // Step 1: Start Hotspot
-        // Auto-triggers API which now regenerates credentials automatically
+        // Start Hotspot — auto-regenerates credentials
         const response = await api.post('/hotspot/start', { force: true });
 
         if (response.success || response.ssid) {
-            // Successfully started hotspot, setup Step 2 UI
-            setupWizardStep2(response.ssid, response.password);
-            setWizardStep(2);
+            // Hotspot ready — swap spinner for QR and populate creds (still on step 1)
+            showWizardStep1Ready(response.ssid, response.password);
         } else {
             throw new Error(response.message || 'Failed to start hotspot');
         }
     } catch (e) {
-        console.error('Wizard Step 1 failed:', e);
+        console.error('Wizard hotspot start failed:', e);
         showToast('Failed to start hotspot for pairing', 'error');
         closePairingWizard();
     }
 }
 
 function setWizardStep(stepNum) {
-    // Update Circles and Lines
-    for (let i = 1; i <= 3; i++) {
+    // Update Circles and Lines (2 steps only)
+    for (let i = 1; i <= 2; i++) {
         const circle = document.querySelector(`#wizard-step-${i} .step-circle`);
         const line = document.getElementById(`wizard-line-${i}`);
 
@@ -1149,8 +1148,8 @@ function setWizardStep(stepNum) {
         }
     }
 
-    // Show corresponding content
-    for (let i = 1; i <= 3; i++) {
+    // Show corresponding content (2 steps only)
+    for (let i = 1; i <= 2; i++) {
         const content = document.getElementById(`wizard-content-step${i}`);
         if (content) {
             if (i === stepNum) {
@@ -1164,14 +1163,39 @@ function setWizardStep(stepNum) {
     }
 }
 
-function setupWizardStep2(ssid, password) {
+/**
+ * Reset step 1 to its initial loading state (spinner in QR area, disabled Next button)
+ */
+function resetWizardStep1() {
+    const qrContainer = document.getElementById('wizard-hotspot-qr');
+    if (qrContainer) {
+        qrContainer.innerHTML = `
+            <div class="wizard-loading-spinner" id="wizard-connect-spinner">
+                <i class="fa-solid fa-circle-notch fa-spin"
+                    style="font-size: 48px; color: #4a9eff;"></i>
+                <p style="font-size: 13px; color: #aaa; margin-top: 10px;">Starting hotspot...</p>
+            </div>`;
+    }
+    document.getElementById('wizard-hotspot-ssid').textContent = 'SSID: ---';
+    document.getElementById('wizard-hotspot-password').textContent = 'Password: ---';
+    const nextBtn = document.getElementById('btn-wizard-next-step2');
+    if (nextBtn) nextBtn.disabled = true;
+}
+
+/**
+ * Hotspot is ready — swap the inline spinner for the WiFi QR and populate credentials
+ */
+function showWizardStep1Ready(ssid, password) {
     document.getElementById('wizard-hotspot-ssid').textContent = `SSID: ${ssid}`;
     document.getElementById('wizard-hotspot-password').textContent = `Password: ${password}`;
 
     const qrContainer = document.getElementById('wizard-hotspot-qr');
-    // Random cache buster to ensure new QR is loaded since credentials change
     const cacheBuster = new Date().getTime();
     qrContainer.innerHTML = `<img src="/api/hotspot/qr?type=wifi&_t=${cacheBuster}" alt="WiFi QR">`;
+
+    // Enable the Next button
+    const nextBtn = document.getElementById('btn-wizard-next-step2');
+    if (nextBtn) nextBtn.disabled = false;
 
     // Start polling for connected clients
     startClientPolling();
@@ -1191,7 +1215,7 @@ function startClientPolling() {
                 // Require 2 consecutive checks to ensure it's not a spurious/cached ARP entry ghost
                 if (wizardClientConsecutiveChecks >= 2) {
                     stopPolling();
-                    wizardAdvanceToStep3();
+                    wizardAdvanceToStep2();
                 }
             } else {
                 wizardClientConsecutiveChecks = 0;
@@ -1209,9 +1233,9 @@ function stopPolling() {
     }
 }
 
-async function wizardAdvanceToStep3() {
+async function wizardAdvanceToStep2() {
     stopPolling(); // In case manual Next was clicked
-    setWizardStep(3);
+    setWizardStep(2);
 
     try {
         const data = await api.post('/pair/generate');
@@ -1231,7 +1255,7 @@ async function wizardAdvanceToStep3() {
             throw new Error(data.error || 'Failed to generate code');
         }
     } catch (e) {
-        console.error('Wizard Step 3 failed:', e);
+        console.error('Wizard Step 2 failed:', e);
         showToast('Failed to generate pairing token', 'error');
     }
 }
