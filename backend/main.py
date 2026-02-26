@@ -16,6 +16,12 @@ import base64
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import simplejpeg
+    HAS_SIMPLEJPEG = True
+except ImportError:
+    HAS_SIMPLEJPEG = False
+
 # Set project root directory (parent of backend/)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 os.chdir(PROJECT_ROOT)
@@ -729,10 +735,15 @@ def stream_video():
     total_detections = 0
     dropped_frames = 0
     last_fps_time = datetime.now()
-    jpeg_quality = config.get('streaming.quality', 85)
-    encode_params = [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)]
+    jpeg_quality = int(config.get('streaming.quality', 85))
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]  # fallback for cv2
     process = psutil.Process(os.getpid())
     _prev_infer_id = -1
+
+    if HAS_SIMPLEJPEG:
+        logger.info("[StreamLoop] Using simplejpeg for JPEG encoding (faster on ARM)")
+    else:
+        logger.info("[StreamLoop] simplejpeg not available, falling back to cv2.imencode")
 
     while is_streaming:
         try:
@@ -749,13 +760,19 @@ def stream_video():
                 continue
             _prev_infer_id = cur_infer_id
 
-            # JPEG encode
+            # JPEG encode (simplejpeg is ~2-3x faster than cv2 on ARM)
             jpeg_start = datetime.now()
-            _, buffer = cv2.imencode('.jpg', annotated_frame, encode_params)
+            if HAS_SIMPLEJPEG:
+                jpeg_bytes = simplejpeg.encode_jpeg(
+                    annotated_frame, quality=jpeg_quality, colorspace='BGR'
+                )
+            else:
+                _, buf = cv2.imencode('.jpg', annotated_frame, encode_params)
+                jpeg_bytes = buf.tobytes()
             jpeg_end = datetime.now()
 
             # Emit to clients
-            frame_base64 = base64.b64encode(buffer).decode('utf-8')
+            frame_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
             socketio.emit('video_frame', {
                 'frame': frame_base64,
                 'detections': [

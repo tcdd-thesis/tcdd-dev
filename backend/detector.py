@@ -589,12 +589,10 @@ class Detector:
             # Preprocess: resize to 640x640
             resized = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
             
-            # Hailo Model Zoo YOLO models expect BGR input; camera provides RGB
-            resized_bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
-            
-            # HEF models have quantization built-in: send uint8 [0-255] directly
-            # Ensure C-contiguous array so Hailo C library can read the buffer
-            input_frame = np.ascontiguousarray(resized_bgr, dtype=np.uint8)
+            # Camera pipeline now delivers BGR directly — no conversion needed.
+            # HEF models have quantization built-in: send uint8 [0-255] directly.
+            # Ensure C-contiguous array so Hailo C library can read the buffer.
+            input_frame = np.ascontiguousarray(resized, dtype=np.uint8)
             input_batch = np.expand_dims(input_frame, axis=0)  # (1, 640, 640, 3)
             
             logger.debug(f"Hailo send: shape={input_batch.shape}, "

@@ -276,6 +276,9 @@ def apply_white_balance(frame):
 def get_frame(manual_awb=False):
     """Capture frame from camera with error handling.
     
+    All frames are returned in **BGR** colour order (OpenCV native).
+    Downstream code (detector, draw_detections, JPEG encoding) all expect BGR.
+    
     Args:
         manual_awb: If True, apply CPU-based LAB white balance correction.
                     If False (default), rely on camera hardware AWB.
@@ -287,25 +290,19 @@ def get_frame(manual_awb=False):
     
     try:
         if USE_PICAMERA and isinstance(camera, Picamera2):
-            # Picamera2 - already in RGB888
+            # Picamera2 outputs RGB888 — convert once to BGR
             frame = camera.capture_array()
-            # Convert RGB to BGR for OpenCV processing
             if frame is not None:
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         else:
-            # OpenCV VideoCapture - already in BGR
+            # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
             frame = frame if ret else None
         
-        if frame is not None:
-            # Only apply manual white balance when explicitly enabled
-            if manual_awb:
-                frame = apply_white_balance(frame)
-            
-            # Convert back to RGB for Picamera2 compatibility if needed
-            if USE_PICAMERA and isinstance(camera, Picamera2):
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if frame is not None and manual_awb:
+            frame = apply_white_balance(frame)
         
+        # Frame stays in BGR — no reconversion
         return frame
         
     except Exception as e:
@@ -445,8 +442,8 @@ def camera_loop():
                     current_fps = 30 / elapsed
                     last_fps_time = current_time
             
-            # Dynamic frame rate control
-            time.sleep(1.0 / CAMERA_FPS)
+            # No artificial sleep — loop is naturally paced by camera capture
+            # and detection latency
             
         except Exception as e:
             logger.error(f"Error in camera loop: {e}")
