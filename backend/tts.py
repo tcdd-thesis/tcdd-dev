@@ -201,6 +201,7 @@ class TTSEngine:
 
         # Settings (with defaults)
         self.enabled = self._cfg("tts.enabled", True)
+        self.voice = self._cfg("tts.voice", "mb-us2")
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
@@ -257,8 +258,8 @@ class TTSEngine:
                 capture_output=True, text=True, timeout=5
             )
             logger.info(f"✅ TTS engine ready  —  {_ESPEAK_BIN}  |  "
-                        f"rate={self.speech_rate}, volume={self.volume}, "
-                        f"cooldown={self.cooldown_seconds}s")
+                        f"voice={self.voice}, rate={self.speech_rate}, "
+                        f"volume={self.volume}, cooldown={self.cooldown_seconds}s")
             logger.info(f"   espeak version: {result.stdout.strip()}")
             self._engine_ready = True
         except Exception as e:
@@ -295,9 +296,12 @@ class TTSEngine:
         # Map volume 0.0–1.0  →  espeak amplitude 0–200
         amplitude = int(max(0.0, min(1.0, self.volume)) * 200)
 
+        # Re-read voice from config in case it was changed at runtime
+        self.voice = self._cfg("tts.voice", "mb-us2")
+
         cmd = [
             _ESPEAK_BIN,
-            "-v", "en",
+            "-v", self.voice,
             "-s", str(int(self.speech_rate)),
             "-a", str(amplitude),
             "--", text          # '--' so text starting with '-' is safe
@@ -336,6 +340,7 @@ class TTSEngine:
             logger.warning("TTS: disabled via config after reload")
             return
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
+        self.voice = self._cfg("tts.voice", "mb-us2")
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
 

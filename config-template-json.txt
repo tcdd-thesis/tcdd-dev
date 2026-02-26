@@ -145,11 +145,20 @@
   // =============================================================================
   // TEXT-TO-SPEECH SETTINGS
   // Real-time spoken alerts for detected traffic control devices
-  // Uses pyttsx3 (offline TTS via espeak) — outputs to default audio sink
+  // Uses espeak / espeak-ng via subprocess — outputs to default audio sink
+  // Install MBROLA for higher-quality voices:
+  //   sudo apt install mbrola mbrola-us2
   // =============================================================================
   
   "tts": {
     "enabled": true,               // Enable/disable TTS alerts
+    "voice": "mb-us2",             // espeak voice to use
+                                    // "mb-us2"  = MBROLA US English female (best)
+                                    // "mb-us1"  = MBROLA US English male
+                                    // "mb-en1"  = MBROLA British English female
+                                    // "en+f3"   = built-in female (no mbrola needed)
+                                    // "en+m3"   = built-in male   (no mbrola needed)
+                                    // "en"      = default espeak voice
     "speech_rate": 160,            // Speech speed (words per minute)
                                     // 120 = slow, 160 = normal, 200 = fast
     "volume": 1.0,                 // Volume: 0.0 (mute) to 1.0 (max)
