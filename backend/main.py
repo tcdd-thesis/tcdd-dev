@@ -736,15 +736,10 @@ def stream_video():
     dropped_frames = 0
     last_fps_time = datetime.now()
     jpeg_quality = int(config.get('streaming.quality', 85))
-    encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]  # fallback for cv2
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
     process = psutil.Process(os.getpid())
     metrics_interval = max(1, int(config.get('streaming.metrics_interval', 30)))
     _prev_infer_id = -1
-
-    if HAS_SIMPLEJPEG:
-        logger.info("[StreamLoop] Using simplejpeg for JPEG encoding (faster on ARM)")
-    else:
-        logger.info("[StreamLoop] simplejpeg not available, falling back to cv2.imencode")
 
     while is_streaming:
         try:
@@ -761,15 +756,10 @@ def stream_video():
                 continue
             _prev_infer_id = cur_infer_id
 
-            # JPEG encode (simplejpeg is ~2-3x faster than cv2 on ARM)
+            # JPEG encode (cv2.imencode benchmarked faster than simplejpeg on RPi5)
             jpeg_start = datetime.now()
-            if HAS_SIMPLEJPEG:
-                jpeg_bytes = simplejpeg.encode_jpeg(
-                    annotated_frame, quality=jpeg_quality, colorspace='BGR'
-                )
-            else:
-                _, buf = cv2.imencode('.jpg', annotated_frame, encode_params)
-                jpeg_bytes = buf.tobytes()
+            _, buf = cv2.imencode('.jpg', annotated_frame, encode_params)
+            jpeg_bytes = buf.tobytes()
             jpeg_end = datetime.now()
 
             # Emit to clients

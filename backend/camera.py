@@ -171,7 +171,8 @@ def initialize_camera():
             # Configure camera with auto white balance enabled
             config = camera.create_preview_configuration(
                 main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
-                buffer_count=2  # Minimize buffer for lower latency
+                buffer_count=4  # ≥4 buffers to sustain full frame rate
+                                # (2 buffers causes ping-pong that halves FPS)
             )
             camera.configure(config)
             
