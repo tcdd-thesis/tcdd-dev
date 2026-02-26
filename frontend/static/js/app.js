@@ -123,7 +123,8 @@ const state = {
     originalSettings: {
         brightness: 50,
         confidence: 50
-    }
+    },
+    isWebAudioEnabled: false // Track local TTS state
 };
 
 // ============================================================================
@@ -572,6 +573,107 @@ function handleVideoFrame(data) {
 // ============================================================================
 // LOGS PAGE (User-Friendly Version)
 // ============================================================================
+
+// Track what was spoken and when, identical to the python backed TTL
+const webAudioCooldowns = {};
+const webAudioPriorityMap = {
+    "Stop": 1,
+    "Red Light": 4,
+    "Green Light": 4,
+    "Speed Limit 10": 3,
+    "Speed Limit 20": 3,
+    "Speed Limit 30": 3,
+    "Speed Limit 40": 3,
+    "Speed Limit 50": 3,
+    "Speed Limit 60": 3,
+    "Speed Limit 70": 3,
+    "Speed Limit 80": 3,
+    "Speed Limit 90": 3,
+    "Speed Limit 100": 3,
+    "Speed Limit 110": 3,
+    "Speed Limit 120": 3,
+    "speed_limit_catchall": 3,
+    "stop": 1,
+    "crosswalk": 2,
+    "traffic_light_red": 4,
+    "traffic_light_yellow": 4,
+    "traffic_light_green": 4,
+    "yield": 2,
+    "keep_right": 4,
+    "keep_left": 4,
+    "road_split": 4
+};
+const WEB_AUDIO_COOLDOWN_SEC = 10;
+
+/**
+ * Handle user toggling the Local Web Audio UI
+ */
+function toggleWebAudio() {
+    const checkbox = document.getElementById('setting-web-audio');
+    if (checkbox) {
+        state.isWebAudioEnabled = checkbox.checked;
+        if (state.isWebAudioEnabled) {
+            showToast('Web Audio Enabled - This device will speak alerts', 'info');
+            // Play a test sound to ensure browser permissions are granted
+            const utterance = new SpeechSynthesisUtterance("Web Audio Enabled");
+            window.speechSynthesis.speak(utterance);
+        } else {
+            showToast('Web Audio Disabled', 'info');
+            window.speechSynthesis.cancel();
+        }
+    }
+}
+
+/**
+ * Process a payload of detections and optionally synthesize local web speech
+ */
+function playLocalWebAudio(detections) {
+    if (!window.speechSynthesis) return;
+
+    // Sort detections by our predefined priorities
+    const getPriority = (label) => {
+        // Handle speed limit text parsing for new labels
+        if (label && label.startsWith("speed_limit_")) return 3;
+        return webAudioPriorityMap[label] || 5;
+    };
+
+    // Find the highest priority detection in this frame
+    let topDetection = null;
+    let topPriority = 999;
+
+    for (const det of detections) {
+        const priority = getPriority(det.class_name);
+        if (priority < topPriority) {
+            topPriority = priority;
+            topDetection = det.class_name;
+        }
+    }
+
+    if (!topDetection) return;
+
+    // Check cooldown map
+    const now = Date.now() / 1000;
+    const lastSpoken = webAudioCooldowns[topDetection] || 0;
+
+    if (now - lastSpoken < WEB_AUDIO_COOLDOWN_SEC) {
+        return; // Still on cooldown
+    }
+
+    // Formulate announcement text
+    let textToSpeak = topDetection;
+    if (textToSpeak.startsWith("speed_limit_")) {
+        // e.g., "speed_limit_30" -> "Speed Limit 30"
+        const speed = textToSpeak.split("_")[2];
+        textToSpeak = `Speed Limit ${speed}`;
+    }
+
+    // Actually utter the text
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    window.speechSynthesis.speak(utterance);
+
+    // Update cooldown timestamp
+    webAudioCooldowns[topDetection] = now;
+}
 
 async function loadLogs() {
     try {
@@ -1666,6 +1768,70 @@ async function forgetWifi(name) {
 // ============================================================================
 
 /**
+ * Toggle Bluetooth Audio functionality
+ */
+async function toggleBluetoothUI() {
+    const btn = document.getElementById('bluetooth-toggle-btn');
+    const label = document.getElementById('bluetooth-toggle-label');
+    const controlsContainer = document.getElementById('bluetooth-controls-container');
+    const devicesList = document.getElementById('bluetooth-devices-list');
+
+    // Determine target state based on current button style
+    const isCurrentlyEnabled = btn.classList.contains('btn-danger');
+    const targetState = !isCurrentlyEnabled;
+
+    // Optimistic UI update
+    if (targetState) {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-danger');
+        label.textContent = 'Disable Bluetooth';
+        if (controlsContainer) controlsContainer.style.display = 'block';
+        showToast('Enabling Bluetooth audio...', 'info');
+    } else {
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-primary');
+        label.textContent = 'Enable Bluetooth';
+        if (controlsContainer) controlsContainer.style.display = 'none';
+        if (devicesList) devicesList.style.display = 'none';
+        showToast('Disabling Bluetooth audio...', 'info');
+    }
+
+    btn.disabled = true;
+
+    try {
+        const response = await api.post('/bluetooth/toggle', { enabled: targetState });
+
+        if (response.success) {
+            // Re-load status to ensure everything is synced
+            if (targetState) {
+                await loadBluetoothStatus();
+            }
+        } else {
+            // Revert on failure
+            throw new Error(response.error || 'Failed to toggle');
+        }
+    } catch (error) {
+        console.error('Failed to toggle bluetooth:', error);
+        showToast('Failed to change Bluetooth state', 'error');
+        // Revert UI
+        if (isCurrentlyEnabled) {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-danger');
+            label.textContent = 'Disable Bluetooth';
+            if (controlsContainer) controlsContainer.style.display = 'block';
+        } else {
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-primary');
+            label.textContent = 'Enable Bluetooth';
+            if (controlsContainer) controlsContainer.style.display = 'none';
+            if (devicesList) devicesList.style.display = 'none';
+        }
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/**
  * Load and display current Bluetooth connection status
  */
 async function loadBluetoothStatus() {
@@ -1674,15 +1840,30 @@ async function loadBluetoothStatus() {
     const deviceRow = document.getElementById('bluetooth-device-row');
     const deviceName = document.getElementById('bluetooth-device-name');
 
+    const toggleBtn = document.getElementById('bluetooth-toggle-btn');
+    const toggleLabel = document.getElementById('bluetooth-toggle-label');
+    const controlsContainer = document.getElementById('bluetooth-controls-container');
+
     try {
         const response = await api.get('/bluetooth/status');
 
         if (!response.enabled) {
-            statusText.innerHTML = '<span class="bluetooth-disabled"><i class="fa-brands fa-bluetooth"></i> Disabled in config</span>';
-            if (disconnectBtn) disconnectBtn.style.display = 'none';
-            if (deviceRow) deviceRow.style.display = 'none';
+            if (toggleBtn) {
+                toggleBtn.classList.remove('btn-danger');
+                toggleBtn.classList.add('btn-primary');
+                if (toggleLabel) toggleLabel.textContent = 'Enable Bluetooth';
+            }
+            if (controlsContainer) controlsContainer.style.display = 'none';
             return;
         }
+
+        // Bluetooth is enabled
+        if (toggleBtn) {
+            toggleBtn.classList.remove('btn-primary');
+            toggleBtn.classList.add('btn-danger');
+            if (toggleLabel) toggleLabel.textContent = 'Disable Bluetooth';
+        }
+        if (controlsContainer) controlsContainer.style.display = 'block';
 
         if (response.connected && response.device) {
             statusText.innerHTML = `
@@ -1835,8 +2016,14 @@ function connectWebSocket() {
     });
 
     state.socket.on('video_frame', (data) => {
+        // Render video frame only if user is on the live feed page
         if (state.currentPage === 'live') {
             handleVideoFrame(data);
+        }
+
+        // Play local audio alerts unconditionally if enabled, so it works even when in Settings/Logs
+        if (state.isWebAudioEnabled && data.detections && data.detections.length > 0) {
+            playLocalWebAudio(data.detections);
         }
     });
 

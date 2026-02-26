@@ -242,61 +242,84 @@
                 <!-- Section 4: Bluetooth Audio -->
                 <div class="settings-group settings-group-touch">
                     <h3><i class="fa-brands fa-bluetooth"></i> Bluetooth Audio</h3>
-                    <div class="bluetooth-status-row">
-                        <span class="bluetooth-label">Status</span>
-                        <span id="bluetooth-status-text"><i class="fa fa-spinner fa-spin"></i> Checking...</span>
-                    </div>
-                    <div class="setting-row" id="bluetooth-device-row" style="display:none;">
-                        <label>Connected to</label>
-                        <span id="bluetooth-device-name" class="setting-value">—</span>
-                    </div>
-                    <div class="bluetooth-actions">
-                        <button class="btn-bluetooth primary" id="btn-scan-bluetooth" onclick="scanBluetoothDevices()">
-                            <i class="fa-solid fa-magnifying-glass"></i> Scan
+
+                    <div class="setting-row">
+                        <button class="btn btn-primary btn-touch" id="bluetooth-toggle-btn"
+                            onclick="toggleBluetoothUI()">
+                            <i class="fa-solid fa-bluetooth"></i> <span id="bluetooth-toggle-label">Enable
+                                Bluetooth</span>
                         </button>
-                        <button class="btn-bluetooth secondary" id="btn-bluetooth-disconnect"
-                            onclick="disconnectBluetooth()" style="display:none;">
-                            <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
-                        </button>
+                    </div>
+
+                    <div id="bluetooth-controls-container" style="display:none;">
+                        <div class="bluetooth-status-row">
+                            <span class="bluetooth-label">Status</span>
+                            <span id="bluetooth-status-text"><i class="fa fa-spinner fa-spin"></i> Checking...</span>
+                        </div>
+                        <div class="setting-row" id="bluetooth-device-row" style="display:none;">
+                            <label>Connected to</label>
+                            <span id="bluetooth-device-name" class="setting-value">—</span>
+                        </div>
+                        <div class="bluetooth-actions">
+                            <button class="btn-bluetooth primary" id="btn-scan-bluetooth"
+                                onclick="scanBluetoothDevices()">
+                                <i class="fa-solid fa-magnifying-glass"></i> Scan
+                            </button>
+                            <button class="btn-bluetooth secondary" id="btn-bluetooth-disconnect"
+                                onclick="disconnectBluetooth()" style="display:none;">
+                                <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
+                            </button>
+                        </div>
                     </div>
                     <div id="bluetooth-devices-list" style="display:none;"></div>
                 </div>
+            </div>
 
-                <!-- Section 5: Device Pairing -->
-                <div class="settings-group settings-group-touch">
-                    <h3><i class="fa-solid fa-link"></i> Device Pairing</h3>
-                    <div class="setting-row">
-                        <label>Status</label>
-                        <span id="pairing-status-badge" class="pairing-badge pairing-unpaired">
-                            <i class="fa-solid fa-circle"></i> Not Paired
-                        </span>
-                    </div>
-                    <div id="pairing-device-info" class="pairing-device-info" style="display:none;">
-                        <div class="setting-row">
-                            <label>Device</label>
-                            <span id="pairing-device-name" class="setting-value">—</span>
-                        </div>
-                    </div>
-                    <div class="setting-row pairing-actions">
-                        <button class="btn btn-primary btn-touch" id="btn-generate-pairing"
-                            onclick="generatePairingCode()">
-                            <i class="fa-solid fa-qrcode"></i> Pair Device
-                        </button>
-                        <button class="btn btn-danger btn-touch" id="btn-unpair" onclick="unpairDevice()"
-                            style="display:none;">
-                            <i class="fa-solid fa-link-slash"></i> Unpair
-                        </button>
+            <!-- Section 5: Device Pairing / Remote Audio -->
+            <div class="settings-group settings-group-touch">
+                <h3><i class="fa-solid fa-link"></i> Device Pairing</h3>
+                <div class="setting-row">
+                    <label>Status</label>
+                    <span id="pairing-status-badge" class="pairing-badge pairing-unpaired">
+                        <i class="fa-solid fa-circle"></i> Not Paired
+                    </span>
+                </div>
+
+                <div class="setting-row">
+                    <label>Play Alerts on Device (Web Audio)</label>
+                    <div style="flex: 1; display: flex; justify-content: flex-end;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-web-audio" onchange="toggleWebAudio()">
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
                 </div>
-            </div>
 
-            <!-- Sticky footer buttons — outside scroll container -->
-            <div class="controls-compact">
-                <button id="btn-reset-settings" class="btn btn-secondary btn-touch"><i
-                        class="fa-solid fa-rotate-left"></i> Reset</button>
-                <button id="btn-save-settings" class="btn btn-success btn-touch"><i class="fa-solid fa-floppy-disk"></i>
-                    Save</button>
+                <div id="pairing-device-info" class="pairing-device-info" style="display:none;">
+                    <div class="setting-row">
+                        <label>Device</label>
+                        <span id="pairing-device-name" class="setting-value">—</span>
+                    </div>
+                </div>
+                <div class="setting-row pairing-actions">
+                    <button class="btn btn-primary btn-touch" id="btn-generate-pairing" onclick="generatePairingCode()">
+                        <i class="fa-solid fa-qrcode"></i> Pair Device
+                    </button>
+                    <button class="btn btn-danger btn-touch" id="btn-unpair" onclick="unpairDevice()"
+                        style="display:none;">
+                        <i class="fa-solid fa-link-slash"></i> Unpair
+                    </button>
+                </div>
             </div>
+        </div>
+
+        <!-- Sticky footer buttons — outside scroll container -->
+        <div class="controls-compact">
+            <button id="btn-reset-settings" class="btn btn-secondary btn-touch"><i class="fa-solid fa-rotate-left"></i>
+                Reset</button>
+            <button id="btn-save-settings" class="btn btn-success btn-touch"><i class="fa-solid fa-floppy-disk"></i>
+                Save</button>
+        </div>
         </div>
     </main>
 

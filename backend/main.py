@@ -1370,6 +1370,39 @@ def disconnect_bluetooth():
         logger.error(f"Error disconnecting Bluetooth: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/bluetooth/toggle', methods=['POST'])
+@require_pairing
+def toggle_bluetooth():
+    """Enable or disable Bluetooth audio functionality"""
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled')
+        
+        if enabled is None:
+            return jsonify({'error': 'Enabled state is required'}), 400
+            
+        # Update config
+        config.set('bluetooth.enabled', enabled, save=True)
+        
+        # Update manager state
+        if bluetooth_manager:
+            bluetooth_manager.enabled = enabled
+            if enabled:
+                # Need to re-initialize agent if we just turned it on
+                bluetooth_manager._run_cmd(["bluetoothctl", "power", "on"])
+                bluetooth_manager._run_cmd(["bluetoothctl", "agent", "on"])
+                bluetooth_manager._run_cmd(["bluetoothctl", "default-agent"])
+                
+                # Optionally auto-connect if preferred_mac is set
+                if bluetooth_manager.auto_connect and bluetooth_manager.preferred_mac:
+                    threading.Thread(target=bluetooth_manager.connect, args=(bluetooth_manager.preferred_mac,)).start()
+        
+        return jsonify({'success': True, 'enabled': enabled}), 200
+        
+    except Exception as e:
+        logger.error(f"Error toggling bluetooth: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # ============================================================================
 # STREAMING LOOP WITH METRICS
 # ============================================================================
