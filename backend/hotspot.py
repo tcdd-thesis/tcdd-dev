@@ -471,8 +471,10 @@ bind-interfaces
                     self._is_active = False
                     logger.info("Hotspot stopped")
                     
-                    # Reconnect WiFi to the best available known network
-                    self._reconnect_wifi()
+                    # Reconnect WiFi to the best available known network in background
+                    # so we don't block the API response and freeze the UI
+                    import threading
+                    threading.Thread(target=self._reconnect_wifi, daemon=True).start()
                     
                     return {
                         'success': True,
@@ -484,10 +486,14 @@ bind-interfaces
                     self._run_nmcli(['radio', 'wifi', 'on'], timeout=5)
                     self._is_active = False
                     
-                    # Give radio a moment to come back, then reconnect
-                    import time
-                    time.sleep(2)
-                    self._reconnect_wifi()
+                    # Give radio a moment to come back, then reconnect in background
+                    import threading
+                    def delayed_reconnect():
+                        import time
+                        time.sleep(2)
+                        self._reconnect_wifi()
+                        
+                    threading.Thread(target=delayed_reconnect, daemon=True).start()
                     
                     return {
                         'success': True,
