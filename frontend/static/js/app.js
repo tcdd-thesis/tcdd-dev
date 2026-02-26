@@ -1242,13 +1242,16 @@ async function wizardAdvanceToStep2() {
         if (data.success) {
             document.getElementById('wizard-webapp-token').textContent = data.token;
 
-            const url = data.url || data.ip_url || '';
-            const ip = data.ip || '';
+            // Show clean URL (without token) for manual entry
+            const domain = data.domain || '';
             const port = data.port || 5000;
-            const finalUrl = url ? url : (ip ? `http://${ip}:${port}/pair` : '');
+            const displayUrl = port === 80
+                ? `${domain}/pair`
+                : `${domain}:${port}/pair`;
 
-            document.getElementById('wizard-webapp-url').textContent = finalUrl;
+            document.getElementById('wizard-webapp-url').textContent = displayUrl;
 
+            // QR code still embeds the token for automatic pairing
             const qrContainer = document.getElementById('wizard-webapp-qr');
             qrContainer.innerHTML = `<img src="/api/pair/qr?token=${encodeURIComponent(data.token)}" alt="Web App QR">`;
         } else {
