@@ -521,6 +521,16 @@ body.touchscreen {
     color: rgba(255, 255, 255, 0.3);
 }
 
+.audio-gate-dismiss-btn {
+    margin-top: 12px;
+    opacity: 0.6;
+    font-size: 13px;
+}
+
+.audio-gate-dismiss-btn:hover {
+    opacity: 1;
+}
+
 .status-panel {
     display: flex;
     gap: 15px;

@@ -507,6 +507,7 @@ function switchPage(pageName) {
 
 let _audioCheckInterval = null;
 let _audioGateActive = false;
+let _audioGateDismissedUntil = 0; // Timestamp until which the modal is temporarily dismissed
 
 /**
  * Check if an audio output device is available.
@@ -524,9 +525,16 @@ async function checkAudioDevice() {
             hideAudioGateModals();
             updateAudioGateStatus(statusDot, statusText, 'connected', 'Audio device connected');
             _audioGateActive = false;
+            _audioGateDismissedUntil = 0;
             stopAudioCheckPolling();
         } else {
-            // No audio — show the gate modal
+            // No audio — show the gate modal (unless temporarily dismissed)
+            const now = Date.now();
+            if (_audioGateDismissedUntil > now) {
+                // Still in dismiss cooldown — don't show modal
+                return;
+            }
+
             if (modal && state.currentPage === 'home') {
                 modal.style.display = 'flex';
                 _audioGateActive = true;
@@ -674,6 +682,27 @@ function dismissAudioPrompt() {
     if (promptModal) promptModal.style.display = 'none';
     // Re-check — if still no audio, show the main modal again
     checkAudioDevice();
+}
+
+/**
+ * Temporarily dismiss the audio required modal for 60 seconds.
+ * The modal will reappear on goHome() or after the timeout.
+ */
+function audioGateDismiss() {
+    const DISMISS_SECONDS = 60;
+    _audioGateDismissedUntil = Date.now() + (DISMISS_SECONDS * 1000);
+    hideAudioGateModals();
+    _audioGateActive = false;
+    stopAudioCheckPolling();
+    showToast(`Audio setup skipped for ${DISMISS_SECONDS}s`, 'info');
+
+    // Re-check after the dismiss period expires
+    setTimeout(() => {
+        _audioGateDismissedUntil = 0;
+        if (state.currentPage === 'home') {
+            checkAudioDevice();
+        }
+    }, DISMISS_SECONDS * 1000);
 }
 
 // ============================================================================
