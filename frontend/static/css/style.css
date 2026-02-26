@@ -1661,8 +1661,9 @@ body:not(.touchscreen) #page-logs.active {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 20px 0 30px;
+  margin: 15px auto 20px;
   padding: 0 20px;
+  max-width: 250px;
 }
 
 .wizard-step {
@@ -1731,6 +1732,12 @@ body:not(.touchscreen) #page-logs.active {
 
 .wizard-step-row .pairing-qr-container {
   flex-shrink: 0;
+}
+
+.wizard-step-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
 }
 
 .wizard-step-info {
