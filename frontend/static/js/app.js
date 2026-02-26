@@ -553,9 +553,9 @@ function audioGatePairPhone() {
     const modal = document.getElementById('audio-required-modal');
     if (modal) modal.style.display = 'none';
 
-    // Use the existing generate-and-show pairing flow
-    if (typeof generatePairingCode === 'function') {
-        generatePairingCode();
+    // Open the unified pairing wizard
+    if (typeof startPairingWizard === 'function') {
+        startPairingWizard();
     } else {
         showToast('Pairing flow not available yet', 'error');
     }
@@ -2128,9 +2128,8 @@ function connectWebSocket() {
 
         if (state.currentPage === 'settings') loadPairingStatus();
 
-        // If audio gate was active, close pairing modal and show enable-audio prompt
+        // If audio gate was active, show enable-audio prompt
         if (_audioGateActive) {
-            closePairingQR();
             showEnableAudioPrompt();
         }
     });
