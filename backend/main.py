@@ -46,6 +46,7 @@ from violations_logger import ViolationsLogger
 from display import DisplayController
 from tts import TTSEngine
 
+from bluetooth_mgmt import get_bluetooth_manager
 from pairing import get_pairing_manager, HOTSPOT_IP
 from hotspot import get_hotspot_manager
 
@@ -116,6 +117,7 @@ violations_logger = ViolationsLogger(log_dir='data/logs', prefix='violations')
 # Pairing and Hotspot managers (initialized in initialize())
 pairing_manager = None
 hotspot_manager = None
+bluetooth_manager = None
 
 # Lifecycle flag: True only after initialize() completes and server is about to run
 app_ready = False
@@ -218,7 +220,7 @@ def on_config_change(old_config, new_config):
 
 def initialize():
     """Initialize camera and detector and start background streaming"""
-    global camera, detector, display_controller, tts_engine, is_streaming, pairing_manager, hotspot_manager
+    global camera, detector, display_controller, tts_engine, is_streaming, pairing_manager, hotspot_manager, bluetooth_manager
 
     try:
         logger.info("Initializing pairing manager...")
@@ -249,6 +251,9 @@ def initialize():
         if hasattr(hotspot_manager, 'set_auto_start'):
             hotspot_manager.set_auto_start(False)
         logger.info("Hotspot auto-start is disabled. Use the UI toggle to enable hotspot.")
+        
+        logger.info("Initializing bluetooth manager...")
+        bluetooth_manager = get_bluetooth_manager(config=config)
         
         logger.info("Initializing display controller...")
         display_controller = DisplayController(config)
@@ -1291,6 +1296,79 @@ def get_hotspot_qr():
     img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png', as_attachment=False, download_name=f"hotspot_{qr_type}_qr.png")
+
+# ============================================================================
+# BLUETOOTH API
+# ============================================================================
+
+@app.route('/api/bluetooth/status', methods=['GET'])
+def get_bluetooth_status():
+    """Get current Bluetooth connection status"""
+    try:
+        if not bluetooth_manager or not bluetooth_manager.enabled:
+            return jsonify({'enabled': False, 'connected': False}), 200
+        status = bluetooth_manager.status()
+        status['enabled'] = True
+        return jsonify(status), 200
+    except Exception as e:
+        logger.error(f"Error getting Bluetooth status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bluetooth/scan', methods=['GET'])
+def scan_bluetooth():
+    """Scan for available Bluetooth devices"""
+    try:
+        if not bluetooth_manager or not bluetooth_manager.enabled:
+            return jsonify({'error': 'Bluetooth is disabled'}), 400
+        devices = bluetooth_manager.scan(duration=5)
+        return jsonify({'devices': devices}), 200
+    except Exception as e:
+        logger.error(f"Error scanning Bluetooth: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bluetooth/connect', methods=['POST'])
+@require_pairing
+def connect_bluetooth():
+    """Connect to a Bluetooth device"""
+    try:
+        if not bluetooth_manager or not bluetooth_manager.enabled:
+            return jsonify({'error': 'Bluetooth is disabled'}), 400
+            
+        data = request.get_json()
+        mac = data.get('mac')
+        if not mac:
+            return jsonify({'error': 'MAC address is required'}), 400
+            
+        success, message = bluetooth_manager.connect(mac)
+        if success:
+            return jsonify({'success': True, 'message': message}), 200
+        else:
+            return jsonify({'success': False, 'message': message}), 500
+    except Exception as e:
+        logger.error(f"Error connecting Bluetooth: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bluetooth/disconnect', methods=['POST'])
+@require_pairing
+def disconnect_bluetooth():
+    """Disconnect from a Bluetooth device"""
+    try:
+        if not bluetooth_manager or not bluetooth_manager.enabled:
+            return jsonify({'error': 'Bluetooth is disabled'}), 400
+            
+        data = request.get_json()
+        mac = data.get('mac')
+        if not mac:
+            return jsonify({'error': 'MAC address is required'}), 400
+            
+        success, message = bluetooth_manager.disconnect(mac)
+        if success:
+            return jsonify({'success': True, 'message': message}), 200
+        else:
+            return jsonify({'success': False, 'message': message}), 500
+    except Exception as e:
+        logger.error(f"Error disconnecting Bluetooth: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ============================================================================
 # STREAMING LOOP WITH METRICS
