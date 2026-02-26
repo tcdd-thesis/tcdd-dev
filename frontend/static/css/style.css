@@ -391,6 +391,136 @@ body.touchscreen {
     color: white;
 }
 
+/* ========== Audio Gate Modal ========== */
+.audio-gate-modal {
+    z-index: 4000;
+    /* Above all other modals */
+}
+
+.audio-gate-content {
+    max-width: 420px;
+    width: 90%;
+    padding: 32px 24px;
+    text-align: center;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+}
+
+.audio-gate-icon {
+    font-size: 56px;
+    color: var(--warning);
+    margin-bottom: 16px;
+}
+
+.audio-gate-icon-success {
+    color: var(--success);
+}
+
+.audio-gate-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.audio-gate-text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 24px;
+    line-height: 1.5;
+}
+
+.audio-gate-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.audio-gate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 12px;
+    width: 100%;
+}
+
+.audio-gate-btn i {
+    font-size: 18px;
+}
+
+.audio-gate-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.audio-gate-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--warning);
+    animation: audio-gate-pulse 1.5s ease-in-out infinite;
+}
+
+.audio-gate-status-dot.connected {
+    background: var(--success);
+    animation: none;
+}
+
+.audio-gate-status-dot.waiting {
+    background: var(--primary);
+    animation: audio-gate-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes audio-gate-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Audio Output Guide Image */
+.audio-prompt-image-container {
+    margin: 16px 0;
+    display: flex;
+    justify-content: center;
+}
+
+.audio-prompt-image {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.audio-prompt-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.audio-prompt-placeholder i {
+    font-size: 32px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
 .status-panel {
     display: flex;
     gap: 15px;
