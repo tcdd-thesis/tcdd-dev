@@ -38,7 +38,8 @@ except ImportError:
 try:
     from hailo_platform import (
         HEF, VDevice, HailoStreamInterface,
-        ConfigureParams, InferVStreams,
+        ConfigureParams,
+        InputVStreams, OutputVStreams,
         InputVStreamParams, OutputVStreamParams
     )
     HAS_HAILO = True
@@ -69,8 +70,12 @@ class Detector:
         self.hailo_hef = None
         self.hailo_network_group = None
         self.hailo_network_group_context = None
-        self._hailo_infer_ctx = None
-        self._hailo_pipeline = None
+        self._hailo_activation_ctx = None
+        self._input_vstreams_ctx = None
+        self._output_vstreams_ctx = None
+        self._input_vstreams = None
+        self._output_vstreams = None
+        self._hailo_input_vstream = None
         self._hailo_input_names = []
         
         # Parse model path(s) based on engine
@@ -212,18 +217,30 @@ class Detector:
             network_groups = self.hailo_device.configure(self.hailo_hef, configure_params)
             self.hailo_network_group = network_groups[0]
             
-            # Activate network group (keep active for entire session)
-            self._hailo_activation_ctx = self.hailo_network_group.activate()
-            self.hailo_network_group_context = self._hailo_activation_ctx.__enter__()
-            
-            # Create persistent InferVStreams pipeline (reused for all frames)
+            # Create vstream params
             input_params = InputVStreamParams.make(self.hailo_network_group)
             output_params = OutputVStreamParams.make(self.hailo_network_group)
             self._hailo_input_names = list(input_params.keys())
             
-            self._hailo_infer_ctx = InferVStreams(
-                self.hailo_network_group, input_params, output_params)
-            self._hailo_pipeline = self._hailo_infer_ctx.__enter__()
+            # Create persistent InputVStreams and OutputVStreams
+            # NOTE: We use send/recv API instead of InferVStreams.infer() because
+            # the latter passes input data as Python dict → C++ std::map<string, py::array>
+            # which can produce 0-byte MemoryView on aarch64/pybind11 ("got 0" error).
+            # send/recv passes py::array directly, avoiding the dict→map conversion.
+            self._input_vstreams_ctx = InputVStreams(
+                self.hailo_network_group, input_params)
+            self._output_vstreams_ctx = OutputVStreams(
+                self.hailo_network_group, output_params)
+            self._input_vstreams = self._input_vstreams_ctx.__enter__()
+            self._output_vstreams = self._output_vstreams_ctx.__enter__()
+            
+            # Activate network group AFTER vstreams are created
+            self._hailo_activation_ctx = self.hailo_network_group.activate()
+            self.hailo_network_group_context = self._hailo_activation_ctx.__enter__()
+            
+            # Cache the input vstream object for fast per-frame access
+            self._hailo_input_vstream = self._input_vstreams.get(
+                self._hailo_input_names[0])
             
             self.loaded = True
             logger.info("\u2705 HEF model loaded on Hailo NPU!")
@@ -238,17 +255,8 @@ class Detector:
     def _cleanup_hailo(self):
         """Release Hailo resources in reverse order of creation"""
         try:
-            # 1. Release inference pipeline
-            if self._hailo_infer_ctx is not None:
-                try:
-                    self._hailo_infer_ctx.__exit__(None, None, None)
-                except Exception:
-                    pass
-                self._hailo_infer_ctx = None
-                self._hailo_pipeline = None
-            
-            # 2. Deactivate network group
-            if hasattr(self, '_hailo_activation_ctx') and self._hailo_activation_ctx is not None:
+            # 1. Deactivate network group (must deactivate before destroying vstreams)
+            if self._hailo_activation_ctx is not None:
                 try:
                     self._hailo_activation_ctx.__exit__(None, None, None)
                 except Exception:
@@ -256,7 +264,26 @@ class Detector:
                 self._hailo_activation_ctx = None
             self.hailo_network_group_context = None
             
-            # 3. Release network group, HEF, device
+            # 2. Release output vstreams
+            if self._output_vstreams_ctx is not None:
+                try:
+                    self._output_vstreams_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
+                self._output_vstreams_ctx = None
+                self._output_vstreams = None
+            
+            # 3. Release input vstreams
+            if self._input_vstreams_ctx is not None:
+                try:
+                    self._input_vstreams_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
+                self._input_vstreams_ctx = None
+                self._input_vstreams = None
+            self._hailo_input_vstream = None
+            
+            # 4. Release network group, HEF, device
             self.hailo_network_group = None
             self.hailo_hef = None
             if self.hailo_device is not None:
@@ -550,7 +577,12 @@ class Detector:
         return []
     
     def _detect_hailo(self, frame):
-        """Run YOLO inference on Hailo AI HAT+ NPU via HEF model"""
+        """Run YOLO inference on Hailo AI HAT+ NPU via HEF model.
+        
+        Uses InputVStream.send() / OutputVStream.recv() instead of
+        InferVStreams.infer() to avoid the Python dict → C++ std::map<string,
+        py::array> conversion that causes 0-byte MemoryView on aarch64.
+        """
         try:
             frame_h, frame_w = frame.shape[:2]
             
@@ -565,18 +597,57 @@ class Detector:
             input_frame = np.ascontiguousarray(resized_bgr, dtype=np.uint8)
             input_batch = np.expand_dims(input_frame, axis=0)  # (1, 640, 640, 3)
             
-            # Build input dict using the stream names stored at init time
-            input_dict = {name: input_batch for name in self._hailo_input_names}
+            logger.debug(f"Hailo send: shape={input_batch.shape}, "
+                         f"dtype={input_batch.dtype}, nbytes={input_batch.nbytes}")
             
-            logger.debug(f"Hailo input: keys={list(input_dict.keys())}, "
-                         f"shape={input_batch.shape}, dtype={input_batch.dtype}, "
-                         f"nbytes={input_batch.nbytes}")
+            # Send frame through InputVStream (passes py::array directly to C++)
+            self._hailo_input_vstream.send(input_batch)
             
-            # Run inference on the persistent pipeline (created once at init)
-            raw_output = self._hailo_pipeline.infer(input_dict)
+            # Receive and parse output from each OutputVStream
+            detections = []
+            class_names = self.labels if self.labels else []
             
-            # Parse NMS output
-            detections = self._parse_hailo_nms_output(raw_output, frame_w, frame_h)
+            for output_vstream in self._output_vstreams:
+                # recv() returns:
+                #   NMS output: list[class_idx] -> ndarray(N, 5) per frame
+                #   Non-NMS:    ndarray
+                nms_output = output_vstream.recv()
+                
+                if not isinstance(nms_output, list):
+                    continue
+                
+                for class_idx, det_array in enumerate(nms_output):
+                    if not isinstance(det_array, np.ndarray) or det_array.size == 0:
+                        continue
+                    
+                    if det_array.ndim == 1:
+                        det_array = det_array.reshape(1, -1)
+                    
+                    for det in det_array:
+                        if len(det) < 5:
+                            continue
+                        
+                        # Hailo NMS format: [y_min, x_min, y_max, x_max, confidence]
+                        y1, x1, y2, x2, confidence = det[:5]
+                        
+                        if confidence < self.confidence:
+                            continue
+                        
+                        # Scale normalized coords to original frame size
+                        x1_scaled = int(max(0, min(frame_w - 1, x1 * frame_w)))
+                        y1_scaled = int(max(0, min(frame_h - 1, y1 * frame_h)))
+                        x2_scaled = int(max(0, min(frame_w - 1, x2 * frame_w)))
+                        y2_scaled = int(max(0, min(frame_h - 1, y2 * frame_h)))
+                        
+                        class_name = (class_names[class_idx]
+                                      if class_idx < len(class_names)
+                                      else f'class_{class_idx}')
+                        
+                        detections.append({
+                            'class_name': class_name,
+                            'confidence': float(confidence),
+                            'bbox': [x1_scaled, y1_scaled, x2_scaled, y2_scaled]
+                        })
             
             return detections
             
