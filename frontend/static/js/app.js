@@ -1183,11 +1183,24 @@ function showPairingQRModal(data) {
     const modal = document.getElementById('pairing-qr-modal');
     const qrContainer = document.getElementById('pairing-qr-image');
     const tokenDisplay = document.getElementById('pairing-token-display');
+    const ipInfo = document.getElementById('pairing-ip-info');
 
     if (!modal) return;
 
     // Display the token
     if (tokenDisplay) tokenDisplay.textContent = data.token || '--------';
+
+    // Display IP / URL info
+    if (ipInfo) {
+        const url = data.url || data.ip_url || '';
+        const ip = data.ip || '';
+        const port = data.port || 5000;
+        if (url) {
+            ipInfo.innerHTML = `Open on phone: <strong>${url}</strong>`;
+        } else if (ip) {
+            ipInfo.innerHTML = `Open on phone: <strong>http://${ip}:${port}/pair</strong>`;
+        }
+    }
 
     // Use server-generated QR code image
     if (qrContainer) {

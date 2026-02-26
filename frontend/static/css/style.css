@@ -1747,10 +1747,10 @@ body:not(.touchscreen) #page-logs.active {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Pairing QR Modal — compact for 2.8" */
+/* Pairing QR Modal — sized for 2.8" (640×480) */
 .pairing-modal-content {
-    max-width: 300px;
-    width: 90%;
+    max-width: 420px;
+    width: 95%;
 }
 
 .pairing-modal-body {
@@ -1758,7 +1758,19 @@ body:not(.touchscreen) #page-logs.active {
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    padding: 10px 15px 15px;
+    padding: 12px 20px 16px;
+}
+
+.pairing-ip-info {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    margin-top: 4px;
+}
+
+.pairing-ip-info strong {
+    color: rgba(255, 255, 255, 0.8);
+    font-family: 'Courier New', monospace;
 }
 
 .pairing-instructions {
