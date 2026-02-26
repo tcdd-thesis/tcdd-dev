@@ -317,24 +317,80 @@
             </div>
         </div>
     </div>
-    <!-- Pairing QR Modal -->
-    <div id="pairing-qr-modal" class="modal" style="display:none;">
-        <div class="modal-content pairing-modal-content">
+    <!-- Pairing Wizard Modal -->
+    <div id="pairing-wizard-modal" class="modal" style="display:none;">
+        <div class="modal-content pairing-wizard-content">
             <div class="modal-header">
-                <h3><i class="fa-solid fa-qrcode"></i> Pair Device</h3>
-                <button class="btn-close" onclick="closePairingQR()"><i class="fa-solid fa-xmark"></i></button>
+                <h3><i class="fa-solid fa-wand-magic-sparkles"></i> Device Pairing</h3>
+                <button class="btn-close" onclick="closePairingWizard()"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="modal-body pairing-modal-body">
-                <div class="pairing-instructions">
-                    <span class="pairing-step">1. Connect phone to hotspot</span>
-                    <span class="pairing-step">2. Scan QR or enter code</span>
+
+            <!-- Step Indicators -->
+            <div class="wizard-steps-container">
+                <div class="wizard-step" id="wizard-step-1">
+                    <div class="step-circle step-active">1</div>
+                    <div class="step-label">Hotspot</div>
                 </div>
-                <div id="pairing-qr-image" class="pairing-qr-container"></div>
-                <div class="pairing-token-row">
-                    <span class="pairing-token-label">Code:</span>
-                    <span id="pairing-token-display" class="pairing-token-value">--------</span>
+                <div class="step-line" id="wizard-line-1"></div>
+
+                <div class="wizard-step" id="wizard-step-2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Connect</div>
                 </div>
-                <div id="pairing-ip-info" class="pairing-ip-info"></div>
+                <div class="step-line" id="wizard-line-2"></div>
+
+                <div class="wizard-step" id="wizard-step-3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Pair Code</div>
+                </div>
+            </div>
+
+            <div class="modal-body pairing-wizard-body">
+
+                <!-- STEP 1: Starting Hotspot -->
+                <div id="wizard-content-step1" class="wizard-content active">
+                    <div class="wizard-loading-spinner">
+                        <i class="fa-solid fa-circle-notch fa-spin"
+                            style="font-size: 48px; color: #4a9eff; margin-bottom: 20px;"></i>
+                        <p style="font-size: 18px; color: #ddd;">Enabling Hotspot...</p>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Connect to WiFi -->
+                <div id="wizard-content-step2" class="wizard-content" style="display:none;">
+                    <div class="pairing-instructions">
+                        <span class="pairing-step">Scan to connect to the internal network</span>
+                    </div>
+                    <div id="wizard-hotspot-qr" class="pairing-qr-container" style="min-height: 200px;">
+                        <!-- QR Injected Here via JS -->
+                    </div>
+                    <div class="hotspot-creds wizard-creds">
+                        <span id="wizard-hotspot-ssid">SSID: ---</span>
+                        <span id="wizard-hotspot-password">Password: ---</span>
+                    </div>
+                    <div style="text-align: center; margin-top: 15px;">
+                        <button class="btn btn-secondary btn-touch" onclick="wizardAdvanceToStep3()">Next <i
+                                class="fa-solid fa-arrow-right"></i></button>
+                    </div>
+                </div>
+
+                <!-- STEP 3: Pair Web App -->
+                <div id="wizard-content-step3" class="wizard-content" style="display:none;">
+                    <div class="pairing-instructions">
+                        <span class="pairing-step">Keep phone connected to hotspot.<br>Scan to open the app and pair
+                            automatically.</span>
+                    </div>
+                    <div id="wizard-webapp-qr" class="pairing-qr-container" style="min-height: 200px;">
+                        <!-- QR Injected Here via JS -->
+                    </div>
+                    <div class="pairing-token-row wizard-creds">
+                        <span class="pairing-token-label">Pairing Code:</span>
+                        <span id="wizard-webapp-token" class="pairing-token-value">--------</span>
+                    </div>
+                    <div class="pairing-ip-info" id="wizard-webapp-url"
+                        style="text-align: center; color: #aaa; margin-top: 5px;"></div>
+                </div>
+
             </div>
         </div>
     </div>
