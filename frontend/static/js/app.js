@@ -1453,7 +1453,7 @@ async function wizardAdvanceToStep2() {
 
             // Show clean URL (without token) for manual entry
             const domain = data.domain || '';
-            const port = data.port || 5000;
+            const port = data.port || 80;
             const displayUrl = port === 80
                 ? `${domain}/pair`
                 : `${domain}:${port}/pair`;

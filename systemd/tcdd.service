@@ -9,6 +9,7 @@ User=tcdd-thesis
 WorkingDirectory=/home/tcdd-thesis/tcdd-dev
 ExecStartPre=/bin/chmod +x /home/tcdd-thesis/tcdd-dev/start.sh
 ExecStart=/bin/bash /home/tcdd-thesis/tcdd-dev/start.sh
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 Environment=DISPLAY=:0
 StandardOutput=journal
 StandardError=journal

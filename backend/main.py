@@ -1085,7 +1085,7 @@ def generate_pairing_token():
         return jsonify({'error': 'Pairing can only be initiated from touchscreen'}), 403
     
     try:
-        port = config.get('port', 5000)
+        port = config.get('port', 80)
         domain = hotspot_manager.get_domain() if hotspot_manager else None
         data = pairing_manager.generate_pairing_data(port=port, domain=domain)
         
@@ -1220,7 +1220,7 @@ def get_pairing_qr():
         return jsonify({'error': 'Token is required'}), 400
     
     # Build the pairing URL explicitly with IP to avoid DNS_PROBE_FINISHED_NXDOMAIN
-    port = config.get('port', 5000)
+    port = config.get('port', 80)
     qr_data = f"http://{HOTSPOT_IP}:{port}/pair?token={token}"
     
     if qrcode is None:
@@ -1421,7 +1421,11 @@ def get_hotspot_qr():
     ssid = creds.get('ssid')
     password = creds.get('password')
     if qr_type == 'webapp':
-        qr_data = f"http://{ip}:5000/"
+        port = config.get('port', 80)
+        if port == 80:
+            qr_data = f"http://{ip}/"
+        else:
+            qr_data = f"http://{ip}:{port}/"
     else:
         # WiFi QR code format
         qr_data = f"WIFI:T:WPA;S:{ssid};P:{password};;"
@@ -1713,7 +1717,7 @@ if __name__ == '__main__':
     logger.info("="*60)
     
     if initialize():
-        port = config.get('port', 5000)
+        port = config.get('port', 80)
         debug = config.get('debug', False)
         
         logger.info(f"Server starting on http://0.0.0.0:{port}")

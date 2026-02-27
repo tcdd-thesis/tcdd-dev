@@ -13,8 +13,8 @@ import os
 import time
 import socketio
 
-API_URL = 'http://localhost:5000'
-WS_URL = 'ws://localhost:5000/socket.io/'
+API_URL = 'http://localhost:80'
+WS_URL = 'ws://localhost:80/socket.io/'
 
 
 def test_pairing_api():
