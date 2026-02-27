@@ -106,36 +106,75 @@
         </div>
 
         <div class="settings-container">
+            <!-- Detection Settings -->
             <div class="settings-group">
-                <h3>Detection Settings</h3>
+                <h3><i class="fa-solid fa-crosshairs"></i> Detection Settings</h3>
                 <div class="setting-row">
                     <label>Detection Confidence</label>
                     <div class="slider-container">
-                        <input type="range" id="setting-confidence" class="slider" min="0" max="100" value="50"
+                        <input type="range" id="setting-confidence" class="slider" min="10" max="100" value="50"
                             step="5">
                         <span id="confidence-display" class="slider-value">50%</span>
                     </div>
                 </div>
             </div>
 
+            <!-- TTS Settings -->
             <div class="settings-group">
-                <h3>TTS Settings</h3>
+                <h3><i class="fa-solid fa-volume-high"></i> TTS Settings</h3>
                 <div class="setting-row">
                     <label>TTS Enabled</label>
                     <span id="tts-status" class="setting-value">—</span>
                 </div>
                 <div class="setting-row">
                     <label>Speech Rate</label>
-                    <span id="tts-rate" class="setting-value">—</span>
+                    <div class="slider-container">
+                        <input type="range" id="setting-tts-rate" class="slider" min="80" max="250" value="160"
+                            step="10">
+                        <span id="tts-rate-display" class="slider-value">160 wpm</span>
+                    </div>
                 </div>
                 <div class="setting-row">
                     <label>Cooldown</label>
-                    <span id="tts-cooldown" class="setting-value">—</span>
+                    <div class="slider-container">
+                        <input type="range" id="setting-tts-cooldown" class="slider" min="1" max="30" value="10"
+                            step="1">
+                        <span id="tts-cooldown-display" class="slider-value">10s</span>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <label>TTS Volume</label>
+                    <div class="slider-container">
+                        <input type="range" id="setting-tts-volume" class="slider" min="0" max="100" value="100"
+                            step="5">
+                        <span id="tts-volume-display" class="slider-value">100%</span>
+                    </div>
                 </div>
             </div>
 
+            <!-- Mobile Device Pairing -->
             <div class="settings-group">
-                <h3>System Info</h3>
+                <h3><i class="fa-solid fa-link"></i> Device Pairing</h3>
+                <div class="setting-row">
+                    <label>Status</label>
+                    <span id="mobile-pairing-status" class="pairing-badge pairing-paired">
+                        <i class="fa-solid fa-circle"></i> Paired
+                    </span>
+                </div>
+                <div class="setting-row" id="mobile-pairing-device-row">
+                    <label>Paired to</label>
+                    <span id="mobile-pairing-device" class="setting-value">TCDD System</span>
+                </div>
+                <div class="setting-row">
+                    <button id="btn-mobile-unpair" class="btn btn-danger btn-sm" onclick="mobileUnpair()">
+                        <i class="fa-solid fa-link-slash"></i> Unpair This Device
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Info -->
+            <div class="settings-group">
+                <h3><i class="fa-solid fa-circle-info"></i> System Info</h3>
                 <div class="setting-row">
                     <label>Version</label>
                     <span class="setting-value">1.0.0</span>
@@ -148,6 +187,8 @@
         </div>
 
         <div class="settings-footer">
+            <button id="btn-reset-settings" class="btn btn-secondary"><i class="fa-solid fa-rotate-left"></i>
+                Reset</button>
             <button id="btn-save-settings" class="btn btn-success"><i class="fa-solid fa-floppy-disk"></i>
                 Save</button>
         </div>

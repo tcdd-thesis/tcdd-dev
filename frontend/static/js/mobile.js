@@ -17,7 +17,12 @@ const state = {
     lastFrameTime: null,
     config: null,
     phoneAudioEnabled: false,
-    originalConfidence: 50,
+    originalSettings: {
+        confidence: 50,
+        ttsRate: 160,
+        ttsCooldown: 10,
+        ttsVolume: 100
+    },
     status: {
         connection: false
     }
@@ -146,21 +151,47 @@ async function loadSettings() {
 
         // Confidence slider
         const confidence = cfg.detection?.confidence || 0.5;
-        const slider = document.getElementById('setting-confidence');
-        const display = document.getElementById('confidence-display');
-        if (slider && display) {
-            slider.value = Math.round(confidence * 100);
-            display.textContent = Math.round(confidence * 100) + '%';
+        const confSlider = document.getElementById('setting-confidence');
+        const confDisplay = document.getElementById('confidence-display');
+        if (confSlider && confDisplay) {
+            confSlider.value = Math.round(confidence * 100);
+            confDisplay.textContent = Math.round(confidence * 100) + '%';
         }
-        state.originalConfidence = Math.round(confidence * 100);
+        state.originalSettings.confidence = Math.round(confidence * 100);
 
-        // TTS info
+        // TTS Enabled status
         const ttsStatus = document.getElementById('tts-status');
-        const ttsRate = document.getElementById('tts-rate');
-        const ttsCooldown = document.getElementById('tts-cooldown');
         if (ttsStatus) ttsStatus.textContent = cfg.tts?.enabled !== false ? 'Enabled' : 'Disabled';
-        if (ttsRate) ttsRate.textContent = (cfg.tts?.speech_rate || 160) + ' wpm';
-        if (ttsCooldown) ttsCooldown.textContent = (cfg.tts?.cooldown_seconds || 10) + 's';
+
+        // TTS Speech Rate slider
+        const speechRate = cfg.tts?.speech_rate || 160;
+        const rateSlider = document.getElementById('setting-tts-rate');
+        const rateDisplay = document.getElementById('tts-rate-display');
+        if (rateSlider && rateDisplay) {
+            rateSlider.value = speechRate;
+            rateDisplay.textContent = speechRate + ' wpm';
+        }
+        state.originalSettings.ttsRate = speechRate;
+
+        // TTS Cooldown slider
+        const cooldown = cfg.tts?.cooldown_seconds || 10;
+        const cdSlider = document.getElementById('setting-tts-cooldown');
+        const cdDisplay = document.getElementById('tts-cooldown-display');
+        if (cdSlider && cdDisplay) {
+            cdSlider.value = cooldown;
+            cdDisplay.textContent = cooldown + 's';
+        }
+        state.originalSettings.ttsCooldown = cooldown;
+
+        // TTS Volume slider
+        const volume = cfg.tts?.volume ?? 1.0;
+        const volSlider = document.getElementById('setting-tts-volume');
+        const volDisplay = document.getElementById('tts-volume-display');
+        if (volSlider && volDisplay) {
+            volSlider.value = Math.round(volume * 100);
+            volDisplay.textContent = Math.round(volume * 100) + '%';
+        }
+        state.originalSettings.ttsVolume = Math.round(volume * 100);
 
         // System info
         try {
@@ -180,19 +211,79 @@ async function loadSettings() {
 async function saveSettings() {
     try {
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
+        const speechRate = parseInt(document.getElementById('setting-tts-rate').value);
+        const cooldown = parseInt(document.getElementById('setting-tts-cooldown').value);
+        const volume = parseFloat(document.getElementById('setting-tts-volume').value) / 100;
 
         const config = {
-            detection: { confidence: confidence }
+            detection: { confidence: confidence },
+            tts: {
+                speech_rate: speechRate,
+                cooldown_seconds: cooldown,
+                volume: parseFloat(volume.toFixed(2))
+            }
         };
 
         showToast('Saving...', 'info');
         const response = await api.put('/config', config);
         state.config = response.config;
-        state.originalConfidence = Math.round(confidence * 100);
+
+        // Update original settings after successful save
+        state.originalSettings.confidence = Math.round(confidence * 100);
+        state.originalSettings.ttsRate = speechRate;
+        state.originalSettings.ttsCooldown = cooldown;
+        state.originalSettings.ttsVolume = Math.round(volume * 100);
+
         showToast('Settings saved!', 'success');
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
+    }
+}
+
+/**
+ * Reset all settings sliders to their last-saved values.
+ */
+function resetSettings() {
+    const o = state.originalSettings;
+
+    const confSlider = document.getElementById('setting-confidence');
+    const confDisplay = document.getElementById('confidence-display');
+    if (confSlider) confSlider.value = o.confidence;
+    if (confDisplay) confDisplay.textContent = o.confidence + '%';
+
+    const rateSlider = document.getElementById('setting-tts-rate');
+    const rateDisplay = document.getElementById('tts-rate-display');
+    if (rateSlider) rateSlider.value = o.ttsRate;
+    if (rateDisplay) rateDisplay.textContent = o.ttsRate + ' wpm';
+
+    const cdSlider = document.getElementById('setting-tts-cooldown');
+    const cdDisplay = document.getElementById('tts-cooldown-display');
+    if (cdSlider) cdSlider.value = o.ttsCooldown;
+    if (cdDisplay) cdDisplay.textContent = o.ttsCooldown + 's';
+
+    const volSlider = document.getElementById('setting-tts-volume');
+    const volDisplay = document.getElementById('tts-volume-display');
+    if (volSlider) volSlider.value = o.ttsVolume;
+    if (volDisplay) volDisplay.textContent = o.ttsVolume + '%';
+
+    showToast('Settings reset', 'info');
+}
+
+/**
+ * Unpair this mobile device from the TCDD system.
+ */
+async function mobileUnpair() {
+    if (!confirm('Unpair this device? You will need to pair again to reconnect.')) return;
+    try {
+        showToast('Unpairing...', 'info');
+        await api.post('/pair/unpair');
+        localStorage.removeItem('tcdd_session_token');
+        showToast('Device unpaired. Redirecting...', 'success');
+        setTimeout(() => { window.location.href = '/pair'; }, 1500);
+    } catch (error) {
+        console.error('Failed to unpair:', error);
+        showToast('Unpair failed', 'error');
     }
 }
 
@@ -610,15 +701,45 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Settings save
+    // Settings save & reset
     const saveBtn = document.getElementById('btn-save-settings');
     if (saveBtn) saveBtn.addEventListener('click', saveSettings);
+
+    const resetBtn = document.getElementById('btn-reset-settings');
+    if (resetBtn) resetBtn.addEventListener('click', resetSettings);
 
     // Confidence slider live update
     const confidenceSlider = document.getElementById('setting-confidence');
     if (confidenceSlider) {
         confidenceSlider.addEventListener('input', (e) => {
             const display = document.getElementById('confidence-display');
+            if (display) display.textContent = e.target.value + '%';
+        });
+    }
+
+    // TTS Speech Rate slider live update
+    const rateSlider = document.getElementById('setting-tts-rate');
+    if (rateSlider) {
+        rateSlider.addEventListener('input', (e) => {
+            const display = document.getElementById('tts-rate-display');
+            if (display) display.textContent = e.target.value + ' wpm';
+        });
+    }
+
+    // TTS Cooldown slider live update
+    const cdSlider = document.getElementById('setting-tts-cooldown');
+    if (cdSlider) {
+        cdSlider.addEventListener('input', (e) => {
+            const display = document.getElementById('tts-cooldown-display');
+            if (display) display.textContent = e.target.value + 's';
+        });
+    }
+
+    // TTS Volume slider live update
+    const volSlider = document.getElementById('setting-tts-volume');
+    if (volSlider) {
+        volSlider.addEventListener('input', (e) => {
+            const display = document.getElementById('tts-volume-display');
             if (display) display.textContent = e.target.value + '%';
         });
     }

@@ -1177,10 +1177,13 @@ def validate_pairing_token():
 def unpair_device():
     """
     Unpair the currently paired device.
-    Only accessible from touchscreen (local).
+    Accessible from touchscreen (local) or from the paired mobile device.
     """
     if not is_local_request():
-        return jsonify({'error': 'Unpairing can only be done from touchscreen'}), 403
+        # Also allow the paired mobile device to unpair itself
+        session_token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
+        if not session_token or not pairing_manager.validate_session(session_token):
+            return jsonify({'error': 'Unpairing requires local access or valid session'}), 403
     
     try:
         if pairing_manager.unpair():

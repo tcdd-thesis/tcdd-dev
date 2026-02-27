@@ -461,7 +461,42 @@ body {
     border-top: 2px solid rgba(255, 255, 255, 0.1);
     display: flex;
     justify-content: flex-end;
+    gap: 10px;
     flex-shrink: 0;
+}
+
+/* Pairing Badge */
+.pairing-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.pairing-paired {
+    background: rgba(76, 175, 80, 0.15);
+    color: #66bb6a;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.pairing-paired i {
+    font-size: 8px;
+    color: #66bb6a;
+}
+
+/* Small Button */
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+
+/* Settings group icon spacing */
+.settings-group h3 i {
+    margin-right: 6px;
 }
 
 /* ========== Controls Bar ========== */
