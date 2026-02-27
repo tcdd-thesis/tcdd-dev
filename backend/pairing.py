@@ -283,7 +283,7 @@ class PairingManager:
         """
         return HOTSPOT_IP
     
-    def generate_pairing_data(self, port: int = 80, domain: Optional[str] = None) -> Dict[str, Any]:
+    def generate_pairing_data(self, port: int = 5000, domain: Optional[str] = None) -> Dict[str, Any]:
         """
         Generate complete pairing data including QR code content.
         Uses the domain name if provided, otherwise falls back to IP.

@@ -216,7 +216,7 @@ def test_pairing_with_ip():
     
     # Test: Generate pairing data
     print("\n[Test] Generate Pairing Data")
-    data = pm.generate_pairing_data(port=80)
+    data = pm.generate_pairing_data(port=5000)
     print(f"  Token: {data['token']}")
     print(f"  IP: {data['ip']}")
     print(f"  URL: {data['url']}")

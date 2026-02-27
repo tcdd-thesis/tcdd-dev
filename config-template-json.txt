@@ -5,7 +5,7 @@
   // SERVER CONFIGURATION
   // =============================================================================
   
-  "port": 80,                      // Web server port (requires restart)
+  "port": 5000,                      // Web server port (requires restart)
   "debug": false,                  // Enable debug mode (requires restart)
   "host": "0.0.0.0",               // Bind address (0.0.0.0 = all interfaces)
   "venv_path": "backend/.venv",    // Path to Python virtual environment (requires restart)

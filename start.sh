@@ -80,6 +80,22 @@ if echo "$CONFIG" | grep -q '"port":\s*"\K[^"]+'; then
 fi
 PORT=$(echo "$CONFIG" | grep -oP '"port":\s*\K\d+')
 
+# --- Port 80 redirect ---
+# Redirect port 80 → app port so mobile users can type a clean URL without :5000.
+# When run via systemd, iptables is handled in the .service file (as root).
+# When run manually, sudo is needed.
+if [ "$PORT" != "80" ]; then
+    echo "Setting up port 80 → $PORT redirect..."
+    # Remove any stale rules first (idempotent)
+    sudo iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port "$PORT" 2>/dev/null
+    sudo iptables -t nat -D OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port "$PORT" 2>/dev/null
+    # Add fresh rules
+    sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port "$PORT" || \
+        echo "Warning: Could not set port redirect. Try running with sudo."
+    sudo iptables -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port "$PORT" 2>/dev/null
+    echo "Port 80 → $PORT redirect active."
+fi
+
 # Create necessary directories
 mkdir -p data/logs
 mkdir -p data/captures
