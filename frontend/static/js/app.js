@@ -224,9 +224,6 @@ document.addEventListener('click', function(e) {
 });
 
 const HOLD_DURATION = 3000;
-let _holdTimer = null;
-let _holdStart = 0;
-let _holdRaf = null;
 
 function initHoldButton(btnId, onComplete) {
     const btn = document.getElementById(btnId);
@@ -234,15 +231,18 @@ function initHoldButton(btnId, onComplete) {
     const bar = btn.querySelector('.hold-progress');
     const label = btn.querySelector('span');
     const origText = label ? label.textContent : '';
+    let holdTimer = null;
+    let holdStart = 0;
+    let holdRaf = null;
 
     function startHold(e) {
         e.preventDefault();
-        _holdStart = Date.now();
+        holdStart = Date.now();
         btn.classList.add('holding');
         if (bar) bar.style.width = '0%';
 
-        _holdTimer = setTimeout(() => {
-            cancelAnimationFrame(_holdRaf);
+        holdTimer = setTimeout(() => {
+            cancelAnimationFrame(holdRaf);
             btn.classList.remove('holding');
             if (bar) bar.style.width = '0%';
             if (label) label.textContent = origText;
@@ -251,20 +251,20 @@ function initHoldButton(btnId, onComplete) {
         }, HOLD_DURATION);
 
         (function tick() {
-            const elapsed = Date.now() - _holdStart;
+            const elapsed = Date.now() - holdStart;
             const pct = Math.min(100, (elapsed / HOLD_DURATION) * 100);
             if (bar) bar.style.width = pct + '%';
             if (label) {
                 const remaining = Math.ceil((HOLD_DURATION - elapsed) / 1000);
                 label.textContent = remaining > 0 ? remaining + 's...' : origText;
             }
-            if (elapsed < HOLD_DURATION) _holdRaf = requestAnimationFrame(tick);
+            if (elapsed < HOLD_DURATION) holdRaf = requestAnimationFrame(tick);
         })();
     }
 
     function cancelHold() {
-        clearTimeout(_holdTimer);
-        cancelAnimationFrame(_holdRaf);
+        clearTimeout(holdTimer);
+        cancelAnimationFrame(holdRaf);
         btn.classList.remove('holding');
         if (bar) bar.style.width = '0%';
         if (label) label.textContent = origText;
@@ -763,6 +763,12 @@ const ALERT_COOLDOWN_MS = 5000;
 
 function showDetectionAlert(detections) {
     const now = Date.now();
+
+    // Prune stale cooldown entries (older than 2x cooldown)
+    for (const key in _alertCooldowns) {
+        if (now - _alertCooldowns[key] > ALERT_COOLDOWN_MS * 2) delete _alertCooldowns[key];
+    }
+
     let bestTier = 99, bestLabel = '';
     for (const det of detections) {
         const label = det.class_name;
@@ -2354,6 +2360,7 @@ function connectWebSocket() {
     state.socket.io.on('reconnect_failed', () => {
         console.error('WebSocket reconnect failed after all attempts');
         updateConnectionIndicator('disconnected');
+        state._wsReconnectToastShown = false;
         showToast('Unable to reconnect. Please reload the page.', 'error');
     });
 
@@ -2647,9 +2654,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 await api.post('/display/brightness', { brightness: value });
             } catch (error) {
                 console.error('Failed to save brightness:', error);
+            } finally {
+                state._suppressConfigToast = false;
             }
-            // Clear suppression after the config round-trip settles
-            setTimeout(() => { state._suppressConfigToast = false; }, 1000);
         }, 500);
     });
 

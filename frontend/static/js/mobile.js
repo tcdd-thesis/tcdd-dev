@@ -192,6 +192,12 @@ const ALERT_COOLDOWN_MS = 5000;
 
 function showDetectionAlert(detections) {
     const now = Date.now();
+
+    // Prune stale cooldown entries (older than 2x cooldown)
+    for (const key in _alertCooldowns) {
+        if (now - _alertCooldowns[key] > ALERT_COOLDOWN_MS * 2) delete _alertCooldowns[key];
+    }
+
     let bestTier = 99, bestLabel = '';
     for (const det of detections) {
         const label = det.class_name;
@@ -844,6 +850,7 @@ function connectWebSocket() {
     state.socket.io.on('reconnect_failed', () => {
         console.error('WebSocket reconnect failed after all attempts');
         updateConnectionStatus('disconnected');
+        state._wsReconnectToastShown = false;
         showToast('Unable to reconnect. Please reload the page.', 'error');
     });
 

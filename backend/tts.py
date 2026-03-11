@@ -285,17 +285,19 @@ class TTSEngine:
                 else:
                     self._consecutive_failures += 1
                     if self._consecutive_failures >= self._max_consecutive_failures:
-                        logger.error("TTS: %d consecutive failures — disabling TTS",
+                        logger.error("TTS: %d consecutive failures — pausing for 60s before retry",
                                      self._consecutive_failures)
-                        self.enabled = False
-                        self._engine_ready = False
                         if self._on_error_callback:
                             try:
                                 self._on_error_callback(
-                                    f"TTS disabled after {self._consecutive_failures} consecutive failures")
-                            except Exception:
-                                pass
-                        break
+                                    f"TTS paused after {self._consecutive_failures} consecutive failures, retrying in 60s")
+                            except Exception as e:
+                                logger.error(f"TTS error callback exception: {e}")
+                        # Sleep and retry instead of permanently dying
+                        import time as _time
+                        _time.sleep(60)
+                        self._consecutive_failures = 0
+                        logger.info("TTS: Resuming after cooldown")
 
             except Empty:
                 continue
