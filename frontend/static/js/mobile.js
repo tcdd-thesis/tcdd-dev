@@ -6,6 +6,23 @@
  */
 
 // ============================================================================
+// UTILITY: Button loading state
+// ============================================================================
+
+function setBtnLoading(btnOrId, loading, loadingLabel) {
+    const btn = typeof btnOrId === 'string' ? document.getElementById(btnOrId) : btnOrId;
+    if (!btn) return;
+    if (loading) {
+        btn._origHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (loadingLabel || '');
+    } else {
+        btn.disabled = false;
+        if (btn._origHTML !== undefined) btn.innerHTML = btn._origHTML;
+    }
+}
+
+// ============================================================================
 // STATE
 // ============================================================================
 
@@ -231,6 +248,8 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
+    const btn = document.getElementById('btn-save-settings');
+    setBtnLoading(btn, true, 'Saving...');
     try {
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
         const speechRate = parseInt(document.getElementById('setting-tts-rate').value);
@@ -246,7 +265,6 @@ async function saveSettings() {
             }
         };
 
-        showToast('Saving...', 'info');
         const response = await api.put('/config', config);
         state.config = response.config;
 
@@ -260,6 +278,8 @@ async function saveSettings() {
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -297,8 +317,9 @@ function resetSettings() {
  */
 async function mobileUnpair() {
     if (!confirm('Unpair this device? You will need to pair again to reconnect.')) return;
+    const btn = document.getElementById('btn-mobile-unpair');
+    setBtnLoading(btn, true, 'Unpairing...');
     try {
-        showToast('Unpairing...', 'info');
         await api.post('/pair/unpair');
         localStorage.removeItem('tcdd_session_token');
         showToast('Device unpaired. Redirecting...', 'success');
@@ -306,6 +327,7 @@ async function mobileUnpair() {
     } catch (error) {
         console.error('Failed to unpair:', error);
         showToast('Unpair failed', 'error');
+        setBtnLoading(btn, false);
     }
 }
 
@@ -314,6 +336,8 @@ async function mobileUnpair() {
 // ============================================================================
 
 async function loadViolations() {
+    const btn = document.getElementById('btn-refresh-logs');
+    setBtnLoading(btn, true, 'Loading...');
     try {
         const response = await api.get('/violations?limit=100');
         const container = document.getElementById('violations-list');
@@ -346,6 +370,8 @@ async function loadViolations() {
                 </div>
             `;
         }
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 

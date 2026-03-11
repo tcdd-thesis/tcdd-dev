@@ -3,6 +3,23 @@
  * Optimized for 2.8" LCD (640x480)
  */
 
+// ============================================================================
+// UTILITY: Button loading state
+// ============================================================================
+
+function setBtnLoading(btnOrId, loading, loadingLabel) {
+    const btn = typeof btnOrId === 'string' ? document.getElementById(btnOrId) : btnOrId;
+    if (!btn) return;
+    if (loading) {
+        btn._origHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (loadingLabel || '');
+    } else {
+        btn.disabled = false;
+        if (btn._origHTML !== undefined) btn.innerHTML = btn._origHTML;
+    }
+}
+
 // Global state
 const state = {
     streaming: false,
@@ -749,6 +766,8 @@ async function loadLogs() {
 // ---------------------------------------------------------------------------
 
 async function loadViolations() {
+    const btn = document.getElementById('btn-refresh-logs');
+    setBtnLoading(btn, true, 'Loading...');
     try {
         const response = await api.get('/violations?limit=100');
         const container = document.getElementById('violations-list');
@@ -782,6 +801,8 @@ async function loadViolations() {
                 </div>
             `;
         }
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -1282,6 +1303,8 @@ async function loadPairingStatus() {
  * Unpair the currently paired device
  */
 async function unpairDevice() {
+    const btn = document.getElementById('btn-unpair');
+    setBtnLoading(btn, true, 'Unpairing...');
     try {
         const result = await api.post('/pair/unpair');
 
@@ -1299,6 +1322,8 @@ async function unpairDevice() {
     } catch (error) {
         console.error('Failed to unpair:', error);
         showToast('Failed to unpair device', 'error');
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -1588,6 +1613,8 @@ async function loadInitialBrightness() {
 }
 
 async function saveSettings() {
+    const btn = document.getElementById('btn-save-settings');
+    setBtnLoading(btn, true, 'Saving...');
     try {
         // Get display brightness
         const brightness = parseInt(document.getElementById('setting-brightness').value);
@@ -1604,7 +1631,6 @@ async function saveSettings() {
             }
         };
 
-        showToast('Saving...', 'info');
         const response = await api.put('/config', config);
 
         state.config = response.config;
@@ -1618,6 +1644,8 @@ async function saveSettings() {
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -1876,7 +1904,8 @@ async function connectToWifi(ssid, password) {
  * Disconnect from current WiFi network
  */
 async function disconnectWifi() {
-    showToast('Disconnecting...', 'info');
+    const btn = document.getElementById('btn-wifi-disconnect');
+    setBtnLoading(btn, true, 'Disconnecting...');
 
     try {
         const response = await api.post('/wifi/disconnect');
@@ -1890,6 +1919,8 @@ async function disconnectWifi() {
     } catch (error) {
         console.error('WiFi disconnect failed:', error);
         showToast('Disconnect failed', 'error');
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
@@ -2065,8 +2096,6 @@ async function scanBluetoothDevices() {
  */
 async function connectToBluetooth(mac, name) {
     showToast(`Pairing & Connecting to ${name}...`, 'info');
-
-    // Optional: add loading state to the clicked item
     document.body.style.cursor = 'wait';
 
     try {
@@ -2094,7 +2123,8 @@ async function connectToBluetooth(mac, name) {
  * Disconnect from current Bluetooth device
  */
 async function disconnectBluetooth(mac) {
-    showToast('Disconnecting Bluetooth...', 'info');
+    const btn = document.getElementById('btn-bluetooth-disconnect');
+    setBtnLoading(btn, true, 'Disconnecting...');
 
     try {
         const response = await api.post('/bluetooth/disconnect', { mac: mac });
@@ -2108,6 +2138,8 @@ async function disconnectBluetooth(mac) {
     } catch (error) {
         console.error('Bluetooth disconnect failed:', error);
         showToast('Disconnect failed', 'error');
+    } finally {
+        setBtnLoading(btn, false);
     }
 }
 
