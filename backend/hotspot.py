@@ -59,6 +59,12 @@ class HotspotManager:
         
         # Check current hotspot status
         self._check_status()
+        
+        # Clean up stale dnsmasq config if hotspot is not active.
+        # The config binds to 10.42.0.1 which only exists when the hotspot
+        # is running, so a leftover file crashes dnsmasq at next boot.
+        if not self._is_active:
+            self._cleanup_dns()
     
     def _load_from_config(self):
         """Load hotspot settings from config.json."""
@@ -235,7 +241,12 @@ bind-interfaces
     
     def _run_nmcli(self, args: list, timeout: int = 30) -> Tuple[str, str, int]:
         """
-        Run nmcli command.
+        Run nmcli command with sudo.
+        
+        Uses sudo to ensure nmcli has NetworkManager permissions regardless
+        of how the app was launched (terminal vs systemd service).
+        Without sudo, polkit denies nmcli operations when running under
+        systemd because there is no active user session on a local seat.
         
         Args:
             args: Command arguments
@@ -246,7 +257,7 @@ bind-interfaces
         """
         try:
             result = subprocess.run(
-                ['nmcli'] + args,
+                ['sudo', 'nmcli'] + args,
                 capture_output=True,
                 text=True,
                 timeout=timeout

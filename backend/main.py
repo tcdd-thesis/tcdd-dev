@@ -716,11 +716,15 @@ def set_display_brightness():
 # ----------------------------------------------------------------------------
 
 def run_nmcli(args, timeout=10):
-    """Run nmcli command and return output"""
+    """Run nmcli command with sudo and return output.
+    
+    Uses sudo so that polkit does not block NetworkManager operations
+    when the app is running as a systemd service (no active user session).
+    """
     import subprocess
     try:
         result = subprocess.run(
-            ['nmcli'] + args,
+            ['sudo', 'nmcli'] + args,
             capture_output=True,
             text=True,
             timeout=timeout
