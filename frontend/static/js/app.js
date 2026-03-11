@@ -46,6 +46,9 @@ const state = {
     _wsConnectionState: 'disconnected',  // 'connected' | 'reconnecting' | 'disconnected'
     // Suppress config_updated toast when change originated locally (e.g. brightness slider)
     _suppressConfigToast: false,
+    // Settings undo state
+    _previousConfig: null,
+    _undoTimer: null,
     // Camera health state
     _cameraStale: false,
     _lastServerFrameTime: 0
@@ -1631,6 +1634,12 @@ async function saveSettings() {
             }
         };
 
+        // Store previous config for undo
+        const prevConfig = {
+            display: { brightness: state.originalSettings.brightness },
+            detection: { confidence: state.originalSettings.confidence / 100 }
+        };
+
         const response = await api.put('/config', config);
 
         state.config = response.config;
@@ -1639,13 +1648,62 @@ async function saveSettings() {
         state.originalSettings.brightness = brightness;
         state.originalSettings.confidence = Math.round(confidence * 100);
 
-        showToast('Settings saved!', 'success');
+        showUndoToast(prevConfig);
 
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
     } finally {
         setBtnLoading(btn, false);
+    }
+}
+
+function showUndoToast(prevConfig) {
+    // Clear any existing undo timer
+    if (state._undoTimer) clearTimeout(state._undoTimer);
+    state._previousConfig = prevConfig;
+
+    const container = document.getElementById('toast-container');
+    // Remove old undo toasts
+    container.querySelectorAll('.toast-undo').forEach(t => t.remove());
+
+    const toast = document.createElement('div');
+    toast.className = 'toast success toast-undo';
+    toast.innerHTML = 'Settings saved! <button class="toast-undo-btn" onclick="undoSettings()">Undo</button>';
+    container.appendChild(toast);
+
+    state._undoTimer = setTimeout(() => {
+        toast.remove();
+        state._previousConfig = null;
+        state._undoTimer = null;
+    }, 10000);
+}
+
+async function undoSettings() {
+    if (!state._previousConfig) return;
+    if (state._undoTimer) clearTimeout(state._undoTimer);
+
+    const prev = state._previousConfig;
+    state._previousConfig = null;
+
+    // Remove undo toast
+    document.querySelectorAll('.toast-undo').forEach(t => t.remove());
+
+    try {
+        state._suppressConfigToast = true;
+        await api.put('/config', prev);
+        state._suppressConfigToast = false;
+
+        // Restore UI
+        state.originalSettings.brightness = prev.display.brightness;
+        state.originalSettings.confidence = Math.round(prev.detection.confidence * 100);
+
+        if (state.currentPage === 'settings') loadSettings();
+        showToast('Settings reverted', 'info');
+    } catch (error) {
+        state._suppressConfigToast = false;
+        console.error('Undo failed:', error);
+        showToast('Undo failed', 'error');
     }
 }
 
@@ -2274,6 +2332,14 @@ function connectWebSocket() {
         console.log('\u21BB Configuration updated from server:', data);
 
         if (state.configAutoReload) {
+            // Protect unsaved changes on settings page
+            if (state.currentPage === 'settings' && hasSettingsChanged()) {
+                if (!state._suppressConfigToast) {
+                    showToast('Config changed externally. Save or discard your changes.', 'info');
+                }
+                return;
+            }
+
             state.config = data.config;
 
             // Update UI if on settings page

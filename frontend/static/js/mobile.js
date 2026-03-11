@@ -47,6 +47,9 @@ const state = {
     _wsWasConnected: false,
     _wsReconnectToastShown: false,
     _wsConnectionState: 'disconnected',  // 'connected' | 'reconnecting' | 'disconnected'
+    // Settings undo state
+    _previousConfig: null,
+    _undoTimer: null,
     // Camera health state
     _cameraStale: false,
     _lastServerFrameTime: 0
@@ -265,6 +268,16 @@ async function saveSettings() {
             }
         };
 
+        // Store previous config for undo
+        const prevConfig = {
+            detection: { confidence: state.originalSettings.confidence / 100 },
+            tts: {
+                speech_rate: state.originalSettings.ttsRate,
+                cooldown_seconds: state.originalSettings.ttsCooldown,
+                volume: state.originalSettings.ttsVolume / 100
+            }
+        };
+
         const response = await api.put('/config', config);
         state.config = response.config;
 
@@ -274,12 +287,55 @@ async function saveSettings() {
         state.originalSettings.ttsCooldown = cooldown;
         state.originalSettings.ttsVolume = Math.round(volume * 100);
 
-        showToast('Settings saved!', 'success');
+        showUndoToast(prevConfig);
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Save failed', 'error');
     } finally {
         setBtnLoading(btn, false);
+    }
+}
+
+function showUndoToast(prevConfig) {
+    if (state._undoTimer) clearTimeout(state._undoTimer);
+    state._previousConfig = prevConfig;
+
+    const container = document.getElementById('toast-container');
+    container.querySelectorAll('.toast-undo').forEach(t => t.remove());
+
+    const toast = document.createElement('div');
+    toast.className = 'toast success toast-undo';
+    toast.innerHTML = 'Settings saved! <button class="toast-undo-btn" onclick="undoSettings()">Undo</button>';
+    container.appendChild(toast);
+
+    state._undoTimer = setTimeout(() => {
+        toast.remove();
+        state._previousConfig = null;
+        state._undoTimer = null;
+    }, 10000);
+}
+
+async function undoSettings() {
+    if (!state._previousConfig) return;
+    if (state._undoTimer) clearTimeout(state._undoTimer);
+
+    const prev = state._previousConfig;
+    state._previousConfig = null;
+
+    document.querySelectorAll('.toast-undo').forEach(t => t.remove());
+
+    try {
+        await api.put('/config', prev);
+        state.originalSettings.confidence = Math.round(prev.detection.confidence * 100);
+        state.originalSettings.ttsRate = prev.tts.speech_rate;
+        state.originalSettings.ttsCooldown = prev.tts.cooldown_seconds;
+        state.originalSettings.ttsVolume = Math.round(prev.tts.volume * 100);
+
+        if (state.currentPage === 'settings') loadSettings();
+        showToast('Settings reverted', 'info');
+    } catch (error) {
+        console.error('Undo failed:', error);
+        showToast('Undo failed', 'error');
     }
 }
 
@@ -310,6 +366,18 @@ function resetSettings() {
     if (volDisplay) volDisplay.textContent = o.ttsVolume + '%';
 
     showToast('Settings reset', 'info');
+}
+
+function hasMobileSettingsChanged() {
+    const o = state.originalSettings;
+    const conf = document.getElementById('setting-confidence');
+    const rate = document.getElementById('setting-tts-rate');
+    const cd = document.getElementById('setting-tts-cooldown');
+    const vol = document.getElementById('setting-tts-volume');
+    return (conf && parseInt(conf.value) !== o.confidence) ||
+        (rate && parseInt(rate.value) !== o.ttsRate) ||
+        (cd && parseInt(cd.value) !== o.ttsCooldown) ||
+        (vol && parseInt(vol.value) !== o.ttsVolume);
 }
 
 /**
@@ -773,6 +841,11 @@ function connectWebSocket() {
 
     // Config updates from server
     state.socket.on('config_updated', (data) => {
+        // Protect unsaved changes on settings page
+        if (state.currentPage === 'settings' && hasMobileSettingsChanged()) {
+            showToast('Config changed externally. Save or discard your changes.', 'info');
+            return;
+        }
         state.config = data.config;
         if (state.currentPage === 'settings') {
             loadSettings();
