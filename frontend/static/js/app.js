@@ -205,30 +205,84 @@ function showToast(message, type = 'info') {
 }
 
 // ============================================================================
+// SYSTEM MENU & HOLD-TO-CONFIRM (QoL-8)
+// ============================================================================
+
+function toggleSystemMenu() {
+    const menu = document.getElementById('system-menu');
+    if (!menu) return;
+    menu.classList.toggle('open');
+}
+
+// Close system menu when tapping outside
+document.addEventListener('click', function(e) {
+    const menu = document.getElementById('system-menu');
+    const btn = document.getElementById('btn-system-menu');
+    if (menu && menu.classList.contains('open') && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        menu.classList.remove('open');
+    }
+});
+
+const HOLD_DURATION = 3000;
+let _holdTimer = null;
+let _holdStart = 0;
+let _holdRaf = null;
+
+function initHoldButton(btnId, onComplete) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const bar = btn.querySelector('.hold-progress');
+    const label = btn.querySelector('span');
+    const origText = label ? label.textContent : '';
+
+    function startHold(e) {
+        e.preventDefault();
+        _holdStart = Date.now();
+        btn.classList.add('holding');
+        if (bar) bar.style.width = '0%';
+
+        _holdTimer = setTimeout(() => {
+            cancelAnimationFrame(_holdRaf);
+            btn.classList.remove('holding');
+            if (bar) bar.style.width = '0%';
+            if (label) label.textContent = origText;
+            document.getElementById('system-menu')?.classList.remove('open');
+            onComplete();
+        }, HOLD_DURATION);
+
+        (function tick() {
+            const elapsed = Date.now() - _holdStart;
+            const pct = Math.min(100, (elapsed / HOLD_DURATION) * 100);
+            if (bar) bar.style.width = pct + '%';
+            if (label) {
+                const remaining = Math.ceil((HOLD_DURATION - elapsed) / 1000);
+                label.textContent = remaining > 0 ? remaining + 's...' : origText;
+            }
+            if (elapsed < HOLD_DURATION) _holdRaf = requestAnimationFrame(tick);
+        })();
+    }
+
+    function cancelHold() {
+        clearTimeout(_holdTimer);
+        cancelAnimationFrame(_holdRaf);
+        btn.classList.remove('holding');
+        if (bar) bar.style.width = '0%';
+        if (label) label.textContent = origText;
+    }
+
+    btn.addEventListener('mousedown', startHold);
+    btn.addEventListener('touchstart', startHold, { passive: false });
+    btn.addEventListener('mouseup', cancelHold);
+    btn.addEventListener('mouseleave', cancelHold);
+    btn.addEventListener('touchend', cancelHold);
+    btn.addEventListener('touchcancel', cancelHold);
+}
+
+// ============================================================================
 // SHUTDOWN FUNCTIONS
 // ============================================================================
 
-function showShutdownConfirm() {
-    const modal = document.getElementById('shutdown-confirm-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-    }
-}
-
-function cancelShutdown() {
-    const modal = document.getElementById('shutdown-confirm-modal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
 async function confirmShutdown() {
-    // Hide confirmation modal
-    const confirmModal = document.getElementById('shutdown-confirm-modal');
-    if (confirmModal) {
-        confirmModal.style.display = 'none';
-    }
-
     // Show progress modal
     const progressModal = document.getElementById('shutdown-progress-modal');
     if (progressModal) {
@@ -237,11 +291,8 @@ async function confirmShutdown() {
 
     try {
         await api.post('/shutdown');
-        // The system will shut down after 2 seconds
-        // Keep the progress modal visible
     } catch (error) {
         console.error('Shutdown request failed:', error);
-        // Hide progress modal on error
         if (progressModal) {
             progressModal.style.display = 'none';
         }
@@ -253,27 +304,7 @@ async function confirmShutdown() {
 // REBOOT FUNCTIONS
 // ============================================================================
 
-function showRebootConfirm() {
-    const modal = document.getElementById('reboot-confirm-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-    }
-}
-
-function cancelReboot() {
-    const modal = document.getElementById('reboot-confirm-modal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
 async function confirmReboot() {
-    // Hide confirmation modal
-    const confirmModal = document.getElementById('reboot-confirm-modal');
-    if (confirmModal) {
-        confirmModal.style.display = 'none';
-    }
-
     // Show progress modal
     const progressModal = document.getElementById('reboot-progress-modal');
     if (progressModal) {
@@ -282,11 +313,8 @@ async function confirmReboot() {
 
     try {
         await api.post('/reboot');
-        // The system will reboot after 2 seconds
-        // Keep the progress modal visible
     } catch (error) {
         console.error('Reboot request failed:', error);
-        // Hide progress modal on error
         if (progressModal) {
             progressModal.style.display = 'none';
         }
@@ -2643,6 +2671,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Audio device gate: check on startup (fires after switchPage triggers it too)
     checkAudioDevice();
+
+    // Hold-to-confirm for shutdown/reboot (QoL-8)
+    initHoldButton('btn-hold-shutdown', confirmShutdown);
+    initHoldButton('btn-hold-reboot', confirmReboot);
 
     console.log('\u2713 Application ready!');
 });

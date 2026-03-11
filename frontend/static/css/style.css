@@ -97,11 +97,12 @@ body.touchscreen {
   /* Prevent header from shrinking */
 }
 
-/* Header Actions (left side - shutdown, future buttons) */
+/* Header Actions (left side - system menu) */
 .header-actions {
   display: flex;
   gap: 10px;
   align-items: center;
+  position: relative;
 }
 
 .action-btn {
@@ -123,34 +124,76 @@ body.touchscreen {
   transform: scale(0.95);
 }
 
-.shutdown-btn {
-  background: var(--danger);
-  border-color: var(--danger);
+.system-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
-.shutdown-btn:hover {
-  background: #d32f2f;
-  border-color: #d32f2f;
+/* System dropdown menu */
+.system-menu {
+  display: none;
+  position: absolute;
+  top: 58px;
+  left: 0;
+  min-width: 200px;
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 6px 0;
+  z-index: 2000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-.closeapp-btn {
-  background: var(--secondary);
-  border-color: var(--secondary);
+.system-menu.open {
+  display: block;
 }
 
-.closeapp-btn:hover {
-  background: #616161;
-  border-color: #616161;
+.system-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
 }
 
-.reboot-btn {
-  background: var(--warning);
-  border-color: var(--warning);
+.system-menu-item:active {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.reboot-btn:hover {
-  background: #e68a00;
-  border-color: #e68a00;
+.system-menu-item i {
+  width: 22px;
+  text-align: center;
+  font-size: 16px;
+}
+
+.closeapp-item i { color: var(--secondary); }
+.reboot-item i   { color: var(--warning); }
+.shutdown-item i { color: var(--danger); }
+
+/* Hold-to-confirm progress bar */
+.hold-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  border-radius: 0 0 12px 12px;
+  transition: none;
+}
+
+.reboot-item .hold-progress   { background: var(--warning); }
+.shutdown-item .hold-progress  { background: var(--danger); }
+
+.system-menu-item.holding {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Reboot Modals */
@@ -165,45 +208,6 @@ body.touchscreen {
   z-index: 3000;
   align-items: center;
   justify-content: center;
-}
-
-.reboot-confirm-content {
-  background: #1a1a1a;
-  border-radius: 16px;
-  max-width: 350px;
-  width: 90%;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.reboot-confirm-body {
-  padding: 20px;
-  text-align: center;
-}
-
-.reboot-confirm-body p {
-  margin-bottom: 24px;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.reboot-confirm-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-}
-
-.reboot-confirm-buttons .btn {
-  min-width: 120px;
-}
-
-.btn-reboot {
-  background: var(--warning);
-  border-color: var(--warning);
-  color: #fff;
-}
-
-.btn-reboot:hover {
-  background: #e68a00;
 }
 
 .reboot-progress-content {
@@ -252,35 +256,6 @@ body.touchscreen {
   z-index: 3000;
   align-items: center;
   justify-content: center;
-}
-
-.shutdown-confirm-content {
-  background: #1a1a1a;
-  border-radius: 16px;
-  max-width: 350px;
-  width: 90%;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.shutdown-confirm-body {
-  padding: 20px;
-  text-align: center;
-}
-
-.shutdown-confirm-body p {
-  margin-bottom: 24px;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.shutdown-confirm-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-}
-
-.shutdown-confirm-buttons .btn {
-  min-width: 120px;
 }
 
 .shutdown-progress-content {

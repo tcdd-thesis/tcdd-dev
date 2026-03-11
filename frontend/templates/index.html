@@ -33,15 +33,22 @@
         <div class="home-container">
             <div class="home-header">
                 <div class="header-actions">
-                    <button class="action-btn closeapp-btn" onclick="showCloseAppConfirm()" title="Close App">
-                        <i class="fa-solid fa-xmark"></i>
+                    <button class="action-btn system-btn" id="btn-system-menu" onclick="toggleSystemMenu()" title="System">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
                     </button>
-                    <button class="action-btn reboot-btn" onclick="showRebootConfirm()" title="Reboot">
-                        <i class="fa-solid fa-rotate"></i>
-                    </button>
-                    <button class="action-btn shutdown-btn" onclick="showShutdownConfirm()" title="Shutdown">
-                        <i class="fa-solid fa-power-off"></i>
-                    </button>
+                    <div id="system-menu" class="system-menu">
+                        <button class="system-menu-item closeapp-item" onclick="showCloseAppConfirm()">
+                            <i class="fa-solid fa-xmark"></i> Close App
+                        </button>
+                        <button class="system-menu-item reboot-item" id="btn-hold-reboot">
+                            <i class="fa-solid fa-rotate"></i> <span>Hold to Restart</span>
+                            <div class="hold-progress"></div>
+                        </button>
+                        <button class="system-menu-item shutdown-item" id="btn-hold-shutdown">
+                            <i class="fa-solid fa-power-off"></i> <span>Hold to Shutdown</span>
+                            <div class="hold-progress"></div>
+                        </button>
+                    </div>
                 </div>
                 <div class="status-panel">
                     <div class="status-item" id="status-backend">
@@ -458,21 +465,7 @@
     <!-- Toast Notifications -->
     <div id="toast-container"></div>
 
-    <!-- Shutdown Confirmation Modal -->
-    <div id="shutdown-confirm-modal" class="modal shutdown-modal">
-        <div class="modal-content shutdown-confirm-content">
-            <div class="modal-header">
-                <h3>Shutdown System?</h3>
-            </div>
-            <div class="modal-body shutdown-confirm-body">
-                <p>Are you sure you want to shut down the Raspberry Pi?</p>
-                <div class="shutdown-confirm-buttons">
-                    <button class="btn btn-secondary btn-touch" onclick="cancelShutdown()">Cancel</button>
-                    <button class="btn btn-danger btn-touch" onclick="confirmShutdown()">Shutdown</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Shutdown Confirmation — replaced by hold-to-confirm in system menu (QoL-8) -->
 
     <!-- Shutdown In Progress Modal -->
     <div id="shutdown-progress-modal" class="modal shutdown-modal">
@@ -482,21 +475,7 @@
         </div>
     </div>
 
-    <!-- Reboot Confirmation Modal -->
-    <div id="reboot-confirm-modal" class="modal reboot-modal">
-        <div class="modal-content reboot-confirm-content">
-            <div class="modal-header">
-                <h3>Restart System?</h3>
-            </div>
-            <div class="modal-body reboot-confirm-body">
-                <p>Are you sure you want to restart the Raspberry Pi?</p>
-                <div class="reboot-confirm-buttons">
-                    <button class="btn btn-secondary btn-touch" onclick="cancelReboot()">Cancel</button>
-                    <button class="btn btn-reboot btn-touch" onclick="confirmReboot()">Restart</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Reboot Confirmation — replaced by hold-to-confirm in system menu (QoL-8) -->
 
     <!-- Reboot In Progress Modal -->
     <div id="reboot-progress-modal" class="modal reboot-modal">
