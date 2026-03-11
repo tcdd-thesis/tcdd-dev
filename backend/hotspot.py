@@ -703,8 +703,8 @@ bind-interfaces
                     # Match entries like: 10.42.0.123 lladdr aa:bb:cc:dd:ee:ff REACHABLE
                     if '10.42.0.' in line and '10.42.0.1 ' not in line:
                         parts = line.split()
-                        # Only count if state is REACHABLE or STALE (recently seen)
-                        if len(parts) >= 5 and parts[-1] in ['REACHABLE', 'STALE', 'DELAY']:
+                        # Only count if state is REACHABLE, STALE, DELAY, or PROBE (recently seen)
+                        if len(parts) >= 5 and parts[-1] in ['REACHABLE', 'STALE', 'DELAY', 'PROBE']:
                             clients.append({
                                 'ip': parts[0],
                                 'mac': parts[4] if parts[3] == 'lladdr' else 'unknown'

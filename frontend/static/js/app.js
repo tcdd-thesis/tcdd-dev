@@ -1556,7 +1556,7 @@ function startClientPolling() {
     wizardPollingInterval = setInterval(async () => {
         try {
             const res = await api.get('/hotspot/clients');
-            if (res && res.count === 1) {
+            if (res && res.count >= 1) {
                 wizardClientConsecutiveChecks++;
                 // Require 2 consecutive checks to ensure it's not a spurious/cached ARP entry ghost
                 if (wizardClientConsecutiveChecks >= 2) {
