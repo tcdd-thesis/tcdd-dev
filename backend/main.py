@@ -509,16 +509,20 @@ def shutdown_system():
     if not is_local_request():
         return jsonify({'error': 'Shutdown can only be triggered from the touchscreen'}), 403
     import subprocess
-    import threading
-    
-    def delayed_shutdown():
-        import time
-        time.sleep(2)  # Allow UI to show shutdown message
-        logger.info("Executing system shutdown...")
-        subprocess.run(['sudo', 'shutdown', 'now'])
     
     logger.info("Shutdown requested via API")
-    threading.Thread(target=delayed_shutdown, daemon=True).start()
+    
+    try:
+        subprocess.Popen(
+            ['bash', '-c', 'sleep 2; sudo shutdown now'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to initiate shutdown: {e}")
+        return jsonify({'error': str(e)}), 500
+    
     return jsonify({'message': 'Shutting down...'}), 200
 
 @app.route('/api/reboot', methods=['POST'])
@@ -559,24 +563,20 @@ def close_app():
     if not is_local_request():
         return jsonify({'error': 'Close app can only be triggered from the touchscreen'}), 403
     import subprocess
-    import threading
-    import signal
-    
-    def delayed_close():
-        import time
-        time.sleep(1)  # Allow response to reach the client
-        logger.info("Killing Chromium browser...")
-        try:
-            subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
-        except Exception as e:
-            logger.warning(f"Could not kill Chromium: {e}")
-        
-        logger.info("Stopping Flask server...")
-        time.sleep(0.5)
-        os.kill(os.getpid(), signal.SIGTERM)
     
     logger.info("Close app requested via API")
-    threading.Thread(target=delayed_close, daemon=True).start()
+    
+    try:
+        subprocess.Popen(
+            ['bash', '-c', 'sleep 1; pkill -f chromium; sleep 0.5; kill ' + str(os.getpid())],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to initiate close: {e}")
+        return jsonify({'error': str(e)}), 500
+    
     return jsonify({'message': 'Closing application...'}), 200
 
 @app.route('/api/camera/start', methods=['POST'])

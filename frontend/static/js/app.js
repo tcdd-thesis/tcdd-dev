@@ -2305,6 +2305,12 @@ function connectWebSocket() {
         updateConnectionIndicator('connected');
         updateStatus('backend', true);
 
+        // Dismiss any stale progress modals left from shutdown/reboot
+        ['shutdown-progress-modal', 'reboot-progress-modal', 'closeapp-progress-modal'].forEach(id => {
+            const m = document.getElementById(id);
+            if (m) m.style.display = 'none';
+        });
+
         // Only show "Reconnected" toast if this was a reconnect, not initial connect
         if (state._wsWasConnected) {
             showToast('Reconnected to server', 'success');
