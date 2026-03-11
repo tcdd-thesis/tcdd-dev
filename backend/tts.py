@@ -46,9 +46,9 @@ TRAFFIC_ALERTS = {
     "yield_to_pedestrian":               "Yield to pedestrians ahead.",
 
     # --- Medium (Tier 3) ---
-    "speed_limit_50kph":                 "Speed limit fifty kilometers per hour.",
-    "speed_limit_60kph":                 "Speed limit sixty kilometers per hour.",
-    "speed_limit_80kph":                 "Speed limit eighty kilometers per hour.",
+    "speed_limit_50":                 "Speed limit fifty kilometers per hour.",
+    "speed_limit_60":                 "Speed limit sixty kilometers per hour.",
+    "speed_limit_80":                 "Speed limit eighty kilometers per hour.",
     "no_uturn":                          "No U-turn allowed.",
     "no_left_turn":                      "No left turn allowed.",
     "no_right_turn":                     "No right turn allowed.",
