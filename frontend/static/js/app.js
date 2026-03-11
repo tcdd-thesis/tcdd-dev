@@ -26,7 +26,9 @@ const state = {
     // WebSocket reconnection state tracking
     _wsWasConnected: false,
     _wsReconnectToastShown: false,
-    _wsConnectionState: 'disconnected'  // 'connected' | 'reconnecting' | 'disconnected'
+    _wsConnectionState: 'disconnected',  // 'connected' | 'reconnecting' | 'disconnected'
+    // Suppress config_updated toast when change originated locally (e.g. brightness slider)
+    _suppressConfigToast: false
 };
 
 // ============================================================================
@@ -2211,7 +2213,10 @@ function connectWebSocket() {
                 loadSettings();
             }
 
-            showToast('Configuration updated automatically', 'info');
+            // Only show toast if this config change was NOT triggered by local UI interaction
+            if (!state._suppressConfigToast) {
+                showToast('Configuration updated automatically', 'info');
+            }
         }
     });
 }
@@ -2406,6 +2411,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply screen brightness immediately via CSS overlay
         setScreenBrightness(value);
 
+        // Suppress the config_updated toast since we initiated this change
+        state._suppressConfigToast = true;
+
         // Debounce saving to config (don't need to save on every tiny change)
         if (brightnessTimeout) clearTimeout(brightnessTimeout);
         brightnessTimeout = setTimeout(async () => {
@@ -2414,6 +2422,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error('Failed to save brightness:', error);
             }
+            // Clear suppression after the config round-trip settles
+            setTimeout(() => { state._suppressConfigToast = false; }, 1000);
         }, 500);
     });
 
