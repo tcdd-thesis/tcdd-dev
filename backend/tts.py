@@ -119,9 +119,9 @@ PRIORITY_TIERS = {
     "yield_to_pedestrian":               2,
 
     # Tier 3 — Medium: regulatory signs
-    "speed_limit_50kph":                 3,
-    "speed_limit_60kph":                 3,
-    "speed_limit_80kph":                 3,
+    "speed_limit_50":                 3,
+    "speed_limit_60":                 3,
+    "speed_limit_80":                 3,
     "no_uturn":                          3,
     "no_left_turn":                      3,
     "no_right_turn":                     3,
