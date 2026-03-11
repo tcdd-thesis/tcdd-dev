@@ -164,6 +164,59 @@ function handleVideoFrame(data) {
         if (fpsEl) fpsEl.textContent = state.fps;
     }
     state.lastFrameTime = now;
+
+    // Visual alert for detections
+    if (data.detections && data.detections.length) {
+        showDetectionAlert(data.detections);
+    }
+}
+
+// ============================================================================
+// VISUAL DETECTION ALERTS
+// ============================================================================
+
+const ALERT_TIERS = {
+    stop: 1, traffic_light_red: 1, traffic_light_red_no_left_turn: 1,
+    traffic_light_red_no_right_turn: 1, traffic_light_red_right_turn: 1,
+    traffic_light_red_left_turn: 1, Stop: 1, 'Red Light': 1,
+    traffic_light_yellow: 2, yield: 2, pedestrian_crossing: 2,
+    pwd_crossing: 2, yield_to_pedestrian: 2,
+    speed_limit_50kph: 3, speed_limit_60kph: 3, speed_limit_80kph: 3,
+    no_uturn: 3, no_left_turn: 3, no_right_turn: 3, no_turn_on_red: 3,
+    no_left_turn_on_red: 3, no_right_turn_on_red: 3, no_parking: 3,
+    do_not_block_intersection: 3, curve_right: 3, curve_left: 3
+};
+
+const _alertCooldowns = {};
+const ALERT_COOLDOWN_MS = 5000;
+
+function showDetectionAlert(detections) {
+    const now = Date.now();
+    let bestTier = 99, bestLabel = '';
+    for (const det of detections) {
+        const label = det.class_name;
+        const tier = ALERT_TIERS[label];
+        if (!tier || tier > 3) continue;
+        if (_alertCooldowns[label] && now - _alertCooldowns[label] < ALERT_COOLDOWN_MS) continue;
+        if (tier < bestTier) { bestTier = tier; bestLabel = label; }
+    }
+    if (!bestLabel) return;
+
+    _alertCooldowns[bestLabel] = now;
+
+    const container = document.querySelector('.video-container');
+    if (!container) return;
+
+    const old = container.querySelector('.detection-alert');
+    if (old) old.remove();
+
+    const tierClass = bestTier === 1 ? 'alert-critical' : bestTier === 2 ? 'alert-warning' : 'alert-info';
+    const alertEl = document.createElement('div');
+    alertEl.className = `detection-alert ${tierClass}`;
+    alertEl.textContent = bestLabel.replace(/_/g, ' ');
+    container.appendChild(alertEl);
+
+    setTimeout(() => alertEl.remove(), 3000);
 }
 
 function setCameraWarning(show, message) {

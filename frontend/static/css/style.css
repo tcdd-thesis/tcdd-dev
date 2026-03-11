@@ -870,6 +870,33 @@ body:not(.touchscreen) #page-logs.active {
   50% { opacity: 0.5; }
 }
 
+/* Detection alert overlays */
+.detection-alert {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 10;
+  pointer-events: none;
+  animation: alert-fade 3s ease-in-out forwards;
+}
+.alert-critical { background: var(--danger); color: #fff; }
+.alert-warning  { background: var(--warning); color: #1a1a2e; }
+.alert-info     { background: var(--primary); color: #fff; }
+
+@keyframes alert-fade {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  10%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .stats-bar-compact {
   display: flex;
   gap: 20px;
