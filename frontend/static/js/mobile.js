@@ -25,7 +25,11 @@ const state = {
     },
     status: {
         connection: false
-    }
+    },
+    // WebSocket reconnection state tracking
+    _wsWasConnected: false,
+    _wsReconnectToastShown: false,
+    _wsConnectionState: 'disconnected'  // 'connected' | 'reconnecting' | 'disconnected'
 };
 
 // ============================================================================
@@ -612,14 +616,28 @@ function showAudioStatus(msg, type) {
 // ============================================================================
 
 function connectWebSocket() {
-    state.socket = io();
+    state.socket = io({
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5
+    });
 
     state.socket.on('connect', () => {
         console.log('WebSocket connected');
-        updateConnectionStatus(true);
-        showToast('Connected to server', 'success');
+        updateConnectionStatus('connected');
 
-        // Authenticate with session token
+        // Only show "Reconnected" toast if this was a reconnect, not initial connect
+        if (state._wsWasConnected) {
+            showToast('Reconnected to server', 'success');
+        } else {
+            showToast('Connected to server', 'success');
+        }
+        state._wsWasConnected = true;
+        state._wsReconnectToastShown = false;
+
+        // Authenticate with session token (also re-authenticates on reconnect)
         const token = localStorage.getItem('tcdd_session_token');
         if (token) {
             state.socket.emit('authenticate', { session_token: token });
@@ -635,10 +653,33 @@ function connectWebSocket() {
         showToast('Session expired. Please re-pair.', 'error');
     });
 
-    state.socket.on('disconnect', () => {
-        console.log('WebSocket disconnected');
-        updateConnectionStatus(false);
-        showToast('Disconnected from server', 'warning');
+    state.socket.on('disconnect', (reason) => {
+        console.log('WebSocket disconnected:', reason);
+
+        // If server intentionally disconnected us (force_disconnect follows), show red
+        // Otherwise Socket.IO will auto-reconnect, show amber
+        if (reason === 'io server disconnect') {
+            updateConnectionStatus('disconnected');
+        } else {
+            updateConnectionStatus('reconnecting');
+        }
+    });
+
+    state.socket.io.on('reconnect_attempt', (attempt) => {
+        console.log(`WebSocket reconnect attempt ${attempt}`);
+        updateConnectionStatus('reconnecting');
+
+        // Show reconnecting toast once (not on every attempt)
+        if (!state._wsReconnectToastShown) {
+            showToast('Connection lost. Reconnecting...', 'warning');
+            state._wsReconnectToastShown = true;
+        }
+    });
+
+    state.socket.io.on('reconnect_failed', () => {
+        console.error('WebSocket reconnect failed after all attempts');
+        updateConnectionStatus('disconnected');
+        showToast('Unable to reconnect. Please reload the page.', 'error');
     });
 
     state.socket.on('force_disconnect', (data) => {
@@ -677,13 +718,18 @@ function connectWebSocket() {
     });
 }
 
-function updateConnectionStatus(online) {
-    state.status.connection = online;
+/**
+ * Update the connection status indicator to one of three states:
+ * 'connected' (green), 'reconnecting' (amber), 'disconnected' (red)
+ */
+function updateConnectionStatus(status) {
+    state._wsConnectionState = status;
+    state.status.connection = (status === 'connected');
     const el = document.getElementById('status-connection');
     if (!el) return;
     const dot = el.querySelector('.status-dot');
     if (dot) {
-        dot.className = online ? 'status-dot online' : 'status-dot offline';
+        dot.className = 'status-dot ' + status;
     }
 }
 

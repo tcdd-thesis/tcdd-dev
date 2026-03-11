@@ -562,6 +562,11 @@ body.touchscreen {
   animation: pulse-icon 2s infinite;
 }
 
+.status-item.reconnecting .status-icon-indicator {
+  color: var(--warning);
+  animation: pulse-icon 1s infinite;
+}
+
 @keyframes pulse-icon {
   0%,
   100% {

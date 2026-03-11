@@ -44,6 +44,10 @@
                     </button>
                 </div>
                 <div class="status-panel">
+                    <div class="status-item" id="status-backend">
+                        <span class="status-icon-indicator"><i class="fa-solid fa-server"></i></span>
+                        <span class="status-label">Server</span>
+                    </div>
                     <div class="status-item" id="status-wifi">
                         <span id="home-wifi-fallback" class="status-icon-indicator"><i
                                 class="fa-solid fa-wifi"></i></span>
@@ -552,7 +556,7 @@
     <!-- Load SocketIO (bundled locally for offline/hotspot use) -->
     <script src="/static/js/socket.io.min.js"></script>
     <!-- Load our app with cache buster to ensure latest fixes -->
-    <script src="/static/js/app.js?v=1.0.2"></script>
+    <script src="/static/js/app.js?v=1.1.0"></script>
     {% if not is_touchscreen %}
     <script>
         // Landscape prompt logic (mobile only)

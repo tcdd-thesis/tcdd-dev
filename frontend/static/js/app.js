@@ -15,13 +15,18 @@ const state = {
     brightness: 50, // Default brightness (0-100)
     status: {
         wifi: false,
-        camera: false
+        camera: false,
+        backend: false
     },
     // Track original settings for unsaved changes detection
     originalSettings: {
         brightness: 50,
         confidence: 50
-    }
+    },
+    // WebSocket reconnection state tracking
+    _wsWasConnected: false,
+    _wsReconnectToastShown: false,
+    _wsConnectionState: 'disconnected'  // 'connected' | 'reconnecting' | 'disconnected'
 };
 
 // ============================================================================
@@ -2091,21 +2096,63 @@ async function disconnectBluetooth(mac) {
 // ============================================================================
 
 function connectWebSocket() {
-    state.socket = io();
+    state.socket = io({
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5
+    });
 
     state.socket.on('connect', () => {
         console.log('WebSocket connected');
+        updateConnectionIndicator('connected');
         updateStatus('backend', true);
-        showToast('Connected to server', 'success');
+
+        // Only show "Reconnected" toast if this was a reconnect, not initial connect
+        if (state._wsWasConnected) {
+            showToast('Reconnected to server', 'success');
+        } else {
+            showToast('Connected to server', 'success');
+        }
+        state._wsWasConnected = true;
+        state._wsReconnectToastShown = false;
+
         // Check full system status
         checkSystemStatus();
     });
 
-    state.socket.on('disconnect', () => {
-        console.log('WebSocket disconnected');
-        updateStatus('backend', false);
+    state.socket.on('disconnect', (reason) => {
+        console.log('WebSocket disconnected:', reason);
         updateStatus('camera', false);
-        showToast('Disconnected from server', 'warning');
+
+        // If the server shut us down intentionally, show disconnected (red)
+        // Otherwise Socket.IO will auto-reconnect, so show reconnecting (amber)
+        if (reason === 'io server disconnect') {
+            updateConnectionIndicator('disconnected');
+            updateStatus('backend', false);
+            showToast('Disconnected by server', 'warning');
+        } else {
+            updateConnectionIndicator('reconnecting');
+            updateStatus('backend', false);
+        }
+    });
+
+    state.socket.io.on('reconnect_attempt', (attempt) => {
+        console.log(`WebSocket reconnect attempt ${attempt}`);
+        updateConnectionIndicator('reconnecting');
+
+        // Show reconnecting toast once (not on every attempt)
+        if (!state._wsReconnectToastShown) {
+            showToast('Connection lost. Reconnecting...', 'warning');
+            state._wsReconnectToastShown = true;
+        }
+    });
+
+    state.socket.io.on('reconnect_failed', () => {
+        console.error('WebSocket reconnect failed after all attempts');
+        updateConnectionIndicator('disconnected');
+        showToast('Unable to reconnect. Please reload the page.', 'error');
     });
 
     state.socket.on('video_frame', (data) => {
@@ -2193,6 +2240,26 @@ function updateStatus(component, isOnline) {
         statusElement.classList.add('connected');
     } else {
         statusElement.classList.remove('connected');
+    }
+}
+
+/**
+ * Update the backend connection indicator to one of three states:
+ * 'connected' (green), 'reconnecting' (amber), 'disconnected' (red)
+ */
+function updateConnectionIndicator(status) {
+    state._wsConnectionState = status;
+    const el = document.getElementById('status-backend');
+    if (!el) return;
+
+    const icon = el.querySelector('.status-icon-indicator');
+    if (icon) {
+        el.classList.remove('connected', 'reconnecting');
+        if (status === 'connected') {
+            el.classList.add('connected');
+        } else if (status === 'reconnecting') {
+            el.classList.add('reconnecting');
+        }
     }
 }
 

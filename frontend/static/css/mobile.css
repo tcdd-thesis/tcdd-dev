@@ -160,6 +160,22 @@ body {
     transition: background 0.3s;
 }
 
+.status-dot.connected {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.status-dot.reconnecting {
+    background: var(--warning);
+    box-shadow: 0 0 6px var(--warning);
+    animation: pulse-reconnect 1s infinite;
+}
+
+.status-dot.disconnected {
+    background: var(--danger);
+}
+
+/* Keep legacy classes for backwards compatibility */
 .status-dot.online {
     background: var(--success);
     box-shadow: 0 0 6px var(--success);
@@ -167,6 +183,11 @@ body {
 
 .status-dot.offline {
     background: var(--danger);
+}
+
+@keyframes pulse-reconnect {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
 }
 
 .status-label {
