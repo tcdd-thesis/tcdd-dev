@@ -318,7 +318,8 @@
                 <button class="btn-close" onclick="closeHotspotPrompt()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="modal-body">
-                <p>This will temporarily disconnect the system from WiFi to broadcast the pairing signal. Proceed?</p>
+                <p>This will temporarily disconnect from WiFi to broadcast the pairing signal.</p>
+                <p style="margin-top:8px; color:#e8a735;"><i class="fa-solid fa-triangle-exclamation"></i> Remote access (RPi Connect) will be unavailable until the hotspot is stopped.</p>
                 <div style="margin-top: 15px; display: flex; gap: 10px;">
                     <button class="btn btn-secondary btn-touch" onclick="closeHotspotPrompt()">Cancel</button>
                     <button class="btn btn-success btn-touch" onclick="confirmStartPairing()">Start</button>

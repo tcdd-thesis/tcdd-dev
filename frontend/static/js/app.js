@@ -1444,18 +1444,10 @@ function confirmStartPairing() {
 }
 
 async function startPairingWizard(force = false) {
-    // If not forcing, check if we might need the prompt first
+    // Always show warning prompt before starting hotspot (disconnects WiFi + remote access)
     if (!force) {
-        try {
-            const status = await api.get('/wifi/status');
-            if (status && status.connected) {
-                // Currently on WiFi. Show warning prompt instead of opening wizard.
-                showHotspotPrompt();
-                return;
-            }
-        } catch (e) {
-            console.warn("Failed to check WiFi status before pairing wizard", e);
-        }
+        showHotspotPrompt();
+        return;
     }
 
     const modal = document.getElementById('pairing-wizard-modal');
