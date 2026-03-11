@@ -283,6 +283,15 @@ def initialize():
 
         tts_engine.set_on_speak_callback(on_tts_speak)
 
+        def on_tts_error(message):
+            logger.error(f"TTS fatal error: {message}")
+            socketio.emit('system_warning', {
+                'type': 'tts_error',
+                'message': message
+            })
+
+        tts_engine.set_on_error_callback(on_tts_error)
+
         if tts_engine.is_ready():
             tts_engine.speak("System ready. Driver assistance activated.")
         

@@ -2194,6 +2194,8 @@ function connectWebSocket() {
         } else if (data.type === 'camera_recovered') {
             state._cameraStale = false;
             setCameraWarning(false);
+        } else if (data.type === 'tts_error') {
+            showToast('Voice alerts disabled: ' + data.message, 'error');
         }
     });
 

@@ -213,6 +213,9 @@ class TTSEngine:
         self._thread: threading.Thread | None = None
         self._engine_ready = False
         self._on_speak_callback = None  # Called with (text, label, priority) when alert fires
+        self._on_error_callback = None   # Called with (message: str) when TTS fails fatally
+        self._consecutive_failures = 0
+        self._max_consecutive_failures = 3
 
         if not HAS_TTS:
             logger.warning("TTS engine disabled — espeak is not installed")
@@ -276,7 +279,23 @@ class TTSEngine:
                     # Poison pill — shut down
                     break
 
-                self._speak_subprocess(message)
+                ok = self._speak_subprocess(message)
+                if ok:
+                    self._consecutive_failures = 0
+                else:
+                    self._consecutive_failures += 1
+                    if self._consecutive_failures >= self._max_consecutive_failures:
+                        logger.error("TTS: %d consecutive failures — disabling TTS",
+                                     self._consecutive_failures)
+                        self.enabled = False
+                        self._engine_ready = False
+                        if self._on_error_callback:
+                            try:
+                                self._on_error_callback(
+                                    f"TTS disabled after {self._consecutive_failures} consecutive failures")
+                            except Exception:
+                                pass
+                        break
 
             except Empty:
                 continue
@@ -309,11 +328,17 @@ class TTSEngine:
         ]
 
         try:
-            subprocess.run(cmd, timeout=15, capture_output=True)
+            result = subprocess.run(cmd, timeout=15, capture_output=True)
+            if result.returncode != 0:
+                logger.warning(f"TTS subprocess exited with code {result.returncode} for: {text!r}")
+                return False
+            return True
         except subprocess.TimeoutExpired:
             logger.warning(f"TTS subprocess timed out for: {text!r}")
+            return False
         except Exception as e:
             logger.error(f"TTS subprocess error: {e}")
+            return False
 
     # -----------------------------------------------------------------
     # Public API
@@ -414,6 +439,13 @@ class TTSEngine:
         """
         self._on_speak_callback = callback
         logger.info(f"TTS on_speak callback {'set' if callback else 'cleared'}")
+
+    def set_on_error_callback(self, callback):
+        """
+        Register a callback invoked when TTS fails fatally (consecutive errors).
+        The callback receives (message: str).
+        """
+        self._on_error_callback = callback
 
     def stop(self):
         """Shut down the TTS worker thread gracefully."""
