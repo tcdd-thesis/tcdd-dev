@@ -28,7 +28,10 @@ const state = {
     _wsReconnectToastShown: false,
     _wsConnectionState: 'disconnected',  // 'connected' | 'reconnecting' | 'disconnected'
     // Suppress config_updated toast when change originated locally (e.g. brightness slider)
-    _suppressConfigToast: false
+    _suppressConfigToast: false,
+    // Camera health state
+    _cameraStale: false,
+    _lastServerFrameTime: 0
 };
 
 // ============================================================================
@@ -681,6 +684,21 @@ function handleVideoFrame(data) {
     state.fps = Math.round(1000 / delta);
     document.getElementById('fps-value').textContent = state.fps;
     state.lastFrameTime = now;
+}
+
+function setCameraWarning(show, message) {
+    const noFeed = document.getElementById('no-feed');
+    if (!noFeed) return;
+    if (show) {
+        noFeed.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>' +
+            (message || 'Camera not responding') + '</span>';
+        noFeed.classList.add('camera-warning');
+        noFeed.style.display = 'flex';
+    } else {
+        noFeed.classList.remove('camera-warning');
+        noFeed.style.display = 'none';
+        noFeed.innerHTML = '';
+    }
 }
 
 // ============================================================================
@@ -2160,6 +2178,22 @@ function connectWebSocket() {
     state.socket.on('video_frame', (data) => {
         if (state.currentPage === 'live') {
             handleVideoFrame(data);
+        }
+        // Track last frame arrival for client-side stale detection
+        state._lastServerFrameTime = Date.now();
+        if (state._cameraStale) {
+            state._cameraStale = false;
+            setCameraWarning(false);
+        }
+    });
+
+    state.socket.on('system_warning', (data) => {
+        if (data.type === 'camera_stale') {
+            state._cameraStale = true;
+            setCameraWarning(true, data.message);
+        } else if (data.type === 'camera_recovered') {
+            state._cameraStale = false;
+            setCameraWarning(false);
         }
     });
 

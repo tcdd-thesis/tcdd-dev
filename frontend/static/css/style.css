@@ -851,6 +851,25 @@ body:not(.touchscreen) #page-logs.active {
   color: rgba(255, 255, 255, 0.3);
 }
 
+.no-feed.camera-warning {
+  color: var(--warning);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.no-feed.camera-warning i {
+  font-size: 28px;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .stats-bar-compact {
   display: flex;
   gap: 20px;

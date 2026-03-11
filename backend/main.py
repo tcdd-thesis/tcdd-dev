@@ -132,6 +132,7 @@ _latest_annotated = None        # Most recent annotated frame
 _latest_result_lock = threading.Lock()
 _pipeline_frame_count = 0       # Frames captured by camera thread
 _pipeline_infer_count = 0       # Frames processed by inference thread
+_last_frame_time = 0.0          # monotonic timestamp of last camera frame
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -1532,7 +1533,7 @@ def disconnect_bluetooth():
 
 def _camera_capture_loop():
     """Producer thread: grab frames as fast as the camera delivers them."""
-    global _latest_frame, _pipeline_frame_count, is_streaming
+    global _latest_frame, _pipeline_frame_count, _last_frame_time, is_streaming
     logger.info("[CamThread] Camera capture thread started")
     while is_streaming:
         try:
@@ -1542,6 +1543,7 @@ def _camera_capture_loop():
             with _latest_frame_lock:
                 _latest_frame = frame
             _pipeline_frame_count += 1
+            _last_frame_time = time.monotonic()
         except Exception as e:
             logger.error(f"[CamThread] Error: {e}")
             import time; time.sleep(0.05)
@@ -1590,9 +1592,34 @@ def stream_video():
     process = psutil.Process(os.getpid())
     metrics_interval = max(1, int(config.get('streaming.metrics_interval', 30)))
     _prev_infer_id = -1
+    _camera_stale_threshold = 3.0   # seconds without a new frame
+    _last_health_check = 0.0
+    _camera_was_stale = False
 
     while is_streaming:
         try:
+            # ── Periodic camera health check (every ~2s) ────────────
+            _now_mono = time.monotonic()
+            if _now_mono - _last_health_check >= 2.0:
+                _last_health_check = _now_mono
+                _frame_age = _now_mono - _last_frame_time if _last_frame_time else 0
+                if _last_frame_time and _frame_age > _camera_stale_threshold:
+                    if not _camera_was_stale:
+                        logger.warning("[StreamLoop] Camera stale – no frame for %.1fs", _frame_age)
+                        _camera_was_stale = True
+                    socketio.emit('system_warning', {
+                        'type': 'camera_stale',
+                        'message': 'Camera not responding',
+                        'stale_seconds': round(_frame_age, 1)
+                    })
+                elif _camera_was_stale:
+                    logger.info("[StreamLoop] Camera recovered")
+                    socketio.emit('system_warning', {
+                        'type': 'camera_recovered',
+                        'message': 'Camera recovered'
+                    })
+                    _camera_was_stale = False
+
             # Grab latest annotated frame + detections
             with _latest_result_lock:
                 annotated_frame = _latest_annotated
