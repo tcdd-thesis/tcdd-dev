@@ -680,17 +680,38 @@ bind-interfaces
     def get_connected_clients(self) -> list:
         """
         Get list of connected clients (if available).
+        Uses iw station dump (WiFi-level association) as primary source,
+        falling back to ip neigh (ARP table) if iw is unavailable.
         
         Returns:
             list: Connected client information
         """
-        # This is a best-effort attempt to get connected clients
-        # Use ip neigh on Linux to only get REACHABLE or STALE clients,
-        # ignoring old FAILED or INCOMPLETE arp cache entries.
         clients = []
         
         try:
-            # Try to read from ip neigh (Linux)
+            # Primary: iw station dump — detects WiFi-associated clients instantly,
+            # even before DHCP/ARP traffic (critical for returning devices with saved connections)
+            result = subprocess.run(
+                ['iw', 'dev', self._interface, 'station', 'dump'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                for line in result.stdout.split('\n'):
+                    # Lines like: "Station aa:bb:cc:dd:ee:ff (on wlan0)"
+                    if line.startswith('Station '):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            clients.append({
+                                'ip': 'associated',
+                                'mac': parts[1]
+                            })
+                if clients:
+                    return clients
+            
+            # Fallback: ip neigh — ARP-level detection (requires prior IP traffic)
             result = subprocess.run(
                 ['ip', 'neigh', 'show', 'dev', self._interface],
                 capture_output=True,
@@ -700,38 +721,15 @@ bind-interfaces
             
             if result.returncode == 0:
                 for line in result.stdout.strip().split('\n'):
-                    # Match entries like: 10.42.0.123 lladdr aa:bb:cc:dd:ee:ff REACHABLE
                     if '10.42.0.' in line and '10.42.0.1 ' not in line:
                         parts = line.split()
-                        # Only count if state is REACHABLE, STALE, DELAY, or PROBE (recently seen)
                         if len(parts) >= 5 and parts[-1] in ['REACHABLE', 'STALE', 'DELAY', 'PROBE']:
                             clients.append({
                                 'ip': parts[0],
                                 'mac': parts[4] if parts[3] == 'lladdr' else 'unknown'
                             })
-                            
-            # Fallback for non-Linux or if ip command fails
-            if not clients:
-                result = subprocess.run(
-                    ['arp', '-a'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                
-                if result.returncode == 0:
-                    for line in result.stdout.split('\n'):
-                        if '10.42.0.' in line and '10.42.0.1' not in line:
-                            # Only include Dynamic/active looking IPs in windows fallback
-                            if 'dynamic' in line.lower() or 'ether' in line.lower():
-                                parts = line.split()
-                                if len(parts) >= 3:
-                                    clients.append({
-                                        'ip': parts[0] if not parts[0].startswith('(') else parts[1].strip('()'),
-                                        'mac': parts[1] if not parts[0].startswith('(') else parts[3]
-                                    })
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Client detection error: {e}")
         
         return clients
 
