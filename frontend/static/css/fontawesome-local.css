@@ -42,6 +42,8 @@
 .fa-bars:before { content: "\f0c9"; }
 .fa-arrow-left:before { content: "\f060"; }
 .fa-refresh:before, .fa-sync:before { content: "\f021"; }
+.fa-server:before { content: "\f233"; }
+.fa-ellipsis-v:before, .fa-ellipsis-vertical:before { content: "\f142"; }
 
 /* Menu and Navigation */
 .fa-list:before { content: "\f03a"; }
@@ -80,3 +82,19 @@
 .fa-signal:before { content: "\f012"; }
 .fa-lock:before { content: "\f023"; }
 .fa-trash:before { content: "\f1f8"; }
+
+/* Mobile, Audio and Pairing */
+.fa-mobile-alt:before, .fa-mobile-screen-button:before { content: "\f3cd"; }
+.fa-volume-high:before, .fa-volume-up:before { content: "\f028"; }
+.fa-volume-xmark:before, .fa-volume-mute:before { content: "\f6a9"; }
+.fa-video-slash:before { content: "\f4e2"; }
+.fa-crosshairs:before { content: "\f05b"; }
+.fa-circle-info:before, .fa-info-circle:before { content: "\f05a"; }
+.fa-plug-circle-xmark:before { content: "\e560"; }
+.fa-bookmark:before { content: "\f02e"; }
+.fa-wand-magic-sparkles:before { content: "\e2ca"; }
+.fa-check-circle:before, .fa-circle-check:before { content: "\f058"; }
+.fa-clock:before { content: "\f017"; }
+.fa-arrow-right:before { content: "\f061"; }
+.fa-chain:before, .fa-link:before { content: "\f0c1"; }
+.fa-circle-notch:before { content: "\f1ce"; }
