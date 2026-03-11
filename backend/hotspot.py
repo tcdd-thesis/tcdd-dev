@@ -59,6 +59,12 @@ class HotspotManager:
         
         # Check current hotspot status
         self._check_status()
+        
+        # Clean up stale dnsmasq config if hotspot is not active.
+        # The config binds to 10.42.0.1 which only exists when the hotspot
+        # is running, so a leftover file crashes dnsmasq at next boot.
+        if not self._is_active:
+            self._cleanup_dns()
     
     def _load_from_config(self):
         """Load hotspot settings from config.json."""
