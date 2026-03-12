@@ -170,7 +170,7 @@ def initialize_camera():
             
             # Configure camera with auto white balance enabled
             config = camera.create_preview_configuration(
-                main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
+                main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "BGR888"},
                 buffer_count=2  # ≥4 buffers to sustain full frame rate
                                 # (2 buffers causes ping-pong that halves FPS)
             )
@@ -296,10 +296,8 @@ def get_frame(manual_awb=False):
     
     try:
         if USE_PICAMERA and isinstance(camera, Picamera2):
-            # Picamera2 outputs RGB888 — convert once to BGR
+            # Picamera2 configured with BGR888 — already OpenCV-native order
             frame = camera.capture_array()
-            if frame is not None:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         else:
             # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
