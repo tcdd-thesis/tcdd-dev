@@ -315,7 +315,7 @@ def get_frame(manual_awb=False):
             # folded into the same NEON memcpy pass (~0.2 ms on RPi5).
             frame = camera.capture_array()
             if frame is not None:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         else:
             # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
