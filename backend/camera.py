@@ -159,39 +159,33 @@ class Camera:
         return get_frame(manual_awb=self._manual_awb)
 
 
-_picamera_needs_rgb2bgr = False  # Set during init if BGR888 format not available
-
-
 def initialize_camera():
     """Initialize Raspberry Pi camera or fallback to USB camera."""
-    global camera, _picamera_needs_rgb2bgr
+    global camera
     
     if USE_PICAMERA:
         try:
             logger.info("Initializing Raspberry Pi Camera...")
             camera = Picamera2()
             
-            # Prefer BGR888 so the ISP delivers OpenCV-native channel order
-            # with zero CPU conversion.  If the platform/Picamera2 version
-            # doesn't support BGR888 we fall back to RGB888 + fast cvtColor.
-            chosen_fmt = "BGR888"
-            try:
-                cfg = camera.create_preview_configuration(
-                    main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "BGR888"},
-                    buffer_count=2,
-                )
-                camera.configure(cfg)
-                _picamera_needs_rgb2bgr = False
-                logger.info("Picamera2: using BGR888 (zero-cost ISP conversion)")
-            except Exception:
-                logger.warning("BGR888 not supported — falling back to RGB888")
-                chosen_fmt = "RGB888"
-                cfg = camera.create_preview_configuration(
-                    main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
-                    buffer_count=2,
-                )
-                camera.configure(cfg)
-                _picamera_needs_rgb2bgr = True
+            # Always request RGB888 from the ISP.  The per-frame
+            # cvtColor(RGB→BGR) in get_frame() serves double duty:
+            #   1. Converts to OpenCV-native BGR channel order.
+            #   2. Copies the data out of Picamera2's DMA buffer
+            #      (mandatory with buffer_count=2 to avoid corruption).
+            # A plain .copy() would cost the same — cvtColor just also
+            # swaps R↔B during the same NEON-optimised memcpy pass,
+            # so there is zero additional overhead.
+            #
+            # NOTE: BGR888 format is NOT used because Picamera2 on many
+            # RPi platforms silently delivers RGB data regardless of the
+            # format label, causing a red↔blue swap in the live feed.
+            config = camera.create_preview_configuration(
+                main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
+                buffer_count=2  # ≥4 buffers to sustain full frame rate
+                                # (2 buffers causes ping-pong that halves FPS)
+            )
+            camera.configure(config)
             
             # Set controls for target frame rate and white balance
             # FrameDurationLimits (min, max) in microseconds — forces the ISP to
@@ -205,30 +199,10 @@ def initialize_camera():
             })
             
             camera.start()
-            # Warm up camera and let AWB stabilise
+            # Warm up camera and let AWB stabilize
             time.sleep(1.0)
-            
-            # ── Runtime channel-order verification ──────────────────
-            # Capture a test frame and check whether the actual memory
-            # layout matches what we requested.  Some Picamera2 builds
-            # silently remap BGR888↔RGB888, so we detect that here and
-            # compensate once rather than guessing.
-            test_frame = camera.capture_array()
-            if test_frame is not None and chosen_fmt == "BGR888":
-                # The configured format's actual byte order can be read
-                # from the stream config that Picamera2 negotiated.
-                actual_fmt = camera.camera_configuration()["main"]["format"]
-                if actual_fmt != "BGR888":
-                    logger.warning(
-                        f"Requested BGR888 but got {actual_fmt} — enabling RGB→BGR conversion"
-                    )
-                    _picamera_needs_rgb2bgr = True
-            
-            mode_str = "BGR-native" if not _picamera_needs_rgb2bgr else "RGB888+cvtColor"
-            logger.info(
-                f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} "
-                f"@ {CAMERA_FPS} FPS, FrameDuration={frame_duration_us}µs, {mode_str})"
-            )
+            logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
+                         f"FrameDuration={frame_duration_us}µs, RGB888+cvtColor)")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Pi Camera: {e}")
@@ -334,17 +308,14 @@ def get_frame(manual_awb=False):
     try:
         if USE_PICAMERA and isinstance(camera, Picamera2):
             # capture_array() returns a numpy view into Picamera2's DMA
-            # buffer.  We MUST copy the data out before the next capture
-            # recycles that buffer (buffer_count=2).
-            # • BGR888 path  → .copy() is a plain memcpy (zero conversion).
-            # • RGB888 path  → cvtColor(RGB→BGR) copies + swaps in one
-            #                  NEON-optimised pass (~0.2 ms on RPi5).
+            # buffer.  cvtColor(RGB→BGR) serves double duty:
+            #   1. Converts RGB888 → BGR (OpenCV-native channel order)
+            #   2. Copies data out of the DMA buffer before it's recycled
+            # Cost is identical to a plain .copy() — the R↔B swap is
+            # folded into the same NEON memcpy pass (~0.2 ms on RPi5).
             frame = camera.capture_array()
             if frame is not None:
-                if _picamera_needs_rgb2bgr:
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                else:
-                    frame = frame.copy()  # release DMA buffer promptly
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         else:
             # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
