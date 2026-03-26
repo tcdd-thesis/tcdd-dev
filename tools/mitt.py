@@ -1,0 +1,1729 @@
+#!/usr/bin/env python3
+"""
+Model Inference Testing Tool (MITT)
+Standalone model inference GUI tool for performance testing.
+
+Supported model formats:
+- PyTorch/Ultralytics (.pt, .pth) via existing Detector backend
+- HEF (.hef) via existing Detector + Hailo path
+- ONNX (.onnx) via onnxruntime
+
+Input modes:
+- Single image
+- Dataset folder (recursive image scan)
+- Camera stream (Windows webcams/USB, Raspberry Pi camera module)
+"""
+
+from __future__ import annotations
+
+import os
+import time
+import queue
+import json
+import threading
+import platform
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+import cv2
+import numpy as np
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from tkinter.scrolledtext import ScrolledText
+
+try:
+    from PIL import Image, ImageTk
+except ImportError as exc:
+    raise RuntimeError("Pillow is required for preview rendering. Install pillow.") from exc
+
+# Reuse the existing RPi-ready detector implementation
+try:
+    from detector import Detector, HAS_HAILO, HAS_YOLO
+except ImportError:
+    Detector = None
+    HAS_HAILO = False
+    HAS_YOLO = False
+
+try:
+    import onnxruntime as ort
+except ImportError:
+    ort = None
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
+    from picamera2 import Picamera2
+except ImportError:
+    Picamera2 = None
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+MODEL_EXTENSIONS = {".pt", ".pth", ".onnx", ".hef"}
+
+
+class DictConfig:
+    """Tiny dot-notation config adapter for Detector compatibility."""
+
+    def __init__(self, data: Dict[str, Any]):
+        self._data = data
+
+    def get(self, key: str, default: Any = None) -> Any:
+        node: Any = self._data
+        for part in key.split("."):
+            if isinstance(node, dict) and part in node:
+                node = node[part]
+            else:
+                return default
+        return node
+
+
+@dataclass
+class InferenceResult:
+    latency_ms: float
+    detections: int
+    output_summary: str
+    annotated_frame: Optional[np.ndarray]
+    predictions: Optional[List[Dict[str, Any]]] = None
+
+
+class BaseBackend:
+    name = "base"
+
+    def infer(self, frame_bgr: np.ndarray) -> InferenceResult:
+        raise NotImplementedError
+
+    def get_model_info(self) -> Dict[str, Any]:
+        return {"backend": self.name}
+
+    def close(self) -> None:
+        return None
+
+
+class DetectorBackend(BaseBackend):
+    """Wrap the existing Detector class for .pt/.pth and .hef models."""
+
+    name = "detector"
+
+    def __init__(
+        self,
+        model_path: str,
+        confidence: float,
+        iou: float,
+        labels_path: str,
+        use_hailo_for_hef: bool,
+        device: str,
+    ):
+        if Detector is None:
+            raise RuntimeError("Unable to import Detector from backend/detector.py")
+
+        suffix = Path(model_path).suffix.lower()
+        if suffix == ".hef":
+            if not use_hailo_for_hef:
+                raise RuntimeError("HEF model selected but Hailo option is disabled.")
+            if not HAS_HAILO:
+                raise RuntimeError("hailo_platform is not available in this environment.")
+            engine = "hef"
+            detection_device = "hailo"
+        else:
+            if not HAS_YOLO:
+                raise RuntimeError("ultralytics is not available in this environment.")
+            engine = "ultralytics"
+            detection_device = device
+
+        config_dict: Dict[str, Any] = {
+            "detection": {
+                "engine": engine,
+                "device": detection_device,
+                "model_files": [model_path],
+                "labels": labels_path,
+                "confidence": confidence,
+                "iou_threshold": iou,
+            }
+        }
+        self.model_path = model_path
+        self._detector = Detector(DictConfig(config_dict))
+
+        if not self._detector.is_loaded():
+            raise RuntimeError("Detector backend did not load the model successfully.")
+
+    def infer(self, frame_bgr: np.ndarray) -> InferenceResult:
+        start = time.perf_counter()
+        detections = self._detector.detect(frame_bgr)
+        latency_ms = (time.perf_counter() - start) * 1000.0
+
+        count = len(detections) if isinstance(detections, list) else 0
+        annotated = self._detector.draw_detections(frame_bgr, detections) if count else frame_bgr.copy()
+        summary = f"detections={count}"
+
+        return InferenceResult(
+            latency_ms=latency_ms,
+            detections=count,
+            output_summary=summary,
+            annotated_frame=annotated,
+            predictions=detections if isinstance(detections, list) else [],
+        )
+
+    def get_model_info(self) -> Dict[str, Any]:
+        info = self._detector.get_info()
+        info["backend"] = self.name
+        return info
+
+    def close(self) -> None:
+        if hasattr(self._detector, "_cleanup_hailo"):
+            try:
+                self._detector._cleanup_hailo()
+            except Exception:
+                pass
+
+
+class OnnxBackend(BaseBackend):
+    """Generic ONNX Runtime backend for performance testing."""
+
+    name = "onnxruntime"
+
+    _DTYPE_MAP = {
+        "tensor(float)": np.float32,
+        "tensor(float16)": np.float16,
+        "tensor(double)": np.float64,
+        "tensor(int64)": np.int64,
+        "tensor(int32)": np.int32,
+        "tensor(uint8)": np.uint8,
+        "tensor(int8)": np.int8,
+    }
+
+    def __init__(self, model_path: str, prefer_gpu: bool):
+        if ort is None:
+            raise RuntimeError("onnxruntime is not installed in this environment.")
+
+        requested = ["CPUExecutionProvider"]
+        if prefer_gpu:
+            requested = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+        available = set(ort.get_available_providers())
+        providers = [p for p in requested if p in available]
+        if not providers:
+            providers = ["CPUExecutionProvider"]
+
+        self.model_path = model_path
+        self.session = ort.InferenceSession(model_path, providers=providers)
+        self.input_meta = self.session.get_inputs()[0]
+        self.input_name = self.input_meta.name
+        self.input_shape = list(self.input_meta.shape)
+        self.input_type = self.input_meta.type
+        self.channels_last = self._is_channels_last(self.input_shape)
+        self.height, self.width = self._resolve_hw(self.input_shape)
+
+    @staticmethod
+    def _resolve_dim(raw: Any, fallback: int) -> int:
+        if isinstance(raw, int) and raw > 0:
+            return raw
+        return fallback
+
+    def _is_channels_last(self, shape: Sequence[Any]) -> bool:
+        if len(shape) != 4:
+            return False
+        if shape[-1] in (1, 3):
+            return True
+        if shape[1] in (1, 3):
+            return False
+        return False
+
+    def _resolve_hw(self, shape: Sequence[Any]) -> Tuple[int, int]:
+        if len(shape) == 4:
+            if shape[1] in (1, 3):  # NCHW
+                return self._resolve_dim(shape[2], 640), self._resolve_dim(shape[3], 640)
+            if shape[-1] in (1, 3):  # NHWC
+                return self._resolve_dim(shape[1], 640), self._resolve_dim(shape[2], 640)
+        return 640, 640
+
+    def _preprocess(self, frame_bgr: np.ndarray) -> np.ndarray:
+        input_dtype = self._DTYPE_MAP.get(self.input_type, np.float32)
+        resized = cv2.resize(frame_bgr, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+
+        if input_dtype == np.uint8:
+            arr = rgb
+        else:
+            arr = rgb.astype(np.float32) / 255.0
+
+        if len(self.input_shape) == 4 and not self.channels_last:
+            arr = np.transpose(arr, (2, 0, 1))
+
+        if len(self.input_shape) == 4:
+            arr = np.expand_dims(arr, axis=0)
+
+        return arr.astype(input_dtype, copy=False)
+
+    @staticmethod
+    def _summarize_outputs(outputs: Sequence[Any]) -> str:
+        parts: List[str] = []
+        for idx, out in enumerate(outputs):
+            if isinstance(out, np.ndarray):
+                parts.append(f"out{idx}: shape={tuple(out.shape)} dtype={out.dtype}")
+            else:
+                parts.append(f"out{idx}: type={type(out).__name__}")
+            if idx >= 2:
+                break
+        return " | ".join(parts)
+
+    def infer(self, frame_bgr: np.ndarray) -> InferenceResult:
+        model_input = self._preprocess(frame_bgr)
+        start = time.perf_counter()
+        outputs = self.session.run(None, {self.input_name: model_input})
+        latency_ms = (time.perf_counter() - start) * 1000.0
+
+        return InferenceResult(
+            latency_ms=latency_ms,
+            detections=0,
+            output_summary=self._summarize_outputs(outputs),
+            annotated_frame=frame_bgr.copy(),
+        )
+
+    def get_model_info(self) -> Dict[str, Any]:
+        return {
+            "backend": self.name,
+            "model": self.model_path,
+            "providers": self.session.get_providers(),
+            "input_name": self.input_name,
+            "input_shape": self.input_shape,
+            "input_type": self.input_type,
+            "layout": "NHWC" if self.channels_last else "NCHW",
+            "resolved_hw": [self.height, self.width],
+        }
+
+
+class OpenCVCapture:
+    def __init__(self, index: int, width: int, height: int, fps: int):
+        api = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_V4L2
+        self.cap = cv2.VideoCapture(index, api)
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Unable to open camera index {index}")
+
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.cap.set(cv2.CAP_PROP_FPS, fps)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        for _ in range(4):
+            self.cap.read()
+
+    def read(self) -> Optional[np.ndarray]:
+        ok, frame = self.cap.read()
+        if not ok:
+            return None
+        return frame
+
+    def release(self) -> None:
+        self.cap.release()
+
+
+class PiCamera2Capture:
+    def __init__(self, width: int, height: int, fps: int):
+        if Picamera2 is None:
+            raise RuntimeError("picamera2 is not installed.")
+
+        self.camera = Picamera2()
+        config = self.camera.create_preview_configuration(
+            main={"size": (width, height), "format": "RGB888"},
+            buffer_count=4,
+        )
+        self.camera.configure(config)
+
+        frame_duration_us = int(1_000_000 / max(fps, 1))
+        self.camera.set_controls(
+            {
+                "AwbEnable": True,
+                "AwbMode": 0,
+                "FrameDurationLimits": (frame_duration_us, frame_duration_us),
+            }
+        )
+        self.camera.start()
+        time.sleep(1.0)
+
+    def read(self) -> Optional[np.ndarray]:
+        rgb = self.camera.capture_array()
+        if rgb is None:
+            return None
+        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+    def release(self) -> None:
+        try:
+            self.camera.stop()
+        finally:
+            self.camera.close()
+
+
+def compute_stats(samples_ms: Sequence[float]) -> Dict[str, float]:
+    if not samples_ms:
+        return {}
+
+    arr = np.asarray(samples_ms, dtype=np.float64)
+    mean_ms = float(arr.mean())
+    fps = (1000.0 / mean_ms) if mean_ms > 0 else 0.0
+
+    return {
+        "count": float(arr.size),
+        "avg_ms": mean_ms,
+        "min_ms": float(arr.min()),
+        "max_ms": float(arr.max()),
+        "std_ms": float(arr.std()),
+        "p50_ms": float(np.percentile(arr, 50)),
+        "p90_ms": float(np.percentile(arr, 90)),
+        "p95_ms": float(np.percentile(arr, 95)),
+        "p99_ms": float(np.percentile(arr, 99)),
+        "fps": fps,
+    }
+
+
+def discover_images(folder: str) -> List[str]:
+    root = Path(folder)
+    files: List[str] = []
+    for ext in IMAGE_EXTENSIONS:
+        files.extend(str(p) for p in root.rglob(f"*{ext}"))
+        files.extend(str(p) for p in root.rglob(f"*{ext.upper()}"))
+    files.sort()
+    return files
+
+
+def normalize_class_name(name: str) -> str:
+    return "".join(ch for ch in name.lower().strip() if ch.isalnum())
+
+
+def parse_yolo_names(raw_names: Any) -> List[str]:
+    if isinstance(raw_names, list):
+        return [str(item) for item in raw_names]
+    if isinstance(raw_names, dict):
+        parsed: Dict[int, str] = {}
+        for key, value in raw_names.items():
+            try:
+                parsed[int(key)] = str(value)
+            except Exception:
+                continue
+        if parsed:
+            return [parsed[idx] for idx in sorted(parsed.keys())]
+    return []
+
+
+def resolve_dataset_entry(root: Path, entry: Any) -> List[str]:
+    if entry is None:
+        return []
+
+    if isinstance(entry, (list, tuple)):
+        out: List[str] = []
+        for item in entry:
+            out.extend(resolve_dataset_entry(root, item))
+        return out
+
+    if not isinstance(entry, str):
+        return []
+
+    target = Path(entry)
+    if not target.is_absolute():
+        target = root / target
+
+    if target.is_dir():
+        return discover_images(str(target))
+
+    if target.is_file():
+        if target.suffix.lower() == ".txt":
+            files: List[str] = []
+            with target.open("r", encoding="utf-8") as handle:
+                for raw_line in handle:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    image_path = Path(line)
+                    if not image_path.is_absolute():
+                        image_path = target.parent / image_path
+                    files.append(str(image_path))
+            return files
+        if target.suffix.lower() in IMAGE_EXTENSIONS:
+            return [str(target)]
+
+    return []
+
+
+def load_yolo_dataset_layout(dataset_root: str, split: str) -> Dict[str, Any]:
+    root = Path(dataset_root)
+    yaml_path: Optional[Path] = None
+    for name in ("data.yaml", "dataset.yaml"):
+        candidate = root / name
+        if candidate.exists():
+            yaml_path = candidate
+            break
+
+    if yaml_path is None:
+        return {"is_yolo": False, "images": discover_images(dataset_root), "names": [], "yaml_path": None}
+
+    if yaml is None:
+        raise RuntimeError("PyYAML is required for YOLO dataset parsing. Install pyyaml.")
+
+    with yaml_path.open("r", encoding="utf-8") as handle:
+        parsed = yaml.safe_load(handle) or {}
+
+    names = parse_yolo_names(parsed.get("names", []))
+    split_map: Dict[str, Any] = {
+        "train": parsed.get("train"),
+        "val": parsed.get("val", parsed.get("valid")),
+        "test": parsed.get("test"),
+    }
+
+    selected = split.lower().strip()
+    if selected == "valid":
+        selected = "val"
+
+    available_images: Dict[str, List[str]] = {}
+    for key, source in split_map.items():
+        files = resolve_dataset_entry(root, source)
+        if files:
+            available_images[key] = sorted(set(files))
+
+    images: List[str] = []
+    if selected == "all":
+        seen: Dict[str, None] = {}
+        for key in ("train", "val", "test"):
+            for file_path in available_images.get(key, []):
+                seen[file_path] = None
+        images = list(seen.keys())
+    else:
+        images = available_images.get(selected, [])
+
+    if not images:
+        images = discover_images(dataset_root)
+
+    return {
+        "is_yolo": True,
+        "images": sorted(set(images)),
+        "names": names,
+        "yaml_path": str(yaml_path),
+        "available_splits": sorted(list(available_images.keys())),
+    }
+
+
+def image_path_to_label_path(image_path: str) -> str:
+    img = Path(image_path)
+    parts = list(img.parts)
+    for idx, token in enumerate(parts):
+        if token.lower() == "images":
+            replaced = parts.copy()
+            replaced[idx] = "labels"
+            return str(Path(*replaced).with_suffix(".txt"))
+    return str(img.with_suffix(".txt"))
+
+
+def parse_yolo_label_file(label_path: str, image_w: int, image_h: int, class_count: int) -> List[Dict[str, Any]]:
+    if not os.path.exists(label_path):
+        return []
+
+    gts: List[Dict[str, Any]] = []
+    with open(label_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            raw = line.strip()
+            if not raw:
+                continue
+            parts = raw.split()
+            if len(parts) < 5:
+                continue
+            try:
+                cls_id = int(float(parts[0]))
+                xc = float(parts[1])
+                yc = float(parts[2])
+                bw = float(parts[3])
+                bh = float(parts[4])
+            except ValueError:
+                continue
+
+            if cls_id < 0 or (class_count > 0 and cls_id >= class_count):
+                continue
+
+            x1 = max(0.0, (xc - bw / 2.0) * image_w)
+            y1 = max(0.0, (yc - bh / 2.0) * image_h)
+            x2 = min(float(image_w - 1), (xc + bw / 2.0) * image_w)
+            y2 = min(float(image_h - 1), (yc + bh / 2.0) * image_h)
+
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            gts.append({"cls": cls_id, "bbox": [x1, y1, x2, y2]})
+
+    return gts
+
+
+def clip_box(box: Sequence[float], image_w: int, image_h: int) -> List[float]:
+    x1 = float(max(0.0, min(image_w - 1, box[0])))
+    y1 = float(max(0.0, min(image_h - 1, box[1])))
+    x2 = float(max(0.0, min(image_w - 1, box[2])))
+    y2 = float(max(0.0, min(image_h - 1, box[3])))
+    if x2 < x1:
+        x1, x2 = x2, x1
+    if y2 < y1:
+        y1, y2 = y2, y1
+    return [x1, y1, x2, y2]
+
+
+def box_iou(box_a: Sequence[float], box_b: Sequence[float]) -> float:
+    inter_x1 = max(float(box_a[0]), float(box_b[0]))
+    inter_y1 = max(float(box_a[1]), float(box_b[1]))
+    inter_x2 = min(float(box_a[2]), float(box_b[2]))
+    inter_y2 = min(float(box_a[3]), float(box_b[3]))
+
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+
+    area_a = max(0.0, float(box_a[2]) - float(box_a[0])) * max(0.0, float(box_a[3]) - float(box_a[1]))
+    area_b = max(0.0, float(box_b[2]) - float(box_b[0])) * max(0.0, float(box_b[3]) - float(box_b[1]))
+
+    union = area_a + area_b - inter_area
+    if union <= 0.0:
+        return 0.0
+    return inter_area / union
+
+
+def greedy_match(iou_matrix: np.ndarray, min_iou: float) -> List[Tuple[int, int, float]]:
+    if iou_matrix.size == 0:
+        return []
+
+    pred_count, gt_count = iou_matrix.shape
+    candidates: List[Tuple[float, int, int]] = []
+    for pred_idx in range(pred_count):
+        for gt_idx in range(gt_count):
+            score = float(iou_matrix[pred_idx, gt_idx])
+            if score >= min_iou:
+                candidates.append((score, pred_idx, gt_idx))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    used_preds: Dict[int, None] = {}
+    used_gts: Dict[int, None] = {}
+    matches: List[Tuple[int, int, float]] = []
+    for score, pred_idx, gt_idx in candidates:
+        if pred_idx in used_preds or gt_idx in used_gts:
+            continue
+        used_preds[pred_idx] = None
+        used_gts[gt_idx] = None
+        matches.append((pred_idx, gt_idx, score))
+    return matches
+
+
+def compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
+    if recall.size == 0 or precision.size == 0:
+        return 0.0
+
+    mrec = np.concatenate(([0.0], recall, [1.0]))
+    mpre = np.concatenate(([1.0], precision, [0.0]))
+    for idx in range(mpre.size - 1, 0, -1):
+        mpre[idx - 1] = max(mpre[idx - 1], mpre[idx])
+
+    x = np.linspace(0.0, 1.0, 101)
+    return float(np.trapz(np.interp(x, mrec, mpre), x))
+
+
+def class_ap_for_iou(records: Sequence[Dict[str, Any]], cls_id: int, iou_thr: float) -> Tuple[float, int]:
+    gt_by_image: Dict[int, List[Sequence[float]]] = {}
+    predictions: List[Tuple[int, float, Sequence[float]]] = []
+    gt_total = 0
+
+    for image_idx, rec in enumerate(records):
+        gts = [g["bbox"] for g in rec["gt"] if int(g["cls"]) == cls_id]
+        if gts:
+            gt_by_image[image_idx] = gts
+            gt_total += len(gts)
+
+        for pred in rec["pred"]:
+            if int(pred["cls"]) != cls_id:
+                continue
+            predictions.append((image_idx, float(pred["conf"]), pred["bbox"]))
+
+    if gt_total == 0:
+        return float("nan"), 0
+
+    predictions.sort(key=lambda item: item[1], reverse=True)
+    matched: Dict[int, Dict[int, None]] = {}
+    tp: List[int] = []
+    fp: List[int] = []
+
+    for image_idx, _, pred_box in predictions:
+        gt_boxes = gt_by_image.get(image_idx, [])
+        if image_idx not in matched:
+            matched[image_idx] = {}
+
+        best_iou = 0.0
+        best_idx = -1
+        for gt_idx, gt_box in enumerate(gt_boxes):
+            if gt_idx in matched[image_idx]:
+                continue
+            iou = box_iou(pred_box, gt_box)
+            if iou > best_iou:
+                best_iou = iou
+                best_idx = gt_idx
+
+        if best_idx >= 0 and best_iou >= iou_thr:
+            matched[image_idx][best_idx] = None
+            tp.append(1)
+            fp.append(0)
+        else:
+            tp.append(0)
+            fp.append(1)
+
+    if not tp:
+        return 0.0, gt_total
+
+    tp_cum = np.cumsum(np.asarray(tp, dtype=np.float64))
+    fp_cum = np.cumsum(np.asarray(fp, dtype=np.float64))
+    recall = tp_cum / max(float(gt_total), 1e-9)
+    precision = tp_cum / np.maximum(tp_cum + fp_cum, 1e-9)
+    return compute_ap(recall, precision), gt_total
+
+
+def evaluate_confidence_at(records: Sequence[Dict[str, Any]], conf_thr: float, class_count: int, iou_thr: float) -> Tuple[int, int, int]:
+    tp_total = 0
+    fp_total = 0
+    fn_total = 0
+
+    for rec in records:
+        for cls_id in range(class_count):
+            preds = [p for p in rec["pred"] if int(p["cls"]) == cls_id and float(p["conf"]) >= conf_thr]
+            gts = [g for g in rec["gt"] if int(g["cls"]) == cls_id]
+
+            if not preds and not gts:
+                continue
+            if preds and not gts:
+                fp_total += len(preds)
+                continue
+            if gts and not preds:
+                fn_total += len(gts)
+                continue
+
+            iou_matrix = np.zeros((len(preds), len(gts)), dtype=np.float64)
+            for pred_idx, pred in enumerate(preds):
+                for gt_idx, gt in enumerate(gts):
+                    iou_matrix[pred_idx, gt_idx] = box_iou(pred["bbox"], gt["bbox"])
+
+            matches = greedy_match(iou_matrix, iou_thr)
+            match_count = len(matches)
+            tp_total += match_count
+            fp_total += len(preds) - match_count
+            fn_total += len(gts) - match_count
+
+    return tp_total, fp_total, fn_total
+
+
+def compute_confusion_matrix(records: Sequence[Dict[str, Any]], class_count: int, conf_thr: float, iou_thr: float) -> np.ndarray:
+    matrix = np.zeros((class_count + 1, class_count + 1), dtype=np.int64)
+    bg_idx = class_count
+
+    for rec in records:
+        preds = [p for p in rec["pred"] if float(p["conf"]) >= conf_thr]
+        gts = rec["gt"]
+
+        if preds and gts:
+            iou_matrix = np.zeros((len(preds), len(gts)), dtype=np.float64)
+            for pred_idx, pred in enumerate(preds):
+                for gt_idx, gt in enumerate(gts):
+                    iou_matrix[pred_idx, gt_idx] = box_iou(pred["bbox"], gt["bbox"])
+            matches = greedy_match(iou_matrix, iou_thr)
+        else:
+            matches = []
+
+        used_pred: Dict[int, None] = {}
+        used_gt: Dict[int, None] = {}
+        for pred_idx, gt_idx, _ in matches:
+            used_pred[pred_idx] = None
+            used_gt[gt_idx] = None
+            gt_cls = int(gts[gt_idx]["cls"])
+            pred_cls = int(preds[pred_idx]["cls"])
+            matrix[gt_cls, pred_cls] += 1
+
+        for gt_idx, gt in enumerate(gts):
+            if gt_idx in used_gt:
+                continue
+            matrix[int(gt["cls"]), bg_idx] += 1
+
+        for pred_idx, pred in enumerate(preds):
+            if pred_idx in used_pred:
+                continue
+            matrix[bg_idx, int(pred["cls"])] += 1
+
+    return matrix
+
+
+def save_yolo_eval_report(
+    report_dir: str,
+    class_names: Sequence[str],
+    summary: Dict[str, Any],
+    conf_thresholds: np.ndarray,
+    precision_curve: np.ndarray,
+    recall_curve: np.ndarray,
+    f1_curve: np.ndarray,
+    confusion_matrix: np.ndarray,
+) -> Dict[str, str]:
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError("matplotlib is required to generate evaluation plots.") from exc
+
+    out_root = Path(report_dir)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    files: Dict[str, str] = {}
+
+    summary_path = out_root / "metrics_summary.json"
+    with summary_path.open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
+    files["summary_json"] = str(summary_path)
+
+    def save_curve(x: np.ndarray, y: np.ndarray, title: str, x_label: str, y_label: str, filename: str) -> None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(x, y, linewidth=2)
+        ax.set_title(title)
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = out_root / filename
+        fig.savefig(out_path, dpi=160)
+        plt.close(fig)
+        files[filename] = str(out_path)
+
+    save_curve(recall_curve, precision_curve, "Precision-Recall Curve", "Recall", "Precision", "pr_curve.png")
+    save_curve(conf_thresholds, f1_curve, "F1-Confidence Curve", "Confidence", "F1", "f1_conf_curve.png")
+    save_curve(conf_thresholds, precision_curve, "Precision-Confidence Curve", "Confidence", "Precision", "p_conf_curve.png")
+    save_curve(conf_thresholds, recall_curve, "Recall-Confidence Curve", "Confidence", "Recall", "r_conf_curve.png")
+
+    cm = confusion_matrix.astype(np.float64)
+    cm_row_sum = cm.sum(axis=1, keepdims=True)
+    cm_norm = np.divide(cm, np.maximum(cm_row_sum, 1.0))
+
+    labels = list(class_names) + ["background"]
+    fig, ax = plt.subplots(figsize=(9, 8))
+    im = ax.imshow(cm_norm, cmap="Blues", vmin=0.0, vmax=1.0)
+    ax.set_title("Confusion Matrix (row-normalized)")
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Ground Truth")
+    ax.set_xticks(np.arange(len(labels)))
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_yticklabels(labels)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    fig.tight_layout()
+    cm_path = out_root / "confusion_matrix.png"
+    fig.savefig(cm_path, dpi=180)
+    plt.close(fig)
+    files["confusion_matrix.png"] = str(cm_path)
+
+    return files
+
+
+class InferenceToolApp:
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        self.root.title("TCDD Standalone Inference Tool")
+        self.root.geometry("1400x900")
+
+        self.backend: Optional[BaseBackend] = None
+        self.worker_thread: Optional[threading.Thread] = None
+        self.stop_event = threading.Event()
+        self.ui_queue: "queue.Queue[Tuple[str, Any]]" = queue.Queue()
+        self.preview_image: Optional[ImageTk.PhotoImage] = None
+
+        self.model_path_var = tk.StringVar()
+        self.model_format_var = tk.StringVar(value="Unknown")
+        self.labels_path_var = tk.StringVar(value="backend/models/labels.txt")
+        self.mode_var = tk.StringVar(value="image")
+        self.image_path_var = tk.StringVar()
+        self.dataset_path_var = tk.StringVar()
+        self.dataset_split_var = tk.StringVar(value="val")
+        self.camera_source_var = tk.StringVar(value="0")
+        self.device_var = tk.StringVar(value="cpu")
+
+        self.use_hailo_var = tk.BooleanVar(value=True)
+        self.prefer_gpu_var = tk.BooleanVar(value=False)
+
+        self.confidence_var = tk.StringVar(value="0.50")
+        self.iou_var = tk.StringVar(value="0.45")
+        self.warmup_var = tk.StringVar(value="5")
+        self.iterations_var = tk.StringVar(value="50")
+
+        self.cam_width_var = tk.StringVar(value="640")
+        self.cam_height_var = tk.StringVar(value="480")
+        self.cam_fps_var = tk.StringVar(value="30")
+
+        self.status_var = tk.StringVar(value="Idle")
+        self.stats_var = tk.StringVar(value="No benchmark yet")
+
+        self._build_ui()
+        self._refresh_capability_hint()
+
+        self.model_path_var.trace_add("write", self._on_model_path_changed)
+        self.mode_var.trace_add("write", self._on_mode_changed)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(60, self._poll_ui_queue)
+        self._apply_mode_controls()
+
+    def _build_ui(self) -> None:
+        outer = ttk.Frame(self.root, padding=8)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        left = ttk.Frame(outer)
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        right = ttk.Frame(outer)
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        model_frame = ttk.LabelFrame(left, text="Model")
+        model_frame.pack(fill=tk.X, padx=4, pady=4)
+
+        ttk.Label(model_frame, text="Path").grid(row=0, column=0, sticky="w", padx=4, pady=4)
+        ttk.Entry(model_frame, textvariable=self.model_path_var, width=72).grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+        ttk.Button(model_frame, text="Browse", command=self._browse_model).grid(row=0, column=2, padx=4, pady=4)
+
+        ttk.Label(model_frame, text="Format").grid(row=1, column=0, sticky="w", padx=4, pady=4)
+        ttk.Label(model_frame, textvariable=self.model_format_var).grid(row=1, column=1, sticky="w", padx=4, pady=4)
+
+        ttk.Label(model_frame, text="Labels").grid(row=2, column=0, sticky="w", padx=4, pady=4)
+        ttk.Entry(model_frame, textvariable=self.labels_path_var, width=50).grid(row=2, column=1, sticky="ew", padx=4, pady=4)
+        ttk.Button(model_frame, text="Browse", command=self._browse_labels).grid(row=2, column=2, padx=4, pady=4)
+
+        controls_row = ttk.Frame(model_frame)
+        controls_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+
+        ttk.Checkbutton(controls_row, text="Use Hailo for HEF", variable=self.use_hailo_var).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(controls_row, text="Prefer GPU (ONNX)", variable=self.prefer_gpu_var).pack(side=tk.LEFT, padx=4)
+
+        ttk.Label(controls_row, text="Device").pack(side=tk.LEFT, padx=(12, 2))
+        ttk.Combobox(
+            controls_row,
+            textvariable=self.device_var,
+            values=["cpu", "cuda"],
+            width=8,
+            state="readonly",
+        ).pack(side=tk.LEFT, padx=4)
+
+        ttk.Button(controls_row, text="Load Model", command=self._load_model).pack(side=tk.RIGHT, padx=4)
+        model_frame.columnconfigure(1, weight=1)
+
+        input_frame = ttk.LabelFrame(left, text="Input")
+        input_frame.pack(fill=tk.X, padx=4, pady=4)
+
+        mode_row = ttk.Frame(input_frame)
+        mode_row.pack(fill=tk.X, padx=4, pady=4)
+        ttk.Radiobutton(mode_row, text="Single Image", variable=self.mode_var, value="image").pack(side=tk.LEFT, padx=4)
+        ttk.Radiobutton(mode_row, text="Dataset", variable=self.mode_var, value="dataset").pack(side=tk.LEFT, padx=4)
+        ttk.Radiobutton(mode_row, text="Camera Stream", variable=self.mode_var, value="camera").pack(side=tk.LEFT, padx=4)
+
+        image_row = ttk.Frame(input_frame)
+        image_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(image_row, text="Image").pack(side=tk.LEFT)
+        self.image_entry = ttk.Entry(image_row, textvariable=self.image_path_var, width=68)
+        self.image_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.image_browse_btn = ttk.Button(image_row, text="Browse", command=self._browse_image)
+        self.image_browse_btn.pack(side=tk.LEFT)
+
+        dataset_row = ttk.Frame(input_frame)
+        dataset_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(dataset_row, text="Dataset").pack(side=tk.LEFT)
+        self.dataset_entry = ttk.Entry(dataset_row, textvariable=self.dataset_path_var, width=52)
+        self.dataset_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.dataset_browse_btn = ttk.Button(dataset_row, text="Browse", command=self._browse_dataset)
+        self.dataset_browse_btn.pack(side=tk.LEFT)
+        ttk.Label(dataset_row, text="Split").pack(side=tk.LEFT, padx=(10, 2))
+        self.dataset_split_combo = ttk.Combobox(
+            dataset_row,
+            textvariable=self.dataset_split_var,
+            values=["all", "train", "val", "test", "valid"],
+            width=8,
+            state="readonly",
+        )
+        self.dataset_split_combo.pack(side=tk.LEFT)
+
+        camera_row = ttk.Frame(input_frame)
+        camera_row.pack(fill=tk.X, padx=4, pady=4)
+        ttk.Label(camera_row, text="Camera Source").pack(side=tk.LEFT)
+        self.camera_source_combo = ttk.Combobox(
+            camera_row,
+            textvariable=self.camera_source_var,
+            values=["0", "1", "2", "3", "4", "rpi_camera"],
+            width=12,
+            state="readonly",
+        )
+        self.camera_source_combo.pack(side=tk.LEFT, padx=6)
+
+        ttk.Label(camera_row, text="Width").pack(side=tk.LEFT, padx=(12, 2))
+        self.cam_width_entry = ttk.Entry(camera_row, textvariable=self.cam_width_var, width=6)
+        self.cam_width_entry.pack(side=tk.LEFT)
+        ttk.Label(camera_row, text="Height").pack(side=tk.LEFT, padx=(8, 2))
+        self.cam_height_entry = ttk.Entry(camera_row, textvariable=self.cam_height_var, width=6)
+        self.cam_height_entry.pack(side=tk.LEFT)
+        ttk.Label(camera_row, text="FPS").pack(side=tk.LEFT, padx=(8, 2))
+        self.cam_fps_entry = ttk.Entry(camera_row, textvariable=self.cam_fps_var, width=6)
+        self.cam_fps_entry.pack(side=tk.LEFT)
+
+        bench_frame = ttk.LabelFrame(left, text="Benchmark")
+        bench_frame.pack(fill=tk.X, padx=4, pady=4)
+
+        ttk.Label(bench_frame, text="Confidence").grid(row=0, column=0, padx=4, pady=4, sticky="w")
+        ttk.Entry(bench_frame, textvariable=self.confidence_var, width=8).grid(row=0, column=1, padx=4, pady=4, sticky="w")
+
+        ttk.Label(bench_frame, text="IOU").grid(row=0, column=2, padx=4, pady=4, sticky="w")
+        ttk.Entry(bench_frame, textvariable=self.iou_var, width=8).grid(row=0, column=3, padx=4, pady=4, sticky="w")
+
+        ttk.Label(bench_frame, text="Warmup").grid(row=0, column=4, padx=4, pady=4, sticky="w")
+        ttk.Entry(bench_frame, textvariable=self.warmup_var, width=8).grid(row=0, column=5, padx=4, pady=4, sticky="w")
+
+        ttk.Label(bench_frame, text="Iterations (image)").grid(row=0, column=6, padx=4, pady=4, sticky="w")
+        self.iterations_entry = ttk.Entry(bench_frame, textvariable=self.iterations_var, width=8)
+        self.iterations_entry.grid(row=0, column=7, padx=4, pady=4, sticky="w")
+
+        action_row = ttk.Frame(left)
+        action_row.pack(fill=tk.X, padx=4, pady=6)
+        ttk.Button(action_row, text="Start", command=self._start).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_row, text="Stop", command=self._stop).pack(side=tk.LEFT, padx=4)
+        ttk.Label(action_row, textvariable=self.status_var).pack(side=tk.RIGHT, padx=6)
+
+        stats_frame = ttk.LabelFrame(left, text="Statistics")
+        stats_frame.pack(fill=tk.X, padx=4, pady=4)
+        ttk.Label(stats_frame, textvariable=self.stats_var, justify=tk.LEFT).pack(fill=tk.X, padx=6, pady=6)
+
+        self.model_info_text = ScrolledText(left, height=7)
+        self.model_info_text.pack(fill=tk.BOTH, padx=4, pady=4)
+        self.model_info_text.insert(tk.END, "Model info will appear here.\n")
+        self.model_info_text.configure(state=tk.DISABLED)
+
+        logs_frame = ttk.LabelFrame(right, text="Logs")
+        logs_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.log_text = ScrolledText(logs_frame, height=18)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        preview_frame = ttk.LabelFrame(right, text="Preview")
+        preview_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.preview_label = ttk.Label(preview_frame)
+        self.preview_label.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+    def _refresh_capability_hint(self) -> None:
+        hints = [
+            f"OS={platform.system()} {platform.release()}",
+            f"ultralytics={'yes' if HAS_YOLO else 'no'}",
+            f"hailo_platform={'yes' if HAS_HAILO else 'no'}",
+            f"onnxruntime={'yes' if ort else 'no'}",
+            f"picamera2={'yes' if Picamera2 else 'no'}",
+        ]
+        self._log("Capabilities: " + " | ".join(hints))
+
+    def _on_model_path_changed(self, *_: Any) -> None:
+        suffix = Path(self.model_path_var.get().strip()).suffix.lower()
+        if suffix in MODEL_EXTENSIONS:
+            self.model_format_var.set(suffix[1:].upper())
+        else:
+            self.model_format_var.set("Unknown")
+
+    def _set_control_state(self, widget: Any, enabled: bool, *, readonly_when_enabled: bool = False) -> None:
+        if readonly_when_enabled:
+            widget.configure(state="readonly" if enabled else "disabled")
+            return
+        widget.configure(state="normal" if enabled else "disabled")
+
+    def _on_mode_changed(self, *_: Any) -> None:
+        self._apply_mode_controls()
+
+    def _apply_mode_controls(self) -> None:
+        mode = self.mode_var.get()
+        is_image = mode == "image"
+        is_dataset = mode == "dataset"
+        is_camera = mode == "camera"
+
+        # Single image controls
+        self._set_control_state(self.image_entry, is_image)
+        self._set_control_state(self.image_browse_btn, is_image)
+
+        # Dataset controls
+        self._set_control_state(self.dataset_entry, is_dataset)
+        self._set_control_state(self.dataset_browse_btn, is_dataset)
+        self._set_control_state(self.dataset_split_combo, is_dataset, readonly_when_enabled=True)
+
+        # Camera controls
+        self._set_control_state(self.camera_source_combo, is_camera, readonly_when_enabled=True)
+        self._set_control_state(self.cam_width_entry, is_camera)
+        self._set_control_state(self.cam_height_entry, is_camera)
+        self._set_control_state(self.cam_fps_entry, is_camera)
+
+        # Iterations are only used in single-image mode
+        self._set_control_state(self.iterations_entry, is_image)
+
+    def _browse_model(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select model",
+            filetypes=[("Model files", "*.pt *.pth *.onnx *.hef"), ("All files", "*.*")],
+        )
+        if path:
+            self.model_path_var.set(path)
+
+    def _browse_labels(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select labels file",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if path:
+            self.labels_path_var.set(path)
+
+    def _browse_image(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select image",
+            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.webp"), ("All files", "*.*")],
+        )
+        if path:
+            self.image_path_var.set(path)
+
+    def _browse_dataset(self) -> None:
+        path = filedialog.askdirectory(title="Select dataset folder")
+        if path:
+            self.dataset_path_var.set(path)
+
+    def _parse_int(self, raw: str, default: int, minimum: int = 0) -> int:
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        return max(value, minimum)
+
+    def _parse_float(self, raw: str, default: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
+        try:
+            value = float(raw)
+        except ValueError:
+            return default
+        return max(minimum, min(maximum, value))
+
+    def _load_model(self) -> bool:
+        model_path = self.model_path_var.get().strip()
+        if not model_path:
+            messagebox.showerror("Model", "Please select a model file.")
+            return False
+        if not os.path.exists(model_path):
+            messagebox.showerror("Model", f"Model file not found:\n{model_path}")
+            return False
+
+        suffix = Path(model_path).suffix.lower()
+        if suffix not in MODEL_EXTENSIONS:
+            messagebox.showerror("Model", "Unsupported model extension. Use .pt, .pth, .onnx, or .hef")
+            return False
+
+        confidence = self._parse_float(self.confidence_var.get(), 0.5)
+        iou = self._parse_float(self.iou_var.get(), 0.45)
+        labels_path = self.labels_path_var.get().strip() or "backend/models/labels.txt"
+        device = self.device_var.get().strip() or "cpu"
+
+        if self.backend is not None:
+            self.backend.close()
+            self.backend = None
+
+        try:
+            if suffix in {".pt", ".pth", ".hef"}:
+                backend = DetectorBackend(
+                    model_path=model_path,
+                    confidence=confidence,
+                    iou=iou,
+                    labels_path=labels_path,
+                    use_hailo_for_hef=self.use_hailo_var.get(),
+                    device=device,
+                )
+            elif suffix == ".onnx":
+                backend = OnnxBackend(model_path=model_path, prefer_gpu=self.prefer_gpu_var.get())
+            else:
+                raise RuntimeError(f"Unsupported model format: {suffix}")
+
+            self.backend = backend
+            info = backend.get_model_info()
+            self._set_model_info(info)
+            self._log(f"Model loaded with backend={info.get('backend', 'unknown')}")
+            self.status_var.set("Model loaded")
+            return True
+
+        except Exception as exc:
+            self._log(f"Model load failed: {exc}")
+            messagebox.showerror("Model Load Failed", str(exc))
+            self.status_var.set("Load failed")
+            return False
+
+    def _set_model_info(self, info: Dict[str, Any]) -> None:
+        lines = ["Model information:"]
+        for key, value in info.items():
+            lines.append(f"- {key}: {value}")
+
+        self.model_info_text.configure(state=tk.NORMAL)
+        self.model_info_text.delete("1.0", tk.END)
+        self.model_info_text.insert(tk.END, "\n".join(lines) + "\n")
+        self.model_info_text.configure(state=tk.DISABLED)
+
+    def _start(self) -> None:
+        if self.worker_thread and self.worker_thread.is_alive():
+            messagebox.showwarning("Benchmark", "A run is already active.")
+            return
+
+        if self.backend is None and not self._load_model():
+            return
+
+        run_config = {
+            "mode": self.mode_var.get(),
+            "warmup": self._parse_int(self.warmup_var.get(), 5, minimum=0),
+            "iterations": self._parse_int(self.iterations_var.get(), 50, minimum=1),
+            "image_path": self.image_path_var.get().strip(),
+            "dataset_path": self.dataset_path_var.get().strip(),
+            "dataset_split": self.dataset_split_var.get().strip(),
+            "camera_source": self.camera_source_var.get().strip(),
+            "cam_width": self._parse_int(self.cam_width_var.get(), 640, minimum=64),
+            "cam_height": self._parse_int(self.cam_height_var.get(), 480, minimum=64),
+            "cam_fps": self._parse_int(self.cam_fps_var.get(), 30, minimum=1),
+        }
+
+        self.stop_event.clear()
+        self.status_var.set("Running")
+        self.stats_var.set("Running...")
+
+        self.worker_thread = threading.Thread(target=self._run_worker, args=(run_config,), daemon=True)
+        self.worker_thread.start()
+
+    def _stop(self) -> None:
+        self.stop_event.set()
+        self.status_var.set("Stopping...")
+
+    def _run_worker(self, run_config: Dict[str, Any]) -> None:
+        mode = run_config["mode"]
+        self._enqueue_log(f"Starting run mode={mode}")
+
+        try:
+            if mode == "image":
+                self._run_image(run_config)
+            elif mode == "dataset":
+                self._run_dataset(run_config)
+            elif mode == "camera":
+                self._run_camera(run_config)
+            else:
+                raise RuntimeError(f"Unknown mode: {mode}")
+        except Exception as exc:
+            self._enqueue_error(str(exc))
+        finally:
+            self._enqueue_status("Idle")
+
+    def _run_image(self, cfg: Dict[str, Any]) -> None:
+        assert self.backend is not None
+        image_path = cfg["image_path"]
+
+        if not image_path:
+            raise RuntimeError("No image selected.")
+        if not os.path.exists(image_path):
+            raise RuntimeError(f"Image file not found: {image_path}")
+
+        frame = cv2.imread(image_path)
+        if frame is None:
+            raise RuntimeError("Unable to decode image.")
+
+        warmup = cfg["warmup"]
+        iterations = cfg["iterations"]
+
+        for _ in range(warmup):
+            if self.stop_event.is_set():
+                self._enqueue_log("Run interrupted during warmup")
+                return
+            self.backend.infer(frame)
+
+        samples: List[float] = []
+        detections_total = 0
+        last_result: Optional[InferenceResult] = None
+
+        for idx in range(iterations):
+            if self.stop_event.is_set():
+                self._enqueue_log("Run interrupted")
+                break
+
+            result = self.backend.infer(frame)
+            samples.append(result.latency_ms)
+            detections_total += result.detections
+            last_result = result
+
+            if (idx + 1) % max(1, iterations // 10) == 0:
+                self._enqueue_log(f"Progress {idx + 1}/{iterations}")
+
+        stats = compute_stats(samples)
+        if stats:
+            stats["avg_detections"] = detections_total / max(1, len(samples))
+            self._enqueue_stats(stats)
+
+        if last_result and last_result.annotated_frame is not None:
+            self._enqueue_preview(last_result.annotated_frame)
+            self._enqueue_log(f"Last output: {last_result.output_summary}")
+
+    def _run_dataset(self, cfg: Dict[str, Any]) -> None:
+        assert self.backend is not None
+        dataset_path = cfg["dataset_path"]
+        dataset_split = cfg.get("dataset_split", "val")
+
+        if not dataset_path:
+            raise RuntimeError("No dataset folder selected.")
+        if not os.path.isdir(dataset_path):
+            raise RuntimeError(f"Dataset folder not found: {dataset_path}")
+
+        layout = load_yolo_dataset_layout(dataset_path, dataset_split)
+        if layout.get("is_yolo"):
+            self._enqueue_log(
+                f"YOLO dataset detected ({layout.get('yaml_path')}); split={dataset_split}. Running evaluation report mode."
+            )
+            self._run_yolo_dataset_eval(cfg=cfg, layout=layout, dataset_root=dataset_path)
+            return
+
+        files = discover_images(dataset_path)
+        if not files:
+            raise RuntimeError("No supported image files found in dataset folder.")
+
+        warmup = min(cfg["warmup"], len(files))
+        self._enqueue_log(f"Dataset files found: {len(files)}")
+
+        for idx in range(warmup):
+            if self.stop_event.is_set():
+                return
+            frame = cv2.imread(files[idx])
+            if frame is not None:
+                self.backend.infer(frame)
+
+        samples: List[float] = []
+        detections_total = 0
+        processed = 0
+
+        for idx, path in enumerate(files, start=1):
+            if self.stop_event.is_set():
+                self._enqueue_log("Run interrupted")
+                break
+
+            frame = cv2.imread(path)
+            if frame is None:
+                self._enqueue_log(f"Skipping unreadable file: {path}")
+                continue
+
+            result = self.backend.infer(frame)
+            samples.append(result.latency_ms)
+            detections_total += result.detections
+            processed += 1
+
+            if idx % 8 == 0 and result.annotated_frame is not None:
+                self._enqueue_preview(result.annotated_frame)
+
+            if idx % 20 == 0:
+                self._enqueue_log(f"Processed {idx}/{len(files)}")
+
+        stats = compute_stats(samples)
+        if stats:
+            stats["dataset_files"] = float(len(files))
+            stats["processed_files"] = float(processed)
+            stats["avg_detections"] = detections_total / max(1, processed)
+            self._enqueue_stats(stats)
+
+        self._enqueue_log("Dataset benchmark complete")
+
+    def _prediction_class_id(self, class_name: str, class_to_id: Dict[str, int], class_count: int) -> int:
+        if class_name in class_to_id:
+            return class_to_id[class_name]
+
+        normalized = normalize_class_name(class_name)
+        if normalized in class_to_id:
+            return class_to_id[normalized]
+
+        if class_name.startswith("class_"):
+            try:
+                idx = int(class_name.split("_", 1)[1])
+                if 0 <= idx < class_count:
+                    return idx
+            except ValueError:
+                pass
+
+        if class_name.isdigit():
+            idx = int(class_name)
+            if 0 <= idx < class_count:
+                return idx
+
+        return -1
+
+    def _run_yolo_dataset_eval(self, cfg: Dict[str, Any], layout: Dict[str, Any], dataset_root: str) -> None:
+        assert self.backend is not None
+        if not isinstance(self.backend, DetectorBackend):
+            raise RuntimeError(
+                "YOLO evaluation report requires a detector backend (.pt/.pth/.hef), because generic ONNX outputs are model-specific."
+            )
+
+        files = layout.get("images", [])
+        if not files:
+            raise RuntimeError("No images found for YOLO dataset evaluation.")
+
+        model_info = self.backend.get_model_info()
+        class_names = list(layout.get("names", []))
+        if not class_names:
+            class_names = [str(name) for name in model_info.get("classes", [])]
+        if not class_names:
+            raise RuntimeError("No class names available. Ensure data.yaml has a valid names list.")
+
+        class_count = len(class_names)
+        class_to_id: Dict[str, int] = {}
+        for idx, name in enumerate(class_names):
+            class_to_id[name] = idx
+            class_to_id[normalize_class_name(name)] = idx
+
+        warmup = min(cfg.get("warmup", 0), len(files))
+        if warmup > 0:
+            self._enqueue_log(f"Warmup on {warmup} images")
+            for idx in range(warmup):
+                if self.stop_event.is_set():
+                    return
+                frame = cv2.imread(files[idx])
+                if frame is not None:
+                    self.backend.infer(frame)
+
+        records: List[Dict[str, Any]] = []
+        latencies: List[float] = []
+        skipped = 0
+        unknown_class_pred = 0
+        report_every = max(1, len(files) // 20)
+
+        for idx, image_path in enumerate(files, start=1):
+            if self.stop_event.is_set():
+                self._enqueue_log("YOLO evaluation interrupted")
+                break
+
+            frame = cv2.imread(image_path)
+            if frame is None:
+                skipped += 1
+                continue
+
+            image_h, image_w = frame.shape[:2]
+            label_path = image_path_to_label_path(image_path)
+            gt = parse_yolo_label_file(label_path, image_w=image_w, image_h=image_h, class_count=class_count)
+
+            result = self.backend.infer(frame)
+            latencies.append(result.latency_ms)
+
+            preds_normalized: List[Dict[str, Any]] = []
+            for pred in result.predictions or []:
+                class_name = str(pred.get("class_name", ""))
+                cls_id = self._prediction_class_id(class_name, class_to_id, class_count)
+                if cls_id < 0:
+                    unknown_class_pred += 1
+                    continue
+
+                bbox = pred.get("bbox")
+                if not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
+                    continue
+
+                box = clip_box([float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])], image_w=image_w, image_h=image_h)
+                conf = float(pred.get("confidence", 0.0))
+                preds_normalized.append({"cls": cls_id, "conf": conf, "bbox": box})
+
+            records.append({"gt": gt, "pred": preds_normalized})
+
+            if idx % 8 == 0 and result.annotated_frame is not None:
+                self._enqueue_preview(result.annotated_frame)
+
+            if idx % report_every == 0:
+                self._enqueue_log(f"YOLO eval progress {idx}/{len(files)}")
+
+        if not records:
+            raise RuntimeError("No valid images were processed for YOLO evaluation.")
+
+        conf_thresholds = np.linspace(0.0, 1.0, 101)
+        precision_curve = np.zeros_like(conf_thresholds)
+        recall_curve = np.zeros_like(conf_thresholds)
+        f1_curve = np.zeros_like(conf_thresholds)
+
+        for idx, conf_thr in enumerate(conf_thresholds):
+            tp, fp, fn = evaluate_confidence_at(records, conf_thr=float(conf_thr), class_count=class_count, iou_thr=0.5)
+            precision = tp / max(tp + fp, 1)
+            recall = tp / max(tp + fn, 1)
+            f1 = (2.0 * precision * recall) / max(precision + recall, 1e-9)
+            precision_curve[idx] = precision
+            recall_curve[idx] = recall
+            f1_curve[idx] = f1
+
+        best_idx = int(np.argmax(f1_curve))
+        best_conf = float(conf_thresholds[best_idx])
+        best_precision = float(precision_curve[best_idx])
+        best_recall = float(recall_curve[best_idx])
+        best_f1 = float(f1_curve[best_idx])
+
+        iou_thresholds = np.arange(0.5, 0.96, 0.05)
+        ap_per_iou: List[List[float]] = []
+        gt_per_class: List[int] = [0 for _ in range(class_count)]
+
+        for iou_thr in iou_thresholds:
+            ap_this_iou: List[float] = []
+            for cls_id in range(class_count):
+                ap, gt_count = class_ap_for_iou(records, cls_id=cls_id, iou_thr=float(iou_thr))
+                if iou_thr == 0.5:
+                    gt_per_class[cls_id] = gt_count
+                if np.isnan(ap):
+                    ap_this_iou.append(float("nan"))
+                else:
+                    ap_this_iou.append(float(ap))
+            ap_per_iou.append(ap_this_iou)
+
+        ap_array = np.asarray(ap_per_iou, dtype=np.float64)
+        map50 = float(np.nanmean(ap_array[0])) if ap_array.size else 0.0
+        map50_95 = float(np.nanmean(ap_array)) if ap_array.size else 0.0
+
+        ap50_per_class: Dict[str, float] = {}
+        if ap_array.size:
+            for cls_id, cls_name in enumerate(class_names):
+                ap50_per_class[cls_name] = float(ap_array[0, cls_id]) if not np.isnan(ap_array[0, cls_id]) else 0.0
+
+        confusion = compute_confusion_matrix(records, class_count=class_count, conf_thr=best_conf, iou_thr=0.5)
+        latency_stats = compute_stats(latencies)
+
+        report_dir = os.path.join(
+            "data",
+            "logs",
+            "inference_reports",
+            datetime.now().strftime("%Y%m%d_%H%M%S"),
+        )
+
+        summary: Dict[str, Any] = {
+            "dataset_root": dataset_root,
+            "data_yaml": layout.get("yaml_path"),
+            "split": cfg.get("dataset_split", "val"),
+            "images_total": len(files),
+            "images_processed": len(records),
+            "images_skipped": skipped,
+            "unknown_class_predictions": unknown_class_pred,
+            "class_names": class_names,
+            "gt_per_class": {class_names[idx]: gt_per_class[idx] for idx in range(class_count)},
+            "precision": best_precision,
+            "recall": best_recall,
+            "f1": best_f1,
+            "best_confidence": best_conf,
+            "map50": map50,
+            "map50_95": map50_95,
+            "ap50_per_class": ap50_per_class,
+            "latency": latency_stats,
+        }
+
+        report_files = save_yolo_eval_report(
+            report_dir=report_dir,
+            class_names=class_names,
+            summary=summary,
+            conf_thresholds=conf_thresholds,
+            precision_curve=precision_curve,
+            recall_curve=recall_curve,
+            f1_curve=f1_curve,
+            confusion_matrix=confusion,
+        )
+
+        ui_stats = {
+            "dataset_files": float(len(files)),
+            "processed_files": float(len(records)),
+            "precision": best_precision,
+            "recall": best_recall,
+            "f1": best_f1,
+            "best_conf": best_conf,
+            "map50": map50,
+            "map50_95": map50_95,
+            "avg_ms": latency_stats.get("avg_ms", 0.0),
+            "p95_ms": latency_stats.get("p95_ms", 0.0),
+            "fps": latency_stats.get("fps", 0.0),
+        }
+        self._enqueue_stats(ui_stats)
+
+        self._enqueue_log(f"YOLO evaluation complete. Report directory: {report_dir}")
+        self._enqueue_log(f"Summary JSON: {report_files.get('summary_json', 'n/a')}")
+        self._enqueue_log(f"PR curve: {report_files.get('pr_curve.png', 'n/a')}")
+        self._enqueue_log(f"F1-confidence curve: {report_files.get('f1_conf_curve.png', 'n/a')}")
+        self._enqueue_log(f"Confusion matrix: {report_files.get('confusion_matrix.png', 'n/a')}")
+
+    def _open_camera(self, source: str, width: int, height: int, fps: int) -> Any:
+        if source == "rpi_camera":
+            return PiCamera2Capture(width=width, height=height, fps=fps)
+
+        try:
+            index = int(source)
+        except ValueError as exc:
+            raise RuntimeError("Camera source must be an integer index or 'rpi_camera'.") from exc
+
+        return OpenCVCapture(index=index, width=width, height=height, fps=fps)
+
+    def _run_camera(self, cfg: Dict[str, Any]) -> None:
+        assert self.backend is not None
+        source = cfg["camera_source"]
+        width = cfg["cam_width"]
+        height = cfg["cam_height"]
+        fps = cfg["cam_fps"]
+        warmup = cfg["warmup"]
+
+        camera = self._open_camera(source=source, width=width, height=height, fps=fps)
+        self._enqueue_log(f"Camera opened source={source} {width}x{height}@{fps}")
+
+        samples: List[float] = []
+        detections_total = 0
+        preview_count = 0
+
+        try:
+            for _ in range(warmup):
+                if self.stop_event.is_set():
+                    return
+                frame = camera.read()
+                if frame is not None:
+                    self.backend.infer(frame)
+
+            start = time.perf_counter()
+            last_report = start
+            frame_count = 0
+
+            while not self.stop_event.is_set():
+                frame = camera.read()
+                if frame is None:
+                    continue
+
+                result = self.backend.infer(frame)
+                frame_count += 1
+                samples.append(result.latency_ms)
+                detections_total += result.detections
+
+                if result.annotated_frame is not None and (preview_count % 3 == 0):
+                    self._enqueue_preview(result.annotated_frame)
+                preview_count += 1
+
+                now = time.perf_counter()
+                if now - last_report >= 1.0:
+                    elapsed = now - start
+                    stream_fps = frame_count / elapsed if elapsed > 0 else 0.0
+                    window_stats = compute_stats(samples[-120:])
+                    summary = {
+                        "count": float(frame_count),
+                        "stream_fps": stream_fps,
+                        "avg_ms": window_stats.get("avg_ms", 0.0),
+                        "p95_ms": window_stats.get("p95_ms", 0.0),
+                        "avg_detections": detections_total / max(1, frame_count),
+                    }
+                    self._enqueue_stats(summary)
+                    last_report = now
+
+            final_stats = compute_stats(samples)
+            if final_stats:
+                final_stats["stream_frames"] = float(len(samples))
+                final_stats["avg_detections"] = detections_total / max(1, len(samples))
+                self._enqueue_stats(final_stats)
+
+            self._enqueue_log("Camera run stopped")
+
+        finally:
+            camera.release()
+
+    def _enqueue_log(self, message: str) -> None:
+        self.ui_queue.put(("log", message))
+
+    def _enqueue_preview(self, frame_bgr: np.ndarray) -> None:
+        self.ui_queue.put(("preview", frame_bgr))
+
+    def _enqueue_stats(self, stats: Dict[str, float]) -> None:
+        self.ui_queue.put(("stats", stats))
+
+    def _enqueue_status(self, status: str) -> None:
+        self.ui_queue.put(("status", status))
+
+    def _enqueue_error(self, message: str) -> None:
+        self.ui_queue.put(("error", message))
+
+    def _poll_ui_queue(self) -> None:
+        try:
+            while True:
+                kind, payload = self.ui_queue.get_nowait()
+
+                if kind == "log":
+                    self._log(payload)
+                elif kind == "preview":
+                    self._render_preview(payload)
+                elif kind == "stats":
+                    self._update_stats(payload)
+                elif kind == "status":
+                    self.status_var.set(payload)
+                elif kind == "error":
+                    self.status_var.set("Error")
+                    self._log(f"ERROR: {payload}")
+                    messagebox.showerror("Run Error", payload)
+        except queue.Empty:
+            pass
+
+        self.root.after(60, self._poll_ui_queue)
+
+    def _render_preview(self, frame_bgr: np.ndarray) -> None:
+        target_w = 700
+        target_h = 430
+
+        h, w = frame_bgr.shape[:2]
+        scale = min(target_w / max(w, 1), target_h / max(h, 1))
+        resized = cv2.resize(frame_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(rgb)
+        self.preview_image = ImageTk.PhotoImage(image=image)
+        self.preview_label.configure(image=self.preview_image)
+
+    def _update_stats(self, stats: Dict[str, float]) -> None:
+        ordered_keys = [
+            "count",
+            "dataset_files",
+            "processed_files",
+            "stream_frames",
+            "precision",
+            "recall",
+            "f1",
+            "best_conf",
+            "map50",
+            "map50_95",
+            "avg_ms",
+            "min_ms",
+            "max_ms",
+            "p50_ms",
+            "p90_ms",
+            "p95_ms",
+            "p99_ms",
+            "std_ms",
+            "fps",
+            "stream_fps",
+            "avg_detections",
+        ]
+
+        lines: List[str] = []
+        for key in ordered_keys:
+            if key not in stats:
+                continue
+            value = stats[key]
+            if key in {"count", "dataset_files", "processed_files", "stream_frames"}:
+                lines.append(f"{key}: {int(value)}")
+            else:
+                lines.append(f"{key}: {value:.3f}")
+
+        self.stats_var.set("\n".join(lines) if lines else "No statistics yet")
+
+    def _log(self, message: str) -> None:
+        stamp = time.strftime("%H:%M:%S")
+        self.log_text.insert(tk.END, f"[{stamp}] {message}\n")
+        self.log_text.see(tk.END)
+
+    def _on_close(self) -> None:
+        self.stop_event.set()
+
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.worker_thread.join(timeout=1.5)
+
+        if self.backend is not None:
+            self.backend.close()
+            self.backend = None
+
+        self.root.destroy()
+
+
+def main() -> None:
+    root = tk.Tk()
+    app = InferenceToolApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

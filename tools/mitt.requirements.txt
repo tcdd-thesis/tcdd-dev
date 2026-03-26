@@ -1,0 +1,22 @@
+# Base requirements
+numpy>=1.26
+opencv-python>=4.8
+pillow>=10.0
+pyyaml>=6.0
+matplotlib>=3.8
+
+# For .pt/.pth model inference (reuses backend/detector.py path)
+ultralytics>=8.3
+torch>=2.2
+
+# For .onnx model inference
+onnxruntime>=1.17
+
+# Optional for ONNX GPU on Windows (install instead of onnxruntime if preferred)
+# onnxruntime-gpu>=1.17
+
+# Raspberry Pi camera module support (optional; camera fallback uses OpenCV)
+# picamera2>=0.3
+
+# Hailo HEF runtime is provided by Hailo installation on Raspberry Pi,
+# not from pip in most setups. Keep using your existing Hailo environment.
