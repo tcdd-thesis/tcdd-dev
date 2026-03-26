@@ -10,6 +10,7 @@ Supported model formats:
 
 Input modes:
 - Single image
+- Video file
 - Dataset folder (recursive image scan)
 - Camera stream (Windows webcams/USB, Raspberry Pi camera module)
 """
@@ -77,6 +78,7 @@ except ImportError:
     Picamera2 = None
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+VIDEO_EXTENSIONS = {".avi", ".mp4", ".mkv", ".mov", ".wmv", ".m4v", ".webm", ".flv", ".mpeg", ".mpg"}
 MODEL_EXTENSIONS = {".pt", ".pth", ".onnx", ".hef"}
 
 
@@ -863,6 +865,7 @@ class InferenceToolApp:
         self.labels_path_var = tk.StringVar(value="backend/models/labels.txt")
         self.mode_var = tk.StringVar(value="image")
         self.image_path_var = tk.StringVar()
+        self.video_path_var = tk.StringVar()
         self.dataset_path_var = tk.StringVar()
         self.dataset_split_var = tk.StringVar(value="val")
         self.camera_source_var = tk.StringVar(value="0")
@@ -951,6 +954,7 @@ class InferenceToolApp:
         mode_row = ttk.Frame(input_frame)
         mode_row.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
         ttk.Radiobutton(mode_row, text="Single Image", variable=self.mode_var, value="image").pack(side=tk.LEFT, padx=4)
+        ttk.Radiobutton(mode_row, text="Video", variable=self.mode_var, value="video").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_row, text="Dataset", variable=self.mode_var, value="dataset").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_row, text="Camera Stream", variable=self.mode_var, value="camera").pack(side=tk.LEFT, padx=4)
 
@@ -962,6 +966,15 @@ class InferenceToolApp:
         self.image_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
         self.image_browse_btn = ttk.Button(self.image_row, text="Browse", command=self._browse_image)
         self.image_browse_btn.pack(side=tk.LEFT)
+
+        self.video_row = ttk.Frame(input_frame)
+        if not self.small_screen_mode:
+            self.video_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(self.video_row, text="Video").pack(side=tk.LEFT)
+        self.video_entry = ttk.Entry(self.video_row, textvariable=self.video_path_var, width=image_path_width)
+        self.video_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.video_browse_btn = ttk.Button(self.video_row, text="Browse", command=self._browse_video)
+        self.video_browse_btn.pack(side=tk.LEFT)
 
         self.image_receiver_row = ttk.Frame(input_frame)
         if not self.small_screen_mode:
@@ -1304,17 +1317,19 @@ class InferenceToolApp:
     def _on_mode_changed(self, *_: Any) -> None:
         self._apply_mode_controls()
 
-    def _set_small_screen_input_rows(self, *, is_image: bool, is_dataset: bool, is_camera: bool) -> None:
+    def _set_small_screen_input_rows(self, *, is_image: bool, is_video: bool, is_dataset: bool, is_camera: bool) -> None:
         if not self.small_screen_mode:
             return
 
-        for row in (self.image_row, self.image_receiver_row, self.dataset_row, self.camera_row):
+        for row in (self.image_row, self.image_receiver_row, self.video_row, self.dataset_row, self.camera_row):
             if row.winfo_manager():
                 row.pack_forget()
 
         if is_image:
             self.image_row.pack(fill=tk.X, padx=self.compact_pad, pady=1)
             self.image_receiver_row.pack(fill=tk.X, padx=self.compact_pad, pady=(0, 2))
+        elif is_video:
+            self.video_row.pack(fill=tk.X, padx=self.compact_pad, pady=1)
         elif is_dataset:
             self.dataset_row.pack(fill=tk.X, padx=self.compact_pad, pady=1)
         elif is_camera:
@@ -1323,16 +1338,21 @@ class InferenceToolApp:
     def _apply_mode_controls(self) -> None:
         mode = self.mode_var.get()
         is_image = mode == "image"
+        is_video = mode == "video"
         is_dataset = mode == "dataset"
         is_camera = mode == "camera"
 
-        self._set_small_screen_input_rows(is_image=is_image, is_dataset=is_dataset, is_camera=is_camera)
+        self._set_small_screen_input_rows(is_image=is_image, is_video=is_video, is_dataset=is_dataset, is_camera=is_camera)
 
         # Single image controls
         self._set_control_state(self.image_entry, is_image)
         self._set_control_state(self.image_browse_btn, is_image)
         self._set_control_state(self.image_paste_btn, is_image)
         self._set_drop_zone_visual_state(is_image)
+
+        # Video controls
+        self._set_control_state(self.video_entry, is_video)
+        self._set_control_state(self.video_browse_btn, is_video)
 
         # Dataset controls
         self._set_control_state(self.dataset_entry, is_dataset)
@@ -1371,6 +1391,17 @@ class InferenceToolApp:
         )
         if path:
             self.image_path_var.set(path)
+
+    def _browse_video(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select video",
+            filetypes=[
+                ("Video files", "*.mp4 *.avi *.mkv *.mov *.wmv *.m4v *.webm *.flv *.mpeg *.mpg"),
+                ("All files", "*.*"),
+            ],
+        )
+        if path:
+            self.video_path_var.set(path)
 
     def _browse_dataset(self) -> None:
         path = filedialog.askdirectory(title="Select dataset folder")
@@ -1474,6 +1505,7 @@ class InferenceToolApp:
             "warmup": self._parse_int(self.warmup_var.get(), 5, minimum=0),
             "iterations": self._parse_int(self.iterations_var.get(), 50, minimum=1),
             "image_path": self.image_path_var.get().strip(),
+            "video_path": self.video_path_var.get().strip(),
             "dataset_path": self.dataset_path_var.get().strip(),
             "dataset_split": self.dataset_split_var.get().strip(),
             "camera_source": self.camera_source_var.get().strip(),
@@ -1500,6 +1532,8 @@ class InferenceToolApp:
         try:
             if mode == "image":
                 self._run_image(run_config)
+            elif mode == "video":
+                self._run_video(run_config)
             elif mode == "dataset":
                 self._run_dataset(run_config)
             elif mode == "camera":
@@ -1624,6 +1658,96 @@ class InferenceToolApp:
             self._enqueue_stats(stats)
 
         self._enqueue_log("Dataset benchmark complete")
+
+    def _run_video(self, cfg: Dict[str, Any]) -> None:
+        assert self.backend is not None
+        video_path = cfg["video_path"]
+        warmup = cfg["warmup"]
+
+        if not video_path:
+            raise RuntimeError("No video selected.")
+        if not os.path.exists(video_path):
+            raise RuntimeError(f"Video file not found: {video_path}")
+
+        suffix = Path(video_path).suffix.lower()
+        if suffix and suffix not in VIDEO_EXTENSIONS:
+            self._enqueue_log(f"Video extension {suffix} is uncommon; attempting decode anyway.")
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise RuntimeError(f"Unable to open video: {video_path}")
+
+        source_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        self._enqueue_log(
+            f"Video opened: {video_path} | source_fps={source_fps:.2f} | total_frames={total_frames if total_frames > 0 else 'unknown'}"
+        )
+
+        samples: List[float] = []
+        detections_total = 0
+        preview_count = 0
+        processed = 0
+
+        try:
+            warmup_done = 0
+            while warmup_done < warmup and not self.stop_event.is_set():
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+                self.backend.infer(frame)
+                warmup_done += 1
+
+            start = time.perf_counter()
+            last_report = start
+
+            while not self.stop_event.is_set():
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+
+                result = self.backend.infer(frame)
+                processed += 1
+                samples.append(result.latency_ms)
+                detections_total += result.detections
+
+                if result.annotated_frame is not None and (preview_count % 3 == 0):
+                    self._enqueue_preview(result.annotated_frame)
+                preview_count += 1
+
+                now = time.perf_counter()
+                if now - last_report >= 1.0:
+                    elapsed = now - start
+                    run_fps = processed / elapsed if elapsed > 0 else 0.0
+                    window_stats = compute_stats(samples[-120:])
+                    summary = {
+                        "count": float(processed),
+                        "stream_fps": run_fps,
+                        "avg_ms": window_stats.get("avg_ms", 0.0),
+                        "p95_ms": window_stats.get("p95_ms", 0.0),
+                        "avg_detections": detections_total / max(1, processed),
+                    }
+                    self._enqueue_stats(summary)
+                    last_report = now
+
+                if processed % 60 == 0:
+                    if total_frames > 0:
+                        self._enqueue_log(f"Video progress {processed}/{total_frames}")
+                    else:
+                        self._enqueue_log(f"Video processed {processed} frames")
+
+            final_stats = compute_stats(samples)
+            if final_stats:
+                final_stats["stream_frames"] = float(processed)
+                final_stats["avg_detections"] = detections_total / max(1, processed)
+                self._enqueue_stats(final_stats)
+
+            if self.stop_event.is_set():
+                self._enqueue_log("Video run stopped")
+            else:
+                self._enqueue_log("Video run complete")
+
+        finally:
+            cap.release()
 
     def _prediction_class_id(self, class_name: str, class_to_id: Dict[str, int], class_count: int) -> int:
         if class_name in class_to_id:
