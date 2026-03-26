@@ -13,7 +13,7 @@ torch>=2.2
 onnxruntime>=1.17
 
 # Optional for ONNX GPU on Windows (install instead of onnxruntime if preferred)
-onnxruntime-gpu>=1.17
+# onnxruntime-gpu>=1.17
 
 # Raspberry Pi camera module support (optional; camera fallback uses OpenCV)
 # picamera2>=0.3
