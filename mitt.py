@@ -22,6 +22,7 @@ import queue
 import json
 import threading
 import platform
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -39,9 +40,22 @@ try:
 except ImportError as exc:
     raise RuntimeError("Pillow is required for preview rendering. Install pillow.") from exc
 
+try:
+    from PIL import ImageGrab
+except Exception:
+    ImageGrab = None
+
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    HAS_TKDND = True
+except ImportError:
+    DND_FILES = None
+    TkinterDnD = None
+    HAS_TKDND = False
+
 # Reuse the existing RPi-ready detector implementation
 try:
-    from detector import Detector, HAS_HAILO, HAS_YOLO
+    from backend.detector import Detector, HAS_HAILO, HAS_YOLO
 except ImportError:
     Detector = None
     HAS_HAILO = False
@@ -822,14 +836,25 @@ def save_yolo_eval_report(
 class InferenceToolApp:
     def __init__(self, root: tk.Tk):
         self.root = root
+        self.screen_w = int(self.root.winfo_screenwidth())
+        self.screen_h = int(self.root.winfo_screenheight())
+        self.small_screen_mode = self.screen_w <= 900 or self.screen_h <= 600
         self.root.title("TCDD Standalone Inference Tool")
-        self.root.geometry("1400x900")
+        if self.small_screen_mode:
+            self.root.geometry(f"{min(self.screen_w, 780)}x{min(self.screen_h, 520)}")
+        else:
+            self.root.geometry("1400x900")
 
         self.backend: Optional[BaseBackend] = None
         self.worker_thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.ui_queue: "queue.Queue[Tuple[str, Any]]" = queue.Queue()
         self.preview_image: Optional[ImageTk.PhotoImage] = None
+        self.preview_image_popup: Optional[ImageTk.PhotoImage] = None
+        self.log_window: Optional[tk.Toplevel] = None
+        self.preview_window: Optional[tk.Toplevel] = None
+        self.log_text_popup: Optional[ScrolledText] = None
+        self.preview_label_popup: Optional[ttk.Label] = None
 
         self.model_path_var = tk.StringVar()
         self.model_format_var = tk.StringVar(value="Unknown")
@@ -855,9 +880,13 @@ class InferenceToolApp:
 
         self.status_var = tk.StringVar(value="Idle")
         self.stats_var = tk.StringVar(value="No benchmark yet")
+        self.image_drop_enabled = True
 
         self._build_ui()
+        self._setup_image_receiver()
         self._refresh_capability_hint()
+        if self.small_screen_mode:
+            self._log("Small screen mode enabled: logs and preview will open in separate windows.")
 
         self.model_path_var.trace_add("write", self._on_model_path_changed)
         self.mode_var.trace_add("write", self._on_mode_changed)
@@ -873,20 +902,26 @@ class InferenceToolApp:
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         right = ttk.Frame(outer)
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        if not self.small_screen_mode:
+            right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        model_path_width = 72 if not self.small_screen_mode else 38
+        labels_path_width = 50 if not self.small_screen_mode else 28
+        image_path_width = 68 if not self.small_screen_mode else 34
+        dataset_path_width = 52 if not self.small_screen_mode else 28
 
         model_frame = ttk.LabelFrame(left, text="Model")
         model_frame.pack(fill=tk.X, padx=4, pady=4)
 
         ttk.Label(model_frame, text="Path").grid(row=0, column=0, sticky="w", padx=4, pady=4)
-        ttk.Entry(model_frame, textvariable=self.model_path_var, width=72).grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+        ttk.Entry(model_frame, textvariable=self.model_path_var, width=model_path_width).grid(row=0, column=1, sticky="ew", padx=4, pady=4)
         ttk.Button(model_frame, text="Browse", command=self._browse_model).grid(row=0, column=2, padx=4, pady=4)
 
         ttk.Label(model_frame, text="Format").grid(row=1, column=0, sticky="w", padx=4, pady=4)
         ttk.Label(model_frame, textvariable=self.model_format_var).grid(row=1, column=1, sticky="w", padx=4, pady=4)
 
         ttk.Label(model_frame, text="Labels").grid(row=2, column=0, sticky="w", padx=4, pady=4)
-        ttk.Entry(model_frame, textvariable=self.labels_path_var, width=50).grid(row=2, column=1, sticky="ew", padx=4, pady=4)
+        ttk.Entry(model_frame, textvariable=self.labels_path_var, width=labels_path_width).grid(row=2, column=1, sticky="ew", padx=4, pady=4)
         ttk.Button(model_frame, text="Browse", command=self._browse_labels).grid(row=2, column=2, padx=4, pady=4)
 
         controls_row = ttk.Frame(model_frame)
@@ -919,15 +954,35 @@ class InferenceToolApp:
         image_row = ttk.Frame(input_frame)
         image_row.pack(fill=tk.X, padx=4, pady=2)
         ttk.Label(image_row, text="Image").pack(side=tk.LEFT)
-        self.image_entry = ttk.Entry(image_row, textvariable=self.image_path_var, width=68)
+        self.image_entry = ttk.Entry(image_row, textvariable=self.image_path_var, width=image_path_width)
         self.image_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
         self.image_browse_btn = ttk.Button(image_row, text="Browse", command=self._browse_image)
         self.image_browse_btn.pack(side=tk.LEFT)
 
+        image_receiver_row = ttk.Frame(input_frame)
+        image_receiver_row.pack(fill=tk.X, padx=4, pady=(0, 4))
+        self.image_drop_label = tk.Label(
+            image_receiver_row,
+            text="Drop an image here or press Ctrl+V to paste from clipboard",
+            relief="groove",
+            borderwidth=2,
+            padx=8,
+            pady=8,
+            anchor="w",
+            bg="#f5f7fa",
+        )
+        self.image_drop_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.image_paste_btn = ttk.Button(
+            image_receiver_row,
+            text="Paste",
+            command=self._paste_image_from_clipboard,
+        )
+        self.image_paste_btn.pack(side=tk.LEFT, padx=(8, 0))
+
         dataset_row = ttk.Frame(input_frame)
         dataset_row.pack(fill=tk.X, padx=4, pady=2)
         ttk.Label(dataset_row, text="Dataset").pack(side=tk.LEFT)
-        self.dataset_entry = ttk.Entry(dataset_row, textvariable=self.dataset_path_var, width=52)
+        self.dataset_entry = ttk.Entry(dataset_row, textvariable=self.dataset_path_var, width=dataset_path_width)
         self.dataset_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
         self.dataset_browse_btn = ttk.Button(dataset_row, text="Browse", command=self._browse_dataset)
         self.dataset_browse_btn.pack(side=tk.LEFT)
@@ -966,18 +1021,32 @@ class InferenceToolApp:
         bench_frame = ttk.LabelFrame(left, text="Benchmark")
         bench_frame.pack(fill=tk.X, padx=4, pady=4)
 
-        ttk.Label(bench_frame, text="Confidence").grid(row=0, column=0, padx=4, pady=4, sticky="w")
-        ttk.Entry(bench_frame, textvariable=self.confidence_var, width=8).grid(row=0, column=1, padx=4, pady=4, sticky="w")
+        if self.small_screen_mode:
+            ttk.Label(bench_frame, text="Confidence").grid(row=0, column=0, padx=4, pady=4, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.confidence_var, width=7).grid(row=0, column=1, padx=4, pady=4, sticky="w")
 
-        ttk.Label(bench_frame, text="IOU").grid(row=0, column=2, padx=4, pady=4, sticky="w")
-        ttk.Entry(bench_frame, textvariable=self.iou_var, width=8).grid(row=0, column=3, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="IOU").grid(row=0, column=2, padx=4, pady=4, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.iou_var, width=7).grid(row=0, column=3, padx=4, pady=4, sticky="w")
 
-        ttk.Label(bench_frame, text="Warmup").grid(row=0, column=4, padx=4, pady=4, sticky="w")
-        ttk.Entry(bench_frame, textvariable=self.warmup_var, width=8).grid(row=0, column=5, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="Warmup").grid(row=0, column=4, padx=4, pady=4, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.warmup_var, width=7).grid(row=0, column=5, padx=4, pady=4, sticky="w")
 
-        ttk.Label(bench_frame, text="Iterations (image)").grid(row=0, column=6, padx=4, pady=4, sticky="w")
-        self.iterations_entry = ttk.Entry(bench_frame, textvariable=self.iterations_var, width=8)
-        self.iterations_entry.grid(row=0, column=7, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="Iterations (image)").grid(row=1, column=0, padx=4, pady=4, sticky="w")
+            self.iterations_entry = ttk.Entry(bench_frame, textvariable=self.iterations_var, width=9)
+            self.iterations_entry.grid(row=1, column=1, padx=4, pady=4, sticky="w")
+        else:
+            ttk.Label(bench_frame, text="Confidence").grid(row=0, column=0, padx=4, pady=4, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.confidence_var, width=8).grid(row=0, column=1, padx=4, pady=4, sticky="w")
+
+            ttk.Label(bench_frame, text="IOU").grid(row=0, column=2, padx=4, pady=4, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.iou_var, width=8).grid(row=0, column=3, padx=4, pady=4, sticky="w")
+
+            ttk.Label(bench_frame, text="Warmup").grid(row=0, column=4, padx=4, pady=4, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.warmup_var, width=8).grid(row=0, column=5, padx=4, pady=4, sticky="w")
+
+            ttk.Label(bench_frame, text="Iterations (image)").grid(row=0, column=6, padx=4, pady=4, sticky="w")
+            self.iterations_entry = ttk.Entry(bench_frame, textvariable=self.iterations_var, width=8)
+            self.iterations_entry.grid(row=0, column=7, padx=4, pady=4, sticky="w")
 
         action_row = ttk.Frame(left)
         action_row.pack(fill=tk.X, padx=4, pady=6)
@@ -1004,6 +1073,73 @@ class InferenceToolApp:
         self.preview_label = ttk.Label(preview_frame)
         self.preview_label.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
+    def _on_popup_log_close(self) -> None:
+        if self.log_window is not None:
+            self.log_window.destroy()
+        self.log_window = None
+        self.log_text_popup = None
+
+    def _on_popup_preview_close(self) -> None:
+        if self.preview_window is not None:
+            self.preview_window.destroy()
+        self.preview_window = None
+        self.preview_label_popup = None
+        self.preview_image_popup = None
+
+    def _ensure_small_screen_popouts(self, *, open_logs: bool, open_preview: bool) -> None:
+        if not self.small_screen_mode:
+            return
+
+        if open_logs and (self.log_window is None or not self.log_window.winfo_exists()):
+            self.log_window = tk.Toplevel(self.root)
+            self.log_window.title("MITT Logs")
+            self.log_window.geometry(f"{min(620, self.screen_w - 20)}x{min(420, self.screen_h - 60)}")
+            self.log_window.protocol("WM_DELETE_WINDOW", self._on_popup_log_close)
+
+            frame = ttk.Frame(self.log_window, padding=6)
+            frame.pack(fill=tk.BOTH, expand=True)
+            self.log_text_popup = ScrolledText(frame, height=18)
+            self.log_text_popup.pack(fill=tk.BOTH, expand=True)
+            existing = self.log_text.get("1.0", tk.END)
+            if existing.strip():
+                self.log_text_popup.insert(tk.END, existing)
+                self.log_text_popup.see(tk.END)
+
+        if open_preview and (self.preview_window is None or not self.preview_window.winfo_exists()):
+            self.preview_window = tk.Toplevel(self.root)
+            self.preview_window.title("MITT Preview")
+            self.preview_window.geometry(f"{min(760, self.screen_w - 20)}x{min(520, self.screen_h - 40)}")
+            self.preview_window.protocol("WM_DELETE_WINDOW", self._on_popup_preview_close)
+
+            frame = ttk.Frame(self.preview_window, padding=6)
+            frame.pack(fill=tk.BOTH, expand=True)
+            self.preview_label_popup = ttk.Label(frame)
+            self.preview_label_popup.pack(fill=tk.BOTH, expand=True)
+
+    def _setup_image_receiver(self) -> None:
+        self.root.bind_all("<Control-v>", self._on_paste_shortcut)
+        self.root.bind_all("<Control-V>", self._on_paste_shortcut)
+
+        if HAS_TKDND:
+            try:
+                self.image_drop_label.drop_target_register(DND_FILES)
+                self.image_drop_label.dnd_bind("<<Drop>>", self._on_image_drop)
+                self._log("Drag-drop enabled for Single Image input")
+            except Exception as exc:
+                self._log(f"Drag-drop setup failed: {exc}")
+        else:
+            self._log("Drag-drop extension not available (install tkinterdnd2 for file drop support)")
+
+    def _set_drop_zone_visual_state(self, enabled: bool) -> None:
+        self.image_drop_enabled = enabled
+        if enabled:
+            text = "Drop an image here or press Ctrl+V to paste from clipboard"
+            bg = "#f5f7fa"
+        else:
+            text = "Drop/Paste is available only in Single Image mode"
+            bg = "#e8eaed"
+        self.image_drop_label.configure(text=text, bg=bg)
+
     def _refresh_capability_hint(self) -> None:
         hints = [
             f"OS={platform.system()} {platform.release()}",
@@ -1020,6 +1156,121 @@ class InferenceToolApp:
             self.model_format_var.set(suffix[1:].upper())
         else:
             self.model_format_var.set("Unknown")
+
+    def _set_single_image_path(self, image_path: str, source: str) -> None:
+        self.image_path_var.set(image_path)
+        self._log(f"Single image set from {source}: {image_path}")
+
+    def _save_clipboard_image(self, image: Image.Image) -> str:
+        out_dir = Path("data") / "captures" / "mitt_clipboard"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"clipboard_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+        image.convert("RGB").save(out_path, format="PNG")
+        return str(out_path)
+
+    def _download_dropped_image_url(self, url: str) -> str:
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(request, timeout=12) as response:
+            payload = response.read()
+
+        encoded = np.frombuffer(payload, dtype=np.uint8)
+        frame = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+        if frame is None:
+            raise RuntimeError("Dropped URL did not return a decodable image")
+
+        out_dir = Path("data") / "captures" / "mitt_drop"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"drop_url_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+        if not cv2.imwrite(str(out_path), frame):
+            raise RuntimeError("Failed to save downloaded image from URL")
+        return str(out_path)
+
+    def _paste_image_from_clipboard(self) -> None:
+        if self.mode_var.get() != "image":
+            return
+        if ImageGrab is None:
+            messagebox.showerror("Clipboard", "Clipboard image paste is not available in this environment.")
+            return
+
+        try:
+            clip = ImageGrab.grabclipboard()
+        except Exception as exc:
+            messagebox.showerror("Clipboard", f"Unable to read clipboard: {exc}")
+            return
+
+        if clip is None:
+            messagebox.showwarning("Clipboard", "Clipboard does not contain an image.")
+            return
+
+        if isinstance(clip, Image.Image):
+            saved_path = self._save_clipboard_image(clip)
+            self._set_single_image_path(saved_path, source="clipboard image")
+            frame = cv2.imread(saved_path)
+            if frame is not None:
+                self._render_preview(frame)
+            return
+
+        if isinstance(clip, list):
+            for item in clip:
+                candidate = str(item)
+                ext = Path(candidate).suffix.lower()
+                if ext in IMAGE_EXTENSIONS and os.path.exists(candidate):
+                    self._set_single_image_path(candidate, source="clipboard file")
+                    frame = cv2.imread(candidate)
+                    if frame is not None:
+                        self._render_preview(frame)
+                    return
+
+        messagebox.showwarning("Clipboard", "Clipboard content is not a supported image.")
+
+    def _on_paste_shortcut(self, _event: Any) -> str:
+        if self.mode_var.get() != "image" or not self.image_drop_enabled:
+            return ""
+        self._paste_image_from_clipboard()
+        return "break"
+
+    def _extract_drop_paths(self, raw_data: str) -> List[str]:
+        try:
+            values = list(self.root.tk.splitlist(raw_data))
+        except Exception:
+            values = [raw_data]
+
+        out: List[str] = []
+        for value in values:
+            cleaned = str(value).strip().strip("{}")
+            if cleaned:
+                out.append(cleaned)
+        return out
+
+    def _on_image_drop(self, event: Any) -> str:
+        if self.mode_var.get() != "image" or not self.image_drop_enabled:
+            return "break"
+
+        paths = self._extract_drop_paths(getattr(event, "data", ""))
+        for candidate in paths:
+            ext = Path(candidate).suffix.lower()
+            if ext in IMAGE_EXTENSIONS and os.path.exists(candidate):
+                self._set_single_image_path(candidate, source="drag-drop")
+                frame = cv2.imread(candidate)
+                if frame is not None:
+                    self._render_preview(frame)
+                return "break"
+
+            if candidate.startswith("http://") or candidate.startswith("https://"):
+                try:
+                    downloaded = self._download_dropped_image_url(candidate)
+                except Exception as exc:
+                    self._log(f"Dropped URL is not usable as image: {exc}")
+                    continue
+
+                self._set_single_image_path(downloaded, source="drag-drop URL")
+                frame = cv2.imread(downloaded)
+                if frame is not None:
+                    self._render_preview(frame)
+                return "break"
+
+        messagebox.showwarning("Drop Image", "Dropped item is not a supported local image file or image URL.")
+        return "break"
 
     def _set_control_state(self, widget: Any, enabled: bool, *, readonly_when_enabled: bool = False) -> None:
         if readonly_when_enabled:
@@ -1039,6 +1290,8 @@ class InferenceToolApp:
         # Single image controls
         self._set_control_state(self.image_entry, is_image)
         self._set_control_state(self.image_browse_btn, is_image)
+        self._set_control_state(self.image_paste_btn, is_image)
+        self._set_drop_zone_visual_state(is_image)
 
         # Dataset controls
         self._set_control_state(self.dataset_entry, is_dataset)
@@ -1162,6 +1415,9 @@ class InferenceToolApp:
         if self.worker_thread and self.worker_thread.is_alive():
             messagebox.showwarning("Benchmark", "A run is already active.")
             return
+
+        if self.small_screen_mode:
+            self._ensure_small_screen_popouts(open_logs=True, open_preview=True)
 
         if self.backend is None and not self._load_model():
             return
@@ -1664,6 +1920,17 @@ class InferenceToolApp:
         self.preview_image = ImageTk.PhotoImage(image=image)
         self.preview_label.configure(image=self.preview_image)
 
+        if self.small_screen_mode and self.preview_label_popup is not None:
+            popup_w = max(320, min(self.screen_w - 40, 900))
+            popup_h = max(220, min(self.screen_h - 80, 620))
+            ph, pw = frame_bgr.shape[:2]
+            pscale = min(popup_w / max(pw, 1), popup_h / max(ph, 1))
+            presized = cv2.resize(frame_bgr, (int(pw * pscale), int(ph * pscale)), interpolation=cv2.INTER_AREA)
+            prgb = cv2.cvtColor(presized, cv2.COLOR_BGR2RGB)
+            pimage = Image.fromarray(prgb)
+            self.preview_image_popup = ImageTk.PhotoImage(image=pimage)
+            self.preview_label_popup.configure(image=self.preview_image_popup)
+
     def _update_stats(self, stats: Dict[str, float]) -> None:
         ordered_keys = [
             "count",
@@ -1706,6 +1973,10 @@ class InferenceToolApp:
         self.log_text.insert(tk.END, f"[{stamp}] {message}\n")
         self.log_text.see(tk.END)
 
+        if self.small_screen_mode and self.log_text_popup is not None:
+            self.log_text_popup.insert(tk.END, f"[{stamp}] {message}\n")
+            self.log_text_popup.see(tk.END)
+
     def _on_close(self) -> None:
         self.stop_event.set()
 
@@ -1716,11 +1987,19 @@ class InferenceToolApp:
             self.backend.close()
             self.backend = None
 
+        if self.log_window is not None and self.log_window.winfo_exists():
+            self.log_window.destroy()
+        if self.preview_window is not None and self.preview_window.winfo_exists():
+            self.preview_window.destroy()
+
         self.root.destroy()
 
 
 def main() -> None:
-    root = tk.Tk()
+    if HAS_TKDND and TkinterDnD is not None:
+        root = TkinterDnD.Tk()
+    else:
+        root = tk.Tk()
     app = InferenceToolApp(root)
     root.mainloop()
 
