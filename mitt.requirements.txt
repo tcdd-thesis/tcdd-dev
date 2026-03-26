@@ -13,13 +13,13 @@ torch>=2.2
 onnxruntime>=1.17
 
 # Optional for ONNX GPU on Windows (install instead of onnxruntime if preferred)
-# onnxruntime-gpu>=1.17
+onnxruntime-gpu>=1.17
 
 # Raspberry Pi camera module support (optional; camera fallback uses OpenCV)
 # picamera2>=0.3
 
 # Optional GUI drag-and-drop support for Single Image mode
-# tkinterdnd2>=0.4
+tkinterdnd2>=0.4
 
 # Hailo HEF runtime is provided by Hailo installation on Raspberry Pi,
 # not from pip in most setups. Keep using your existing Hailo environment.
