@@ -839,9 +839,10 @@ class InferenceToolApp:
         self.screen_w = int(self.root.winfo_screenwidth())
         self.screen_h = int(self.root.winfo_screenheight())
         self.small_screen_mode = self.screen_w <= 900 or self.screen_h <= 600
+        self.compact_pad = 2
         self.root.title("TCDD Standalone Inference Tool")
         if self.small_screen_mode:
-            self.root.geometry(f"{min(self.screen_w, 780)}x{min(self.screen_h, 520)}")
+            self.root.geometry(f"{self.screen_w}x{self.screen_h}")
         else:
             self.root.geometry("1400x900")
 
@@ -854,6 +855,7 @@ class InferenceToolApp:
         self.log_window: Optional[tk.Toplevel] = None
         self.preview_window: Optional[tk.Toplevel] = None
         self.log_text_popup: Optional[ScrolledText] = None
+        self.model_info_text_popup: Optional[ScrolledText] = None
         self.preview_label_popup: Optional[ttk.Label] = None
 
         self.model_path_var = tk.StringVar()
@@ -886,7 +888,8 @@ class InferenceToolApp:
         self._setup_image_receiver()
         self._refresh_capability_hint()
         if self.small_screen_mode:
-            self._log("Small screen mode enabled: logs and preview will open in separate windows.")
+            self._log("Small screen mode enabled: model info/logs and preview open in separate windows.")
+            self._ensure_small_screen_popouts(open_logs=True, open_preview=True)
 
         self.model_path_var.trace_add("write", self._on_model_path_changed)
         self.mode_var.trace_add("write", self._on_mode_changed)
@@ -895,7 +898,7 @@ class InferenceToolApp:
         self._apply_mode_controls()
 
     def _build_ui(self) -> None:
-        outer = ttk.Frame(self.root, padding=8)
+        outer = ttk.Frame(self.root, padding=4 if self.small_screen_mode else 8)
         outer.pack(fill=tk.BOTH, expand=True)
 
         left = ttk.Frame(outer)
@@ -911,21 +914,21 @@ class InferenceToolApp:
         dataset_path_width = 52 if not self.small_screen_mode else 28
 
         model_frame = ttk.LabelFrame(left, text="Model")
-        model_frame.pack(fill=tk.X, padx=4, pady=4)
+        model_frame.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
-        ttk.Label(model_frame, text="Path").grid(row=0, column=0, sticky="w", padx=4, pady=4)
-        ttk.Entry(model_frame, textvariable=self.model_path_var, width=model_path_width).grid(row=0, column=1, sticky="ew", padx=4, pady=4)
-        ttk.Button(model_frame, text="Browse", command=self._browse_model).grid(row=0, column=2, padx=4, pady=4)
+        ttk.Label(model_frame, text="Path").grid(row=0, column=0, sticky="w", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
+        ttk.Entry(model_frame, textvariable=self.model_path_var, width=model_path_width).grid(row=0, column=1, sticky="ew", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
+        ttk.Button(model_frame, text="Browse", command=self._browse_model).grid(row=0, column=2, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
-        ttk.Label(model_frame, text="Format").grid(row=1, column=0, sticky="w", padx=4, pady=4)
-        ttk.Label(model_frame, textvariable=self.model_format_var).grid(row=1, column=1, sticky="w", padx=4, pady=4)
+        ttk.Label(model_frame, text="Format").grid(row=1, column=0, sticky="w", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
+        ttk.Label(model_frame, textvariable=self.model_format_var).grid(row=1, column=1, sticky="w", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
-        ttk.Label(model_frame, text="Labels").grid(row=2, column=0, sticky="w", padx=4, pady=4)
-        ttk.Entry(model_frame, textvariable=self.labels_path_var, width=labels_path_width).grid(row=2, column=1, sticky="ew", padx=4, pady=4)
-        ttk.Button(model_frame, text="Browse", command=self._browse_labels).grid(row=2, column=2, padx=4, pady=4)
+        ttk.Label(model_frame, text="Labels").grid(row=2, column=0, sticky="w", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
+        ttk.Entry(model_frame, textvariable=self.labels_path_var, width=labels_path_width).grid(row=2, column=1, sticky="ew", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
+        ttk.Button(model_frame, text="Browse", command=self._browse_labels).grid(row=2, column=2, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
         controls_row = ttk.Frame(model_frame)
-        controls_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+        controls_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
         ttk.Checkbutton(controls_row, text="Use Hailo for HEF", variable=self.use_hailo_var).pack(side=tk.LEFT, padx=4)
         ttk.Checkbutton(controls_row, text="Prefer GPU (ONNX)", variable=self.prefer_gpu_var).pack(side=tk.LEFT, padx=4)
@@ -943,52 +946,56 @@ class InferenceToolApp:
         model_frame.columnconfigure(1, weight=1)
 
         input_frame = ttk.LabelFrame(left, text="Input")
-        input_frame.pack(fill=tk.X, padx=4, pady=4)
+        input_frame.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
         mode_row = ttk.Frame(input_frame)
-        mode_row.pack(fill=tk.X, padx=4, pady=4)
+        mode_row.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
         ttk.Radiobutton(mode_row, text="Single Image", variable=self.mode_var, value="image").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_row, text="Dataset", variable=self.mode_var, value="dataset").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_row, text="Camera Stream", variable=self.mode_var, value="camera").pack(side=tk.LEFT, padx=4)
 
-        image_row = ttk.Frame(input_frame)
-        image_row.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Label(image_row, text="Image").pack(side=tk.LEFT)
-        self.image_entry = ttk.Entry(image_row, textvariable=self.image_path_var, width=image_path_width)
+        self.image_row = ttk.Frame(input_frame)
+        if not self.small_screen_mode:
+            self.image_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(self.image_row, text="Image").pack(side=tk.LEFT)
+        self.image_entry = ttk.Entry(self.image_row, textvariable=self.image_path_var, width=image_path_width)
         self.image_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-        self.image_browse_btn = ttk.Button(image_row, text="Browse", command=self._browse_image)
+        self.image_browse_btn = ttk.Button(self.image_row, text="Browse", command=self._browse_image)
         self.image_browse_btn.pack(side=tk.LEFT)
 
-        image_receiver_row = ttk.Frame(input_frame)
-        image_receiver_row.pack(fill=tk.X, padx=4, pady=(0, 4))
+        self.image_receiver_row = ttk.Frame(input_frame)
+        if not self.small_screen_mode:
+            self.image_receiver_row.pack(fill=tk.X, padx=4, pady=(0, 4))
+        drop_text = "Drop image or press Ctrl+V to paste" if self.small_screen_mode else "Drop an image here or press Ctrl+V to paste from clipboard"
         self.image_drop_label = tk.Label(
-            image_receiver_row,
-            text="Drop an image here or press Ctrl+V to paste from clipboard",
+            self.image_receiver_row,
+            text=drop_text,
             relief="groove",
             borderwidth=2,
-            padx=8,
-            pady=8,
+            padx=6 if self.small_screen_mode else 8,
+            pady=3 if self.small_screen_mode else 8,
             anchor="w",
             bg="#f5f7fa",
         )
         self.image_drop_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.image_paste_btn = ttk.Button(
-            image_receiver_row,
+            self.image_receiver_row,
             text="Paste",
             command=self._paste_image_from_clipboard,
         )
         self.image_paste_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        dataset_row = ttk.Frame(input_frame)
-        dataset_row.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Label(dataset_row, text="Dataset").pack(side=tk.LEFT)
-        self.dataset_entry = ttk.Entry(dataset_row, textvariable=self.dataset_path_var, width=dataset_path_width)
+        self.dataset_row = ttk.Frame(input_frame)
+        if not self.small_screen_mode:
+            self.dataset_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(self.dataset_row, text="Dataset").pack(side=tk.LEFT)
+        self.dataset_entry = ttk.Entry(self.dataset_row, textvariable=self.dataset_path_var, width=dataset_path_width)
         self.dataset_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-        self.dataset_browse_btn = ttk.Button(dataset_row, text="Browse", command=self._browse_dataset)
+        self.dataset_browse_btn = ttk.Button(self.dataset_row, text="Browse", command=self._browse_dataset)
         self.dataset_browse_btn.pack(side=tk.LEFT)
-        ttk.Label(dataset_row, text="Split").pack(side=tk.LEFT, padx=(10, 2))
+        ttk.Label(self.dataset_row, text="Split").pack(side=tk.LEFT, padx=(10, 2))
         self.dataset_split_combo = ttk.Combobox(
-            dataset_row,
+            self.dataset_row,
             textvariable=self.dataset_split_var,
             values=["all", "train", "val", "test", "valid"],
             width=8,
@@ -996,11 +1003,12 @@ class InferenceToolApp:
         )
         self.dataset_split_combo.pack(side=tk.LEFT)
 
-        camera_row = ttk.Frame(input_frame)
-        camera_row.pack(fill=tk.X, padx=4, pady=4)
-        ttk.Label(camera_row, text="Camera Source").pack(side=tk.LEFT)
+        self.camera_row = ttk.Frame(input_frame)
+        if not self.small_screen_mode:
+            self.camera_row.pack(fill=tk.X, padx=4, pady=4)
+        ttk.Label(self.camera_row, text="Camera Source").pack(side=tk.LEFT)
         self.camera_source_combo = ttk.Combobox(
-            camera_row,
+            self.camera_row,
             textvariable=self.camera_source_var,
             values=["0", "1", "2", "3", "4", "rpi_camera"],
             width=12,
@@ -1008,32 +1016,32 @@ class InferenceToolApp:
         )
         self.camera_source_combo.pack(side=tk.LEFT, padx=6)
 
-        ttk.Label(camera_row, text="Width").pack(side=tk.LEFT, padx=(12, 2))
-        self.cam_width_entry = ttk.Entry(camera_row, textvariable=self.cam_width_var, width=6)
+        ttk.Label(self.camera_row, text="Width").pack(side=tk.LEFT, padx=(12, 2))
+        self.cam_width_entry = ttk.Entry(self.camera_row, textvariable=self.cam_width_var, width=6)
         self.cam_width_entry.pack(side=tk.LEFT)
-        ttk.Label(camera_row, text="Height").pack(side=tk.LEFT, padx=(8, 2))
-        self.cam_height_entry = ttk.Entry(camera_row, textvariable=self.cam_height_var, width=6)
+        ttk.Label(self.camera_row, text="Height").pack(side=tk.LEFT, padx=(8, 2))
+        self.cam_height_entry = ttk.Entry(self.camera_row, textvariable=self.cam_height_var, width=6)
         self.cam_height_entry.pack(side=tk.LEFT)
-        ttk.Label(camera_row, text="FPS").pack(side=tk.LEFT, padx=(8, 2))
-        self.cam_fps_entry = ttk.Entry(camera_row, textvariable=self.cam_fps_var, width=6)
+        ttk.Label(self.camera_row, text="FPS").pack(side=tk.LEFT, padx=(8, 2))
+        self.cam_fps_entry = ttk.Entry(self.camera_row, textvariable=self.cam_fps_var, width=6)
         self.cam_fps_entry.pack(side=tk.LEFT)
 
         bench_frame = ttk.LabelFrame(left, text="Benchmark")
-        bench_frame.pack(fill=tk.X, padx=4, pady=4)
+        bench_frame.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
 
         if self.small_screen_mode:
-            ttk.Label(bench_frame, text="Confidence").grid(row=0, column=0, padx=4, pady=4, sticky="w")
-            ttk.Entry(bench_frame, textvariable=self.confidence_var, width=7).grid(row=0, column=1, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="Conf").grid(row=0, column=0, padx=2, pady=2, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.confidence_var, width=6).grid(row=0, column=1, padx=2, pady=2, sticky="w")
 
-            ttk.Label(bench_frame, text="IOU").grid(row=0, column=2, padx=4, pady=4, sticky="w")
-            ttk.Entry(bench_frame, textvariable=self.iou_var, width=7).grid(row=0, column=3, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="IOU").grid(row=0, column=2, padx=2, pady=2, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.iou_var, width=6).grid(row=0, column=3, padx=2, pady=2, sticky="w")
 
-            ttk.Label(bench_frame, text="Warmup").grid(row=0, column=4, padx=4, pady=4, sticky="w")
-            ttk.Entry(bench_frame, textvariable=self.warmup_var, width=7).grid(row=0, column=5, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="Warm").grid(row=0, column=4, padx=2, pady=2, sticky="w")
+            ttk.Entry(bench_frame, textvariable=self.warmup_var, width=5).grid(row=0, column=5, padx=2, pady=2, sticky="w")
 
-            ttk.Label(bench_frame, text="Iterations (image)").grid(row=1, column=0, padx=4, pady=4, sticky="w")
-            self.iterations_entry = ttk.Entry(bench_frame, textvariable=self.iterations_var, width=9)
-            self.iterations_entry.grid(row=1, column=1, padx=4, pady=4, sticky="w")
+            ttk.Label(bench_frame, text="Iter").grid(row=0, column=6, padx=2, pady=2, sticky="w")
+            self.iterations_entry = ttk.Entry(bench_frame, textvariable=self.iterations_var, width=6)
+            self.iterations_entry.grid(row=0, column=7, padx=2, pady=2, sticky="w")
         else:
             ttk.Label(bench_frame, text="Confidence").grid(row=0, column=0, padx=4, pady=4, sticky="w")
             ttk.Entry(bench_frame, textvariable=self.confidence_var, width=8).grid(row=0, column=1, padx=4, pady=4, sticky="w")
@@ -1049,17 +1057,18 @@ class InferenceToolApp:
             self.iterations_entry.grid(row=0, column=7, padx=4, pady=4, sticky="w")
 
         action_row = ttk.Frame(left)
-        action_row.pack(fill=tk.X, padx=4, pady=6)
+        action_row.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 6)
         ttk.Button(action_row, text="Start", command=self._start).pack(side=tk.LEFT, padx=4)
         ttk.Button(action_row, text="Stop", command=self._stop).pack(side=tk.LEFT, padx=4)
         ttk.Label(action_row, textvariable=self.status_var).pack(side=tk.RIGHT, padx=6)
 
         stats_frame = ttk.LabelFrame(left, text="Statistics")
-        stats_frame.pack(fill=tk.X, padx=4, pady=4)
+        stats_frame.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
         ttk.Label(stats_frame, textvariable=self.stats_var, justify=tk.LEFT).pack(fill=tk.X, padx=6, pady=6)
 
         self.model_info_text = ScrolledText(left, height=7)
-        self.model_info_text.pack(fill=tk.BOTH, padx=4, pady=4)
+        if not self.small_screen_mode:
+            self.model_info_text.pack(fill=tk.BOTH, padx=4, pady=4)
         self.model_info_text.insert(tk.END, "Model info will appear here.\n")
         self.model_info_text.configure(state=tk.DISABLED)
 
@@ -1077,6 +1086,7 @@ class InferenceToolApp:
         if self.log_window is not None:
             self.log_window.destroy()
         self.log_window = None
+        self.model_info_text_popup = None
         self.log_text_popup = None
 
     def _on_popup_preview_close(self) -> None:
@@ -1092,13 +1102,26 @@ class InferenceToolApp:
 
         if open_logs and (self.log_window is None or not self.log_window.winfo_exists()):
             self.log_window = tk.Toplevel(self.root)
-            self.log_window.title("MITT Logs")
-            self.log_window.geometry(f"{min(620, self.screen_w - 20)}x{min(420, self.screen_h - 60)}")
+            self.log_window.title("MITT Model Info and Logs")
+            self.log_window.geometry(f"{min(620, self.screen_w - 20)}x{min(460, self.screen_h - 40)}")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_popup_log_close)
 
             frame = ttk.Frame(self.log_window, padding=6)
             frame.pack(fill=tk.BOTH, expand=True)
-            self.log_text_popup = ScrolledText(frame, height=18)
+
+            info_frame = ttk.LabelFrame(frame, text="Model Info")
+            info_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+            self.model_info_text_popup = ScrolledText(info_frame, height=8)
+            self.model_info_text_popup.pack(fill=tk.BOTH, expand=True)
+            model_existing = self.model_info_text.get("1.0", tk.END)
+            if model_existing.strip():
+                self.model_info_text_popup.insert(tk.END, model_existing)
+                self.model_info_text_popup.see(tk.END)
+            self.model_info_text_popup.configure(state=tk.DISABLED)
+
+            logs_frame = ttk.LabelFrame(frame, text="Logs")
+            logs_frame.pack(fill=tk.BOTH, expand=True)
+            self.log_text_popup = ScrolledText(logs_frame, height=12)
             self.log_text_popup.pack(fill=tk.BOTH, expand=True)
             existing = self.log_text.get("1.0", tk.END)
             if existing.strip():
@@ -1281,11 +1304,29 @@ class InferenceToolApp:
     def _on_mode_changed(self, *_: Any) -> None:
         self._apply_mode_controls()
 
+    def _set_small_screen_input_rows(self, *, is_image: bool, is_dataset: bool, is_camera: bool) -> None:
+        if not self.small_screen_mode:
+            return
+
+        for row in (self.image_row, self.image_receiver_row, self.dataset_row, self.camera_row):
+            if row.winfo_manager():
+                row.pack_forget()
+
+        if is_image:
+            self.image_row.pack(fill=tk.X, padx=self.compact_pad, pady=1)
+            self.image_receiver_row.pack(fill=tk.X, padx=self.compact_pad, pady=(0, 2))
+        elif is_dataset:
+            self.dataset_row.pack(fill=tk.X, padx=self.compact_pad, pady=1)
+        elif is_camera:
+            self.camera_row.pack(fill=tk.X, padx=self.compact_pad, pady=1)
+
     def _apply_mode_controls(self) -> None:
         mode = self.mode_var.get()
         is_image = mode == "image"
         is_dataset = mode == "dataset"
         is_camera = mode == "camera"
+
+        self._set_small_screen_input_rows(is_image=is_image, is_dataset=is_dataset, is_camera=is_camera)
 
         # Single image controls
         self._set_control_state(self.image_entry, is_image)
@@ -1410,6 +1451,12 @@ class InferenceToolApp:
         self.model_info_text.delete("1.0", tk.END)
         self.model_info_text.insert(tk.END, "\n".join(lines) + "\n")
         self.model_info_text.configure(state=tk.DISABLED)
+
+        if self.small_screen_mode and self.model_info_text_popup is not None:
+            self.model_info_text_popup.configure(state=tk.NORMAL)
+            self.model_info_text_popup.delete("1.0", tk.END)
+            self.model_info_text_popup.insert(tk.END, "\n".join(lines) + "\n")
+            self.model_info_text_popup.configure(state=tk.DISABLED)
 
     def _start(self) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
