@@ -9,3 +9,4 @@ config.json
 backend/models/*
 data/logs/*
 data/captures/*
+data/tts_profiles/*
