@@ -101,6 +101,18 @@ mkdir -p data/logs
 mkdir -p data/captures
 mkdir -p backend/models
 
+# Kill any process still holding the port from a bad shutdown
+fuser -k $PORT/tcp 2>/dev/null || true
+sleep 0.5
+
+# Trap to clean up children on script exit
+cleanup() {
+    pkill -f chromium 2>/dev/null
+    kill $BACKEND_PID 2>/dev/null
+    wait $BACKEND_PID 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
 # Start Python backend in background
 python backend/main.py &
 BACKEND_PID=$!
