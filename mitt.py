@@ -25,6 +25,7 @@ import threading
 import platform
 import urllib.request
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -1207,6 +1208,7 @@ class InferenceToolApp:
         self.log_text_popup: Optional[ScrolledText] = None
         self.model_info_text_popup: Optional[ScrolledText] = None
         self.preview_label_popup: Optional[ttk.Label] = None
+        self._cpu_stat_prev: Optional[Tuple[float, float]] = None
 
         self.model_path_var = tk.StringVar()
         self.model_format_var = tk.StringVar(value="Unknown")
@@ -1294,15 +1296,6 @@ class InferenceToolApp:
             state="readonly",
         ).pack(side=tk.LEFT, padx=4)
 
-        ttk.Label(controls_row, text="Input Color").pack(side=tk.LEFT, padx=(12, 2))
-        ttk.Combobox(
-            controls_row,
-            textvariable=self.input_color_space_var,
-            values=["BGR", "RGB"],
-            width=6,
-            state="readonly",
-        ).pack(side=tk.LEFT, padx=4)
-
         ttk.Button(controls_row, text="Load Model", command=self._load_model).pack(side=tk.RIGHT, padx=4)
         model_frame.columnconfigure(1, weight=1)
 
@@ -1315,6 +1308,17 @@ class InferenceToolApp:
         ttk.Radiobutton(mode_row, text="Video", variable=self.mode_var, value="video").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_row, text="Dataset", variable=self.mode_var, value="dataset").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_row, text="Camera Stream", variable=self.mode_var, value="camera").pack(side=tk.LEFT, padx=4)
+
+        color_row = ttk.Frame(input_frame)
+        color_row.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=(0, self.compact_pad if self.small_screen_mode else 2))
+        ttk.Label(color_row, text="Input Color").pack(side=tk.LEFT)
+        ttk.Combobox(
+            color_row,
+            textvariable=self.input_color_space_var,
+            values=["BGR", "RGB"],
+            width=8,
+            state="readonly",
+        ).pack(side=tk.LEFT, padx=6)
 
         self.image_row = ttk.Frame(input_frame)
         if not self.small_screen_mode:
@@ -1813,7 +1817,59 @@ class InferenceToolApp:
                 value /= 1000.0
             if -40.0 <= value <= 150.0:
                 return value
+
+        # Raspberry Pi fallback: vcgencmd measure_temp -> "temp=52.3'C"
+        try:
+            output = subprocess.check_output(["vcgencmd", "measure_temp"], stderr=subprocess.DEVNULL, text=True).strip()
+            match = re.search(r"([-+]?\d*\.?\d+)", output)
+            if match:
+                value = float(match.group(1))
+                if -40.0 <= value <= 150.0:
+                    return value
+        except Exception:
+            pass
+
         return None
+
+    def _read_cpu_util_procstat(self) -> Optional[float]:
+        if os.name == "nt":
+            return None
+
+        try:
+            with open("/proc/stat", "r", encoding="utf-8") as handle:
+                first = handle.readline().strip()
+        except Exception:
+            return None
+
+        if not first.startswith("cpu "):
+            return None
+
+        parts = first.split()
+        if len(parts) < 5:
+            return None
+
+        try:
+            nums = [float(v) for v in parts[1:]]
+        except ValueError:
+            return None
+
+        idle = nums[3] + (nums[4] if len(nums) > 4 else 0.0)
+        total = sum(nums)
+        current = (total, idle)
+
+        if self._cpu_stat_prev is None:
+            self._cpu_stat_prev = current
+            return None
+
+        prev_total, prev_idle = self._cpu_stat_prev
+        self._cpu_stat_prev = current
+        delta_total = total - prev_total
+        delta_idle = idle - prev_idle
+        if delta_total <= 0.0:
+            return None
+
+        util = 100.0 * (1.0 - (delta_idle / delta_total))
+        return max(0.0, min(100.0, util))
 
     def _read_linux_power_w(self) -> Optional[float]:
         base = Path("/sys/class/power_supply")
@@ -1866,6 +1922,10 @@ class InferenceToolApp:
                 metrics["cpu_util_pct"] = float(psutil.cpu_percent(interval=None))
             except Exception:
                 pass
+        else:
+            fallback_cpu = self._read_cpu_util_procstat()
+            if fallback_cpu is not None:
+                metrics["cpu_util_pct"] = float(fallback_cpu)
 
         if os.name != "nt":
             temp_c = self._read_linux_temp_c()
@@ -2494,6 +2554,11 @@ class InferenceToolApp:
             "latency": latency_stats,
             "latency_e2e": e2e_stats,
         }
+
+        system_samples.append(self._sample_system_metrics())
+        system_avg = self._aggregate_metrics(system_samples)
+        summary["system_metrics_avg"] = system_avg
+        summary.update(system_avg)
 
         report_files = save_yolo_eval_report(
             report_dir=report_dir,
