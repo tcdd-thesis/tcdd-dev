@@ -612,22 +612,30 @@ def close_app():
     
     logger.info("Close app requested via API")
     
-    # Spawn a detached process that:
-    # 1. Waits 1s for HTTP response to be sent
-    # 2. Kills all Chromium processes
-    # 3. Sends SIGTERM to this Python process (triggers signal handler → graceful_shutdown)
-    # 4. Waits 3s, then force-kills if still alive
-    # 5. Force-frees the port as last resort
+    running_under_systemd = bool(os.environ.get('INVOCATION_ID'))
     pid = os.getpid()
-    kill_script = f'''
-        sleep 1
-        pkill -f chromium-browser 2>/dev/null
-        pkill -f chromium 2>/dev/null
-        kill {pid} 2>/dev/null
-        sleep 3
-        kill -9 {pid} 2>/dev/null
-        fuser -k 5000/tcp 2>/dev/null
-    '''
+    
+    if running_under_systemd:
+        # When managed by systemd, use systemctl stop — this tells systemd
+        # the stop was intentional so Restart=on-failure won't bring it back.
+        # systemd sends SIGTERM to the process group (kills bash, python, chromium).
+        logger.info("Running under systemd — using systemctl stop")
+        kill_script = f'''
+            sleep 1
+            sudo systemctl stop tcdd.service
+        '''
+    else:
+        # Manual run (terminal) — kill processes directly
+        logger.info("Running manually — using direct kill")
+        kill_script = f'''
+            sleep 1
+            pkill -f chromium-browser 2>/dev/null
+            pkill -f chromium 2>/dev/null
+            kill {pid} 2>/dev/null
+            sleep 3
+            kill -9 {pid} 2>/dev/null
+            fuser -k 5000/tcp 2>/dev/null
+        '''
     
     try:
         subprocess.Popen(
