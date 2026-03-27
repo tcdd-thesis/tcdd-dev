@@ -1608,13 +1608,21 @@ class InferenceToolApp:
 
         layout = load_yolo_dataset_layout(dataset_path, dataset_split)
         if layout.get("is_yolo"):
-            self._enqueue_log(
-                f"YOLO dataset detected ({layout.get('yaml_path')}); split={dataset_split}. Running evaluation report mode."
-            )
-            self._run_yolo_dataset_eval(cfg=cfg, layout=layout, dataset_root=dataset_path)
-            return
+            if isinstance(self.backend, DetectorBackend):
+                self._enqueue_log(
+                    f"YOLO dataset detected ({layout.get('yaml_path')}); split={dataset_split}. Running evaluation report mode."
+                )
+                self._run_yolo_dataset_eval(cfg=cfg, layout=layout, dataset_root=dataset_path)
+                return
 
-        files = discover_images(dataset_path)
+            self._enqueue_log(
+                "YOLO dataset detected, but current backend does not expose class-wise detection outputs for YOLO metrics. "
+                "Falling back to plain dataset benchmark mode (latency/throughput only)."
+            )
+            files = list(layout.get("images", []))
+        else:
+            files = discover_images(dataset_path)
+
         if not files:
             raise RuntimeError("No supported image files found in dataset folder.")
 
