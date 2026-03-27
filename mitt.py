@@ -636,7 +636,10 @@ def compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
         mpre[idx - 1] = max(mpre[idx - 1], mpre[idx])
 
     x = np.linspace(0.0, 1.0, 101)
-    return float(np.trapz(np.interp(x, mrec, mpre), x))
+    y = np.interp(x, mrec, mpre)
+    if hasattr(np, "trapezoid"):
+        return float(np.trapezoid(y, x))
+    return float(np.trapz(y, x))
 
 
 def class_ap_for_iou(records: Sequence[Dict[str, Any]], cls_id: int, iou_thr: float) -> Tuple[float, int]:
