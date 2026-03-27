@@ -27,150 +27,51 @@ if not HAS_TTS:
 
 
 # =============================================================================
-# ALERT MAPPING — Instructional style messages for each detection label
+# TTS PROFILE REGISTRY SETTINGS
 # =============================================================================
 
-TRAFFIC_ALERTS = {
-    # --- Critical (Tier 1) ---
-    "stop":                              "Stop sign ahead. Prepare to stop.",
-    "traffic_light_red":                 "Red light ahead. Please stop.",
-    "traffic_light_red_no_left_turn":    "Red light ahead. No left turn allowed.",
-    "traffic_light_red_no_right_turn":   "Red light ahead. No right turn allowed.",
-    "traffic_light_red_right_turn":      "Red light, right turn signal. Proceed with caution.",
-    "traffic_light_red_left_turn":       "Red light, left turn signal. Proceed with caution.",
+DEFAULT_PROFILES_FILE = "data/tts_profiles.json"
+DEFAULT_PROFILES_TEMPLATE_FILE = "data/tts_profiles_template_json.txt"
 
-    # --- High (Tier 2) ---
-    "traffic_light_yellow":              "Yellow light ahead. Prepare to stop.",
-    "yield":                             "Yield sign ahead. Slow down and give way.",
-    "pedestrian_crossing":               "Pedestrian crossing ahead. Slow down.",
-    "pwd_crossing":                      "PWD crossing ahead. Slow down and give way.",
-    "yield_to_pedestrian":               "Yield to pedestrians ahead.",
 
-    # --- Medium (Tier 3) ---
-    "speed_limit_50":                 "Speed limit fifty kilometers per hour.",
-    "speed_limit_60":                 "Speed limit sixty kilometers per hour.",
-    "speed_limit_80":                 "Speed limit eighty kilometers per hour.",
-    "no_uturn":                          "No U-turn allowed.",
-    "no_left_turn":                      "No left turn allowed.",
-    "no_right_turn":                     "No right turn allowed.",
-    "no_turn_on_red":                    "No turn on red.",
-    "no_left_turn_on_red":               "No left turn on red.",
-    "no_right_turn_on_red":              "No right turn on red.",
-    "no_parking":                        "No parking zone.",
-    "do_not_block_intersection":         "Do not block the intersection.",
-    "curve_right":                       "Curve to the right ahead.",
-    "curve_left":                        "Curve to the left ahead.",
+def _strip_json_comments(text: str) -> str:
+    """Strip // comments from JSON-with-comments text safely."""
+    lines = text.split("\n")
+    cleaned_lines = []
 
-    # --- Low / Informational (Tier 4) ---
-    "traffic_light_green":               "Green light. You may proceed.",
-    "traffic_light_green_no_right_turn": "Green light. No right turn allowed.",
-    "traffic_light_green_no_left_turn":  "Green light. No left turn allowed.",
-    "traffic_light_green_right_turn":    "Green light, right turn signal.",
-    "traffic_light_green_left_turn":     "Green light, left turn signal.",
-    "no_lights":                         "No traffic lights ahead.",
-    "bike_lane":                         "Bike lane ahead. Watch for cyclists.",
-    "loading_unloading_zone":            "Loading and unloading zone.",
-    "one_way_left":                      "One way street to the left.",
-    "one_way_right":                     "One way street to the right.",
-    "one_way":                           "One way street ahead.",
-    "two_way":                           "Two way traffic ahead.",
-    "keep_right":                        "Keep right.",
-    "keep_left":                         "Keep left.",
-    "road_split":                        "Road split ahead.",
+    for line in lines:
+        in_string = False
+        escape_next = False
+        result = []
+        i = 0
 
-    # =================================================================
-    # OLD MODEL LABELS  (remove this section when switching to the
-    # latest model that uses the labels above)
-    # =================================================================
-    "Stop":                              "Stop sign ahead. Prepare to stop.",
-    "Red Light":                         "Red light ahead. Please stop.",
-    "Green Light":                       "Green light. You may proceed.",
-    "Speed Limit 10":                    "Speed limit ten kilometers per hour.",
-    "Speed Limit 20":                    "Speed limit twenty kilometers per hour.",
-    "Speed Limit 30":                    "Speed limit thirty kilometers per hour.",
-    "Speed Limit 40":                    "Speed limit forty kilometers per hour.",
-    "Speed Limit 50":                    "Speed limit fifty kilometers per hour.",
-    "Speed Limit 60":                    "Speed limit sixty kilometers per hour.",
-    "Speed Limit 70":                    "Speed limit seventy kilometers per hour.",
-    "Speed Limit 80":                    "Speed limit eighty kilometers per hour.",
-    "Speed Limit 90":                    "Speed limit ninety kilometers per hour.",
-    "Speed Limit 100":                   "Speed limit one hundred kilometers per hour.",
-    "Speed Limit 110":                   "Speed limit one hundred ten kilometers per hour.",
-    "Speed Limit 120":                   "Speed limit one hundred twenty kilometers per hour.",
-}
+        while i < len(line):
+            ch = line[i]
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+                i += 1
+                continue
+            if ch == "\\" and in_string:
+                result.append(ch)
+                escape_next = True
+                i += 1
+                continue
+            if ch == '"':
+                in_string = not in_string
+                result.append(ch)
+                i += 1
+                continue
+            if not in_string and ch == "/" and i + 1 < len(line) and line[i + 1] == "/":
+                break
+            result.append(ch)
+            i += 1
 
-# =============================================================================
-# PRIORITY TIERS — Lower number = higher priority
-# =============================================================================
+        stripped = "".join(result).rstrip()
+        if stripped.strip():
+            cleaned_lines.append(stripped)
 
-PRIORITY_TIERS = {
-    # Tier 1 — Critical: must stop / immediate danger
-    "stop":                              1,
-    "traffic_light_red":                 1,
-    "traffic_light_red_no_left_turn":    1,
-    "traffic_light_red_no_right_turn":   1,
-    "traffic_light_red_right_turn":      1,
-    "traffic_light_red_left_turn":       1,
-
-    # Tier 2 — High: caution / yield
-    "traffic_light_yellow":              2,
-    "yield":                             2,
-    "pedestrian_crossing":               2,
-    "pwd_crossing":                      2,
-    "yield_to_pedestrian":               2,
-
-    # Tier 3 — Medium: regulatory signs
-    "speed_limit_50":                 3,
-    "speed_limit_60":                 3,
-    "speed_limit_80":                 3,
-    "no_uturn":                          3,
-    "no_left_turn":                      3,
-    "no_right_turn":                     3,
-    "no_turn_on_red":                    3,
-    "no_left_turn_on_red":               3,
-    "no_right_turn_on_red":              3,
-    "no_parking":                        3,
-    "do_not_block_intersection":         3,
-    "curve_right":                       3,
-    "curve_left":                        3,
-
-    # Tier 4 — Low / Informational
-    "traffic_light_green":               4,
-    "traffic_light_green_no_right_turn": 4,
-    "traffic_light_green_no_left_turn":  4,
-    "traffic_light_green_right_turn":    4,
-    "traffic_light_green_left_turn":     4,
-    "no_lights":                         4,
-    "bike_lane":                         4,
-    "loading_unloading_zone":            4,
-    "one_way_left":                      4,
-    "one_way_right":                     4,
-    "one_way":                           4,
-    "two_way":                           4,
-    "keep_right":                        4,
-    "keep_left":                         4,
-    "road_split":                        4,
-
-    # =================================================================
-    # OLD MODEL LABELS  (remove this section when switching to the
-    # latest model that uses the labels above)
-    # =================================================================
-    "Stop":                              1,   # Critical
-    "Red Light":                         1,   # Critical
-    "Green Light":                       4,   # Informational
-    "Speed Limit 10":                    3,   # Regulatory
-    "Speed Limit 20":                    3,
-    "Speed Limit 30":                    3,
-    "Speed Limit 40":                    3,
-    "Speed Limit 50":                    3,
-    "Speed Limit 60":                    3,
-    "Speed Limit 70":                    3,
-    "Speed Limit 80":                    3,
-    "Speed Limit 90":                    3,
-    "Speed Limit 100":                   3,
-    "Speed Limit 110":                   3,
-    "Speed Limit 120":                   3,
-}
+    return "\n".join(cleaned_lines)
 
 # Fallback priority for any unknown label
 DEFAULT_PRIORITY = 5
@@ -206,7 +107,11 @@ class TTSEngine:
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
-        self.profiles_file = self._cfg("tts.profiles_file", "backend/models/tts_profiles.json")
+        self.profiles_file = self._cfg("tts.profiles_file", DEFAULT_PROFILES_FILE)
+        self.profiles_template_file = self._cfg(
+            "tts.profiles_template_file",
+            DEFAULT_PROFILES_TEMPLATE_FILE,
+        )
         self.active_profile = self._cfg("tts.active_profile", "default")
 
         # Internal state
@@ -221,9 +126,9 @@ class TTSEngine:
         self._consecutive_failures = 0
         self._max_consecutive_failures = 3
         self._mapping_lock = threading.Lock()
-        self._alerts_map: dict[str, str] = dict(TRAFFIC_ALERTS)
-        self._priority_map: dict[str, int] = dict(PRIORITY_TIERS)
-        self._profile_source = "legacy"
+        self._alerts_map: dict[str, str] = {}
+        self._priority_map: dict[str, int] = {}
+        self._profile_source = "uninitialized"
         self._profile_load_error = ""
         self._warned_unmapped_labels = set()
 
@@ -252,6 +157,71 @@ class TTSEngine:
             return self.config.get(key, default)
         return default
 
+    def _ensure_profiles_file(self):
+        """
+        Ensure runtime TTS profile registry exists and is valid JSON.
+
+        If the runtime file is missing or invalid, recreate it from
+        ``tts.profiles_template_file``.
+        """
+        runtime_file = self._cfg("tts.profiles_file", DEFAULT_PROFILES_FILE)
+        template_file = self._cfg(
+            "tts.profiles_template_file",
+            DEFAULT_PROFILES_TEMPLATE_FILE,
+        )
+
+        self.profiles_file = runtime_file
+        self.profiles_template_file = template_file
+
+        if not runtime_file:
+            raise ValueError("tts.profiles_file is empty")
+        if not template_file:
+            raise ValueError("tts.profiles_template_file is empty")
+
+        runtime_valid = False
+        if os.path.exists(runtime_file):
+            try:
+                with open(runtime_file, "r", encoding="utf-8") as f:
+                    json.load(f)
+                runtime_valid = True
+            except Exception as e:
+                logger.warning(
+                    "TTS runtime profile file is invalid (%s); regenerating from template",
+                    e,
+                )
+
+        if runtime_valid:
+            return
+
+        if not os.path.exists(template_file):
+            raise FileNotFoundError(
+                f"TTS profile template not found: {template_file}"
+            )
+
+        with open(template_file, "r", encoding="utf-8") as f:
+            template_text = f.read()
+
+        cleaned_json = _strip_json_comments(template_text)
+        registry = json.loads(cleaned_json)
+
+        profiles = registry.get("profiles", {})
+        if not isinstance(profiles, dict) or not profiles:
+            raise ValueError("TTS profile template has no valid 'profiles' object")
+
+        runtime_dir = os.path.dirname(runtime_file)
+        if runtime_dir:
+            os.makedirs(runtime_dir, exist_ok=True)
+
+        with open(runtime_file, "w", encoding="utf-8") as f:
+            json.dump(registry, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+
+        logger.info(
+            "TTS profile registry created from template: %s -> %s",
+            template_file,
+            runtime_file,
+        )
+
     def _set_active_profile_maps(
         self,
         alerts_map: dict,
@@ -272,28 +242,19 @@ class TTSEngine:
     def reload_profile_config(self):
         """
         Reload prompt/priority mappings from the configured profile registry.
-
-        Fallback behavior: if registry loading fails, legacy hardcoded maps are used.
         """
-        profiles_file = self._cfg("tts.profiles_file", "backend/models/tts_profiles.json")
+        profiles_file = self._cfg("tts.profiles_file", DEFAULT_PROFILES_FILE)
+        template_file = self._cfg(
+            "tts.profiles_template_file",
+            DEFAULT_PROFILES_TEMPLATE_FILE,
+        )
         profile_name = self._cfg("tts.active_profile", "default")
         self.profiles_file = profiles_file
-
-        fallback_alerts = dict(TRAFFIC_ALERTS)
-        fallback_priorities = dict(PRIORITY_TIERS)
-
-        if not profiles_file:
-            logger.warning("TTS profile registry path is empty; using legacy mappings")
-            self._set_active_profile_maps(
-                fallback_alerts,
-                fallback_priorities,
-                profile_source="legacy",
-                profile_name="legacy",
-                load_error="profiles_file is empty",
-            )
-            return
+        self.profiles_template_file = template_file
 
         try:
+            self._ensure_profiles_file()
+
             with open(profiles_file, "r", encoding="utf-8") as f:
                 registry = json.load(f)
 
@@ -352,17 +313,20 @@ class TTSEngine:
             )
 
         except Exception as e:
-            logger.warning(
-                "TTS profile registry load failed (%s). Falling back to legacy mappings.",
-                e,
-            )
+            load_error = str(e)
+            logger.error("TTS profile registry load failed: %s", load_error)
             self._set_active_profile_maps(
-                fallback_alerts,
-                fallback_priorities,
-                profile_source="legacy",
-                profile_name="legacy",
-                load_error=str(e),
+                {},
+                {},
+                profile_source="error",
+                profile_name=profile_name,
+                load_error=load_error,
             )
+            if self._on_error_callback:
+                try:
+                    self._on_error_callback(f"TTS profile load failed: {load_error}")
+                except Exception as callback_error:
+                    logger.error("TTS error callback exception: %s", callback_error)
 
     # -----------------------------------------------------------------
     # Background worker
@@ -501,6 +465,9 @@ class TTSEngine:
             alerts_map = self._alerts_map
             priority_map = self._priority_map
 
+        if not alerts_map:
+            return
+
         now = time.time()
 
         # Build candidate list: (priority, label)
@@ -601,7 +568,9 @@ class TTSEngine:
 
     def is_ready(self) -> bool:
         """Return True if the TTS engine is initialised and running."""
-        return self.enabled and self._engine_ready and self._running
+        with self._mapping_lock:
+            has_profile = bool(self._alerts_map)
+        return self.enabled and self._engine_ready and self._running and has_profile
 
     def get_info(self) -> dict:
         """Return a status dict (useful for the /api/status endpoint)."""
@@ -618,6 +587,7 @@ class TTSEngine:
             "labels_mapped": labels_mapped,
             "active_profile": self.active_profile,
             "profiles_file": self.profiles_file,
+            "profiles_template_file": self.profiles_template_file,
             "profile_source": self._profile_source,
             "profile_load_error": self._profile_load_error,
         }
