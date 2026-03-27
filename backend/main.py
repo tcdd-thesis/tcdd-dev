@@ -15,6 +15,7 @@ from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 import os
 import sys
+import signal
 import io
 import logging
 import threading
@@ -557,6 +558,58 @@ def reboot_system():
     
     return jsonify({'message': 'Rebooting...'}), 200
 
+# ============================================================================
+# GRACEFUL SHUTDOWN
+# ============================================================================
+
+_shutdown_in_progress = False
+
+def graceful_shutdown():
+    """Clean up all resources before exiting."""
+    global _shutdown_in_progress, is_streaming
+    if _shutdown_in_progress:
+        return
+    _shutdown_in_progress = True
+    
+    logger.info("Graceful shutdown started...")
+    
+    # Stop streaming loop
+    is_streaming = False
+    
+    # Notify connected clients
+    try:
+        socketio.emit('server_shutdown', {'message': 'Server shutting down'})
+        socketio.sleep(0.2)
+    except Exception as e:
+        logger.debug(f"Could not emit shutdown event: {e}")
+    
+    # Stop camera
+    try:
+        if camera:
+            camera.stop()
+            logger.info("Camera stopped")
+    except Exception as e:
+        logger.error(f"Error stopping camera: {e}")
+    
+    # Stop TTS engine
+    try:
+        if tts_engine:
+            tts_engine.stop()
+            logger.info("TTS engine stopped")
+    except Exception as e:
+        logger.error(f"Error stopping TTS: {e}")
+    
+    # Close loggers
+    try:
+        metrics_logger.close()
+        violations_logger.close()
+        logger.info("Loggers closed")
+    except Exception as e:
+        logger.error(f"Error closing loggers: {e}")
+    
+    logger.info("Graceful shutdown complete")
+
+
 @app.route('/api/close-app', methods=['POST'])
 @require_pairing
 def close_app():
@@ -568,16 +621,24 @@ def close_app():
     
     logger.info("Close app requested via API")
     
+    # Kill Chromium browser
     try:
         subprocess.Popen(
-            ['bash', '-c', 'sleep 1; pkill -f chromium; sleep 0.5; kill ' + str(os.getpid())],
+            ['pkill', '-f', 'chromium'],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
+            stderr=subprocess.DEVNULL
         )
     except Exception as e:
-        logger.error(f"Failed to initiate close: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.warning(f"Could not kill Chromium: {e}")
+    
+    # Schedule graceful shutdown + exit in background thread
+    def _deferred_exit():
+        import time
+        time.sleep(1)  # Allow HTTP response to be sent
+        graceful_shutdown()
+        os._exit(0)
+    
+    threading.Thread(target=_deferred_exit, daemon=True).start()
     
     return jsonify({'message': 'Closing application...'}), 200
 
@@ -1750,6 +1811,16 @@ if __name__ == '__main__':
     os.makedirs('data/captures', exist_ok=True)
     os.makedirs('backend/models', exist_ok=True)
     
+    # Signal handler for clean exit (systemctl stop, Ctrl+C)
+    def _signal_handler(signum, frame):
+        sig_name = signal.Signals(signum).name
+        logger.info(f"Received {sig_name}, shutting down...")
+        graceful_shutdown()
+        os._exit(0)
+    
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+    
     # Initialize system
     logger.info("="*60)
     logger.info("Sign Detection System Starting...")
@@ -1766,15 +1837,7 @@ if __name__ == '__main__':
         # Mark system as fully ready — config callbacks can now broadcast
         app_ready = True
         
-        try:
-            socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
-        except KeyboardInterrupt:
-            logger.info("\nShutting down...")
-            if tts_engine:
-                tts_engine.stop()
-            if camera:
-                camera.stop()
-            logger.info("Goodbye!")
+        socketio.run(app, host='0.0.0.0', port=port, debug=debug, allow_unsafe_werkzeug=True)
     else:
         logger.error("Failed to initialize system. Exiting.")
         sys.exit(1)

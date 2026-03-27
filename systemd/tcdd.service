@@ -7,9 +7,14 @@ Wants=graphical.target
 Type=simple
 User=tcdd-thesis
 WorkingDirectory=/home/tcdd-thesis/tcdd-dev
+KillMode=mixed
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=5
 ExecStartPre=/bin/chmod +x /home/tcdd-thesis/tcdd-dev/start.sh
 ExecStartPre=+/bin/sh -c "iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 5000 2>/dev/null; iptables -t nat -D OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 5000 2>/dev/null; iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 5000; iptables -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 5000"
 ExecStart=/bin/bash /home/tcdd-thesis/tcdd-dev/start.sh
+ExecStopPost=+/bin/sh -c "pkill -f chromium 2>/dev/null; sleep 1; fuser -k 5000/tcp 2>/dev/null || true"
 Environment=DISPLAY=:0
 StandardOutput=journal
 StandardError=journal
