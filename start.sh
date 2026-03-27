@@ -107,9 +107,11 @@ sleep 0.5
 
 # Trap to clean up children on script exit
 cleanup() {
+    pkill -f chromium-browser 2>/dev/null
     pkill -f chromium 2>/dev/null
     kill $BACKEND_PID 2>/dev/null
     wait $BACKEND_PID 2>/dev/null
+    fuser -k $PORT/tcp 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

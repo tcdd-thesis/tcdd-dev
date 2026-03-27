@@ -574,13 +574,6 @@ def graceful_shutdown():
     # Stop streaming loop
     is_streaming = False
     
-    # Notify connected clients
-    try:
-        socketio.emit('server_shutdown', {'message': 'Server shutting down'})
-        socketio.sleep(0.2)
-    except Exception as e:
-        logger.debug(f"Could not emit shutdown event: {e}")
-    
     # Stop camera
     try:
         if camera:
@@ -619,24 +612,33 @@ def close_app():
     
     logger.info("Close app requested via API")
     
-    # Kill Chromium browser
+    # Spawn a detached process that:
+    # 1. Waits 1s for HTTP response to be sent
+    # 2. Kills all Chromium processes
+    # 3. Sends SIGTERM to this Python process (triggers signal handler → graceful_shutdown)
+    # 4. Waits 3s, then force-kills if still alive
+    # 5. Force-frees the port as last resort
+    pid = os.getpid()
+    kill_script = f'''
+        sleep 1
+        pkill -f chromium-browser 2>/dev/null
+        pkill -f chromium 2>/dev/null
+        kill {pid} 2>/dev/null
+        sleep 3
+        kill -9 {pid} 2>/dev/null
+        fuser -k 5000/tcp 2>/dev/null
+    '''
+    
     try:
         subprocess.Popen(
-            ['pkill', '-f', 'chromium'],
+            ['bash', '-c', kill_script],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
         )
     except Exception as e:
-        logger.warning(f"Could not kill Chromium: {e}")
-    
-    # Schedule graceful shutdown + exit in background thread
-    def _deferred_exit():
-        import time
-        time.sleep(1)  # Allow HTTP response to be sent
-        graceful_shutdown()
-        os._exit(0)
-    
-    threading.Thread(target=_deferred_exit, daemon=True).start()
+        logger.error(f"Failed to initiate close: {e}")
+        return jsonify({'error': str(e)}), 500
     
     return jsonify({'message': 'Closing application...'}), 200
 
