@@ -10,3 +10,4 @@ backend/models/*
 data/logs/*
 data/captures/*
 data/tts_profiles.json
+data/mitt/*

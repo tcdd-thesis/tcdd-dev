@@ -24,6 +24,7 @@ import json
 import threading
 import platform
 import urllib.request
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -76,6 +77,11 @@ try:
     from picamera2 import Picamera2
 except ImportError:
     Picamera2 = None
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 VIDEO_EXTENSIONS = {".avi", ".mp4", ".mkv", ".mov", ".wmv", ".m4v", ".webm", ".flv", ".mpeg", ".mpg"}
@@ -244,6 +250,7 @@ class OnnxBackend(BaseBackend):
         self.iou_threshold = iou
         self.labels_path = labels_path
         self.class_names = self._load_labels(labels_path)
+        self.input_frame_color_space = "BGR"
 
     @staticmethod
     def _load_labels(labels_path: str) -> List[str]:
@@ -283,7 +290,10 @@ class OnnxBackend(BaseBackend):
     def _preprocess(self, frame_bgr: np.ndarray) -> np.ndarray:
         input_dtype = self._DTYPE_MAP.get(self.input_type, np.float32)
         resized = cv2.resize(frame_bgr, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        if str(self.input_frame_color_space).upper() == "RGB":
+            rgb = resized
+        else:
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
         if input_dtype == np.uint8:
             arr = rgb
@@ -1208,6 +1218,7 @@ class InferenceToolApp:
         self.dataset_split_var = tk.StringVar(value="val")
         self.camera_source_var = tk.StringVar(value="0")
         self.device_var = tk.StringVar(value="cpu")
+        self.input_color_space_var = tk.StringVar(value="BGR")
 
         self.use_hailo_var = tk.BooleanVar(value=True)
         self.prefer_gpu_var = tk.BooleanVar(value=False)
@@ -1280,6 +1291,15 @@ class InferenceToolApp:
             textvariable=self.device_var,
             values=["cpu", "cuda"],
             width=8,
+            state="readonly",
+        ).pack(side=tk.LEFT, padx=4)
+
+        ttk.Label(controls_row, text="Input Color").pack(side=tk.LEFT, padx=(12, 2))
+        ttk.Combobox(
+            controls_row,
+            textvariable=self.input_color_space_var,
+            values=["BGR", "RGB"],
+            width=6,
             state="readonly",
         ).pack(side=tk.LEFT, padx=4)
 
@@ -1760,6 +1780,155 @@ class InferenceToolApp:
             return default
         return max(minimum, min(maximum, value))
 
+    @staticmethod
+    def _read_numeric_file(path: str) -> Optional[float]:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                raw = handle.read().strip()
+        except Exception:
+            return None
+
+        if not raw:
+            return None
+
+        match = re.search(r"[-+]?\d*\.?\d+", raw)
+        if not match:
+            return None
+
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+
+    def _read_linux_temp_c(self) -> Optional[float]:
+        candidates = [
+            "/sys/class/thermal/thermal_zone0/temp",
+            "/sys/devices/virtual/thermal/thermal_zone0/temp",
+        ]
+        for path in candidates:
+            value = self._read_numeric_file(path)
+            if value is None:
+                continue
+            if value > 200.0:
+                value /= 1000.0
+            if -40.0 <= value <= 150.0:
+                return value
+        return None
+
+    def _read_linux_power_w(self) -> Optional[float]:
+        base = Path("/sys/class/power_supply")
+        if not base.exists():
+            return None
+
+        for supply in base.iterdir():
+            power_now = supply / "power_now"
+            if power_now.exists():
+                value = self._read_numeric_file(str(power_now))
+                if value is not None:
+                    # Usually microwatts on Linux sysfs.
+                    if value > 10000.0:
+                        return value / 1_000_000.0
+                    return value
+
+            voltage_now = supply / "voltage_now"
+            current_now = supply / "current_now"
+            if voltage_now.exists() and current_now.exists():
+                voltage_uv = self._read_numeric_file(str(voltage_now))
+                current_ua = self._read_numeric_file(str(current_now))
+                if voltage_uv is None or current_ua is None:
+                    continue
+                return (voltage_uv * current_ua) / 1_000_000_000_000.0
+
+        return None
+
+    def _read_hailo_util_pct(self) -> Optional[float]:
+        candidates = [
+            "/sys/class/hailo_chardev/hailo0/device/utilization",
+            "/sys/class/hailo_chardev/hailo0/device/hailo_utilization",
+            "/sys/class/hailo_chardev/hailo0/device/npu_utilization",
+            "/sys/class/hailo0/device/utilization",
+        ]
+        for path in candidates:
+            value = self._read_numeric_file(path)
+            if value is None:
+                continue
+            if 0.0 <= value <= 1.0:
+                return value * 100.0
+            if 0.0 <= value <= 100.0:
+                return value
+        return None
+
+    def _sample_system_metrics(self) -> Dict[str, float]:
+        metrics: Dict[str, float] = {}
+
+        if psutil is not None:
+            try:
+                metrics["cpu_util_pct"] = float(psutil.cpu_percent(interval=None))
+            except Exception:
+                pass
+
+        if os.name != "nt":
+            temp_c = self._read_linux_temp_c()
+            if temp_c is not None:
+                metrics["temp_c"] = float(temp_c)
+
+            power_w = self._read_linux_power_w()
+            if power_w is not None:
+                metrics["power_w"] = float(power_w)
+
+            hailo_util_pct = self._read_hailo_util_pct()
+            if hailo_util_pct is not None:
+                metrics["hailo_util_pct"] = float(hailo_util_pct)
+
+        return metrics
+
+    @staticmethod
+    def _aggregate_metrics(samples: Sequence[Dict[str, float]]) -> Dict[str, float]:
+        grouped: Dict[str, List[float]] = {}
+        for sample in samples:
+            for key, value in sample.items():
+                try:
+                    numeric = float(value)
+                except Exception:
+                    continue
+                if np.isnan(numeric) or np.isinf(numeric):
+                    continue
+                grouped.setdefault(key, []).append(numeric)
+
+        out: Dict[str, float] = {}
+        for key, vals in grouped.items():
+            if vals:
+                out[key] = float(np.mean(np.asarray(vals, dtype=np.float64)))
+        return out
+
+    def _selected_input_color_space(self) -> str:
+        color = str(self.input_color_space_var.get() or "BGR").strip().upper()
+        return "RGB" if color == "RGB" else "BGR"
+
+    def _infer_with_color_space(self, frame_bgr: np.ndarray) -> Tuple[InferenceResult, float]:
+        assert self.backend is not None
+
+        color = self._selected_input_color_space()
+        if color == "RGB":
+            model_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        else:
+            model_frame = frame_bgr
+
+        if isinstance(self.backend, OnnxBackend):
+            self.backend.input_frame_color_space = color
+
+        start = time.perf_counter()
+        result = self.backend.infer(model_frame)
+        e2e_ms = (time.perf_counter() - start) * 1000.0
+
+        if color == "RGB" and result.annotated_frame is not None:
+            try:
+                result.annotated_frame = cv2.cvtColor(result.annotated_frame, cv2.COLOR_RGB2BGR)
+            except Exception:
+                pass
+
+        return result, e2e_ms
+
     def _load_model(self) -> bool:
         model_path = self.model_path_var.get().strip()
         if not model_path:
@@ -1909,9 +2078,11 @@ class InferenceToolApp:
             if self.stop_event.is_set():
                 self._enqueue_log("Run interrupted during warmup")
                 return
-            self.backend.infer(frame)
+            self._infer_with_color_space(frame)
 
         samples: List[float] = []
+        e2e_samples: List[float] = []
+        system_samples: List[Dict[str, float]] = []
         detections_total = 0
         last_result: Optional[InferenceResult] = None
 
@@ -1920,17 +2091,26 @@ class InferenceToolApp:
                 self._enqueue_log("Run interrupted")
                 break
 
-            result = self.backend.infer(frame)
+            result, e2e_ms = self._infer_with_color_space(frame)
             samples.append(result.latency_ms)
+            e2e_samples.append(e2e_ms)
             detections_total += result.detections
             last_result = result
 
             if (idx + 1) % max(1, iterations // 10) == 0:
+                system_samples.append(self._sample_system_metrics())
                 self._enqueue_log(f"Progress {idx + 1}/{iterations}")
 
         stats = compute_stats(samples)
         if stats:
             stats["avg_detections"] = detections_total / max(1, len(samples))
+            e2e_stats = compute_stats(e2e_samples)
+            if e2e_stats:
+                stats["e2e_avg_ms"] = e2e_stats.get("avg_ms", 0.0)
+                stats["e2e_p95_ms"] = e2e_stats.get("p95_ms", 0.0)
+
+            system_samples.append(self._sample_system_metrics())
+            stats.update(self._aggregate_metrics(system_samples))
             self._enqueue_stats(stats)
 
         if last_result and last_result.annotated_frame is not None:
@@ -1975,9 +2155,11 @@ class InferenceToolApp:
                 return
             frame = cv2.imread(files[idx])
             if frame is not None:
-                self.backend.infer(frame)
+                self._infer_with_color_space(frame)
 
         samples: List[float] = []
+        e2e_samples: List[float] = []
+        system_samples: List[Dict[str, float]] = []
         detections_total = 0
         processed = 0
 
@@ -1991,8 +2173,9 @@ class InferenceToolApp:
                 self._enqueue_log(f"Skipping unreadable file: {path}")
                 continue
 
-            result = self.backend.infer(frame)
+            result, e2e_ms = self._infer_with_color_space(frame)
             samples.append(result.latency_ms)
+            e2e_samples.append(e2e_ms)
             detections_total += result.detections
             processed += 1
 
@@ -2000,6 +2183,7 @@ class InferenceToolApp:
                 self._enqueue_preview(result.annotated_frame)
 
             if idx % 20 == 0:
+                system_samples.append(self._sample_system_metrics())
                 self._enqueue_log(f"Processed {idx}/{len(files)}")
 
         stats = compute_stats(samples)
@@ -2007,6 +2191,13 @@ class InferenceToolApp:
             stats["dataset_files"] = float(len(files))
             stats["processed_files"] = float(processed)
             stats["avg_detections"] = detections_total / max(1, processed)
+            e2e_stats = compute_stats(e2e_samples)
+            if e2e_stats:
+                stats["e2e_avg_ms"] = e2e_stats.get("avg_ms", 0.0)
+                stats["e2e_p95_ms"] = e2e_stats.get("p95_ms", 0.0)
+
+            system_samples.append(self._sample_system_metrics())
+            stats.update(self._aggregate_metrics(system_samples))
             self._enqueue_stats(stats)
 
         self._enqueue_log("Dataset benchmark complete")
@@ -2036,6 +2227,8 @@ class InferenceToolApp:
         )
 
         samples: List[float] = []
+        e2e_samples: List[float] = []
+        system_samples: List[Dict[str, float]] = []
         detections_total = 0
         preview_count = 0
         processed = 0
@@ -2046,7 +2239,7 @@ class InferenceToolApp:
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     break
-                self.backend.infer(frame)
+                self._infer_with_color_space(frame)
                 warmup_done += 1
 
             start = time.perf_counter()
@@ -2057,9 +2250,10 @@ class InferenceToolApp:
                 if not ok or frame is None:
                     break
 
-                result = self.backend.infer(frame)
+                result, e2e_ms = self._infer_with_color_space(frame)
                 processed += 1
                 samples.append(result.latency_ms)
+                e2e_samples.append(e2e_ms)
                 detections_total += result.detections
 
                 if result.annotated_frame is not None and (preview_count % 3 == 0):
@@ -2071,13 +2265,19 @@ class InferenceToolApp:
                     elapsed = now - start
                     run_fps = processed / elapsed if elapsed > 0 else 0.0
                     window_stats = compute_stats(samples[-120:])
+                    window_e2e = compute_stats(e2e_samples[-120:])
+                    sampled = self._sample_system_metrics()
+                    system_samples.append(sampled)
                     summary = {
                         "count": float(processed),
                         "stream_fps": run_fps,
                         "avg_ms": window_stats.get("avg_ms", 0.0),
                         "p95_ms": window_stats.get("p95_ms", 0.0),
+                        "e2e_avg_ms": window_e2e.get("avg_ms", 0.0),
+                        "e2e_p95_ms": window_e2e.get("p95_ms", 0.0),
                         "avg_detections": detections_total / max(1, processed),
                     }
+                    summary.update(sampled)
                     self._enqueue_stats(summary)
                     last_report = now
 
@@ -2091,6 +2291,13 @@ class InferenceToolApp:
             if final_stats:
                 final_stats["stream_frames"] = float(processed)
                 final_stats["avg_detections"] = detections_total / max(1, processed)
+                e2e_final = compute_stats(e2e_samples)
+                if e2e_final:
+                    final_stats["e2e_avg_ms"] = e2e_final.get("avg_ms", 0.0)
+                    final_stats["e2e_p95_ms"] = e2e_final.get("p95_ms", 0.0)
+
+                system_samples.append(self._sample_system_metrics())
+                final_stats.update(self._aggregate_metrics(system_samples))
                 self._enqueue_stats(final_stats)
 
             if self.stop_event.is_set():
@@ -2156,10 +2363,12 @@ class InferenceToolApp:
                     return
                 frame = cv2.imread(files[idx])
                 if frame is not None:
-                    self.backend.infer(frame)
+                    self._infer_with_color_space(frame)
 
         records: List[Dict[str, Any]] = []
         latencies: List[float] = []
+        e2e_samples: List[float] = []
+        system_samples: List[Dict[str, float]] = []
         skipped = 0
         unknown_class_pred = 0
         report_every = max(1, len(files) // 20)
@@ -2178,8 +2387,9 @@ class InferenceToolApp:
             label_path = image_path_to_label_path(image_path)
             gt = parse_yolo_label_file(label_path, image_w=image_w, image_h=image_h, class_count=class_count)
 
-            result = self.backend.infer(frame)
+            result, e2e_ms = self._infer_with_color_space(frame)
             latencies.append(result.latency_ms)
+            e2e_samples.append(e2e_ms)
 
             preds_normalized: List[Dict[str, Any]] = []
             for pred in result.predictions or []:
@@ -2203,6 +2413,7 @@ class InferenceToolApp:
                 self._enqueue_preview(result.annotated_frame)
 
             if idx % report_every == 0:
+                system_samples.append(self._sample_system_metrics())
                 self._enqueue_log(f"YOLO eval progress {idx}/{len(files)}")
 
         if not records:
@@ -2255,11 +2466,11 @@ class InferenceToolApp:
 
         confusion = compute_confusion_matrix(records, class_count=class_count, conf_thr=best_conf, iou_thr=0.5)
         latency_stats = compute_stats(latencies)
+        e2e_stats = compute_stats(e2e_samples)
 
         report_dir = os.path.join(
             "data",
-            "logs",
-            "inference_reports",
+            "mitt",
             datetime.now().strftime("%Y%m%d_%H%M%S"),
         )
 
@@ -2281,6 +2492,7 @@ class InferenceToolApp:
             "map50_95": map50_95,
             "ap50_per_class": ap50_per_class,
             "latency": latency_stats,
+            "latency_e2e": e2e_stats,
         }
 
         report_files = save_yolo_eval_report(
@@ -2305,8 +2517,12 @@ class InferenceToolApp:
             "map50_95": map50_95,
             "avg_ms": latency_stats.get("avg_ms", 0.0),
             "p95_ms": latency_stats.get("p95_ms", 0.0),
+            "e2e_avg_ms": e2e_stats.get("avg_ms", 0.0),
+            "e2e_p95_ms": e2e_stats.get("p95_ms", 0.0),
             "fps": latency_stats.get("fps", 0.0),
         }
+        system_samples.append(self._sample_system_metrics())
+        ui_stats.update(self._aggregate_metrics(system_samples))
         self._enqueue_stats(ui_stats)
 
         self._enqueue_log(f"YOLO evaluation complete. Report directory: {report_dir}")
@@ -2338,6 +2554,9 @@ class InferenceToolApp:
         self._enqueue_log(f"Camera opened source={source} {width}x{height}@{fps}")
 
         samples: List[float] = []
+        e2e_samples: List[float] = []
+        camera_to_detect_samples: List[float] = []
+        system_samples: List[Dict[str, float]] = []
         detections_total = 0
         preview_count = 0
 
@@ -2347,20 +2566,24 @@ class InferenceToolApp:
                     return
                 frame = camera.read()
                 if frame is not None:
-                    self.backend.infer(frame)
+                    self._infer_with_color_space(frame)
 
             start = time.perf_counter()
             last_report = start
             frame_count = 0
 
             while not self.stop_event.is_set():
+                capture_start = time.perf_counter()
                 frame = camera.read()
+                capture_ms = (time.perf_counter() - capture_start) * 1000.0
                 if frame is None:
                     continue
 
-                result = self.backend.infer(frame)
+                result, e2e_ms = self._infer_with_color_space(frame)
                 frame_count += 1
                 samples.append(result.latency_ms)
+                e2e_samples.append(e2e_ms)
+                camera_to_detect_samples.append(capture_ms + e2e_ms)
                 detections_total += result.detections
 
                 if result.annotated_frame is not None and (preview_count % 3 == 0):
@@ -2372,13 +2595,21 @@ class InferenceToolApp:
                     elapsed = now - start
                     stream_fps = frame_count / elapsed if elapsed > 0 else 0.0
                     window_stats = compute_stats(samples[-120:])
+                    window_e2e = compute_stats(e2e_samples[-120:])
+                    window_cam_to_det = compute_stats(camera_to_detect_samples[-120:])
+                    sampled = self._sample_system_metrics()
+                    system_samples.append(sampled)
                     summary = {
                         "count": float(frame_count),
                         "stream_fps": stream_fps,
                         "avg_ms": window_stats.get("avg_ms", 0.0),
                         "p95_ms": window_stats.get("p95_ms", 0.0),
+                        "e2e_avg_ms": window_e2e.get("avg_ms", 0.0),
+                        "e2e_p95_ms": window_e2e.get("p95_ms", 0.0),
+                        "camera_to_detect_avg_ms": window_cam_to_det.get("avg_ms", 0.0),
                         "avg_detections": detections_total / max(1, frame_count),
                     }
+                    summary.update(sampled)
                     self._enqueue_stats(summary)
                     last_report = now
 
@@ -2386,6 +2617,18 @@ class InferenceToolApp:
             if final_stats:
                 final_stats["stream_frames"] = float(len(samples))
                 final_stats["avg_detections"] = detections_total / max(1, len(samples))
+                e2e_final = compute_stats(e2e_samples)
+                if e2e_final:
+                    final_stats["e2e_avg_ms"] = e2e_final.get("avg_ms", 0.0)
+                    final_stats["e2e_p95_ms"] = e2e_final.get("p95_ms", 0.0)
+
+                cam_to_det_final = compute_stats(camera_to_detect_samples)
+                if cam_to_det_final:
+                    final_stats["camera_to_detect_avg_ms"] = cam_to_det_final.get("avg_ms", 0.0)
+                    final_stats["camera_to_detect_p95_ms"] = cam_to_det_final.get("p95_ms", 0.0)
+
+                system_samples.append(self._sample_system_metrics())
+                final_stats.update(self._aggregate_metrics(system_samples))
                 self._enqueue_stats(final_stats)
 
             self._enqueue_log("Camera run stopped")
@@ -2474,9 +2717,17 @@ class InferenceToolApp:
             "p95_ms",
             "p99_ms",
             "std_ms",
+            "e2e_avg_ms",
+            "e2e_p95_ms",
+            "camera_to_detect_avg_ms",
+            "camera_to_detect_p95_ms",
             "fps",
             "stream_fps",
             "avg_detections",
+            "cpu_util_pct",
+            "hailo_util_pct",
+            "temp_c",
+            "power_w",
         ]
 
         lines: List[str] = []
