@@ -212,7 +212,14 @@ class OnnxBackend(BaseBackend):
         "tensor(int8)": np.int8,
     }
 
-    def __init__(self, model_path: str, prefer_gpu: bool):
+    def __init__(
+        self,
+        model_path: str,
+        prefer_gpu: bool,
+        confidence: float,
+        iou: float,
+        labels_path: str,
+    ):
         if ort is None:
             raise RuntimeError("onnxruntime is not installed in this environment.")
 
@@ -233,6 +240,22 @@ class OnnxBackend(BaseBackend):
         self.input_type = self.input_meta.type
         self.channels_last = self._is_channels_last(self.input_shape)
         self.height, self.width = self._resolve_hw(self.input_shape)
+        self.confidence = confidence
+        self.iou_threshold = iou
+        self.labels_path = labels_path
+        self.class_names = self._load_labels(labels_path)
+
+    @staticmethod
+    def _load_labels(labels_path: str) -> List[str]:
+        if not labels_path or not os.path.exists(labels_path):
+            return []
+        names: List[str] = []
+        with open(labels_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                text = line.strip()
+                if text:
+                    names.append(text)
+        return names
 
     @staticmethod
     def _resolve_dim(raw: Any, fallback: int) -> int:
@@ -287,17 +310,326 @@ class OnnxBackend(BaseBackend):
                 break
         return " | ".join(parts)
 
+    def _class_name(self, cls_id: int) -> str:
+        if 0 <= cls_id < len(self.class_names):
+            return self.class_names[cls_id]
+        return f"class_{cls_id}"
+
+    @staticmethod
+    def _box_iou_xyxy(box_a: Sequence[float], box_b: Sequence[float]) -> float:
+        inter_x1 = max(float(box_a[0]), float(box_b[0]))
+        inter_y1 = max(float(box_a[1]), float(box_b[1]))
+        inter_x2 = min(float(box_a[2]), float(box_b[2]))
+        inter_y2 = min(float(box_a[3]), float(box_b[3]))
+
+        inter_w = max(0.0, inter_x2 - inter_x1)
+        inter_h = max(0.0, inter_y2 - inter_y1)
+        inter_area = inter_w * inter_h
+
+        area_a = max(0.0, float(box_a[2]) - float(box_a[0])) * max(0.0, float(box_a[3]) - float(box_a[1]))
+        area_b = max(0.0, float(box_b[2]) - float(box_b[0])) * max(0.0, float(box_b[3]) - float(box_b[1]))
+
+        union = area_a + area_b - inter_area
+        if union <= 0.0:
+            return 0.0
+        return inter_area / union
+
+    def _input_to_frame_box(
+        self,
+        box_xyxy: Sequence[float],
+        frame_w: int,
+        frame_h: int,
+    ) -> List[int]:
+        x1, y1, x2, y2 = [float(v) for v in box_xyxy]
+        if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 2.5:
+            x1 *= self.width
+            y1 *= self.height
+            x2 *= self.width
+            y2 *= self.height
+
+        sx = frame_w / max(float(self.width), 1.0)
+        sy = frame_h / max(float(self.height), 1.0)
+        x1 *= sx
+        x2 *= sx
+        y1 *= sy
+        y2 *= sy
+
+        x1 = max(0.0, min(frame_w - 1.0, x1))
+        x2 = max(0.0, min(frame_w - 1.0, x2))
+        y1 = max(0.0, min(frame_h - 1.0, y1))
+        y2 = max(0.0, min(frame_h - 1.0, y2))
+
+        if x2 < x1:
+            x1, x2 = x2, x1
+        if y2 < y1:
+            y1, y2 = y2, y1
+
+        return [int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))]
+
+    def _decode_xyxy_rows(
+        self,
+        rows: np.ndarray,
+        frame_w: int,
+        frame_h: int,
+    ) -> List[Dict[str, Any]]:
+        if rows.ndim != 2 or rows.shape[1] < 6:
+            return []
+
+        decoded: List[Dict[str, Any]] = []
+        for row in rows:
+            vals = np.asarray(row, dtype=np.float32)
+            conf = float(vals[4])
+            if conf < self.confidence:
+                continue
+
+            cls_id = int(round(float(vals[5])))
+            x1, y1, x2, y2 = [float(v) for v in vals[:4]]
+
+            # Some exports may still output xywh in first four slots.
+            if x2 <= x1 or y2 <= y1:
+                cx, cy, bw, bh = x1, y1, x2, y2
+                if max(abs(cx), abs(cy), abs(bw), abs(bh)) <= 2.5:
+                    cx *= self.width
+                    cy *= self.height
+                    bw *= self.width
+                    bh *= self.height
+                x1 = cx - bw / 2.0
+                y1 = cy - bh / 2.0
+                x2 = cx + bw / 2.0
+                y2 = cy + bh / 2.0
+
+            box = self._input_to_frame_box([x1, y1, x2, y2], frame_w, frame_h)
+            if box[2] <= box[0] or box[3] <= box[1]:
+                continue
+
+            decoded.append(
+                {
+                    "cls": cls_id,
+                    "class_name": self._class_name(cls_id),
+                    "confidence": conf,
+                    "bbox": box,
+                }
+            )
+
+        return decoded
+
+    def _decode_dense_yolo(
+        self,
+        rows: np.ndarray,
+        frame_w: int,
+        frame_h: int,
+    ) -> List[Dict[str, Any]]:
+        if rows.ndim != 2 or rows.shape[1] < 6:
+            return []
+
+        attrs = rows.shape[1]
+        labels_count = len(self.class_names)
+
+        modes: List[bool] = []
+        if labels_count > 0:
+            if attrs == labels_count + 4:
+                modes = [False]
+            elif attrs == labels_count + 5:
+                modes = [True]
+
+        if not modes:
+            if attrs == 84:
+                modes = [False]
+            elif attrs == 85:
+                modes = [True]
+            elif attrs > 6:
+                # Unknown head layout: try both hypotheses and choose best.
+                modes = [False, True]
+
+        candidates_per_mode: List[List[Dict[str, Any]]] = []
+        for has_objectness in modes:
+            cls_start = 5 if has_objectness else 4
+            if attrs <= cls_start:
+                continue
+
+            mode_preds: List[Dict[str, Any]] = []
+            for row in rows:
+                vals = np.asarray(row, dtype=np.float32)
+                cx, cy, bw, bh = [float(v) for v in vals[:4]]
+                cls_scores = vals[cls_start:]
+                if cls_scores.size == 0:
+                    continue
+
+                cls_rel_idx = int(np.argmax(cls_scores))
+                cls_score = float(cls_scores[cls_rel_idx])
+                if has_objectness:
+                    conf = float(vals[4]) * cls_score
+                else:
+                    conf = cls_score
+
+                if conf < self.confidence:
+                    continue
+
+                if max(abs(cx), abs(cy), abs(bw), abs(bh)) <= 2.5:
+                    cx *= self.width
+                    cy *= self.height
+                    bw *= self.width
+                    bh *= self.height
+
+                x1 = cx - bw / 2.0
+                y1 = cy - bh / 2.0
+                x2 = cx + bw / 2.0
+                y2 = cy + bh / 2.0
+                box = self._input_to_frame_box([x1, y1, x2, y2], frame_w, frame_h)
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    continue
+
+                cls_id = cls_rel_idx
+                mode_preds.append(
+                    {
+                        "cls": cls_id,
+                        "class_name": self._class_name(cls_id),
+                        "confidence": conf,
+                        "bbox": box,
+                    }
+                )
+
+            candidates_per_mode.append(mode_preds)
+
+        if not candidates_per_mode:
+            return []
+
+        # Prefer mode with more valid detections; tie-break by mean confidence.
+        candidates_per_mode.sort(
+            key=lambda dets: (len(dets), float(np.mean([d["confidence"] for d in dets])) if dets else 0.0),
+            reverse=True,
+        )
+        return candidates_per_mode[0]
+
+    def _decode_output_array(
+        self,
+        output: np.ndarray,
+        frame_w: int,
+        frame_h: int,
+    ) -> List[Dict[str, Any]]:
+        arr = np.asarray(output)
+        if not np.issubdtype(arr.dtype, np.number) or arr.size == 0:
+            return []
+
+        # Drop batch dimensions when batch=1.
+        while arr.ndim > 2 and arr.shape[0] == 1:
+            arr = arr[0]
+
+        # Candidate layout A: direct Nx6/Nx7 rows after NMS.
+        direct_rows: Optional[np.ndarray] = None
+        if arr.ndim == 2 and arr.shape[1] >= 6:
+            direct_rows = arr
+
+        # Candidate layout B: dense YOLO head (N x attrs). Handle transposed case.
+        dense_rows: Optional[np.ndarray] = None
+        if arr.ndim == 2:
+            if arr.shape[1] >= 6:
+                dense_rows = arr
+            elif arr.shape[0] >= 6:
+                dense_rows = arr.T
+
+        direct = self._decode_xyxy_rows(direct_rows, frame_w, frame_h) if direct_rows is not None else []
+        dense = self._decode_dense_yolo(dense_rows, frame_w, frame_h) if dense_rows is not None else []
+
+        if len(dense) > len(direct):
+            return dense
+        return direct
+
+    def _nms(self, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not detections:
+            return []
+
+        by_class: Dict[int, List[Dict[str, Any]]] = {}
+        for det in detections:
+            cls_id = int(det.get("cls", -1))
+            by_class.setdefault(cls_id, []).append(det)
+
+        kept: List[Dict[str, Any]] = []
+        for cls_dets in by_class.values():
+            ordered = sorted(cls_dets, key=lambda item: float(item["confidence"]), reverse=True)
+            selected: List[Dict[str, Any]] = []
+            for cand in ordered:
+                overlap = False
+                for prev in selected:
+                    iou = self._box_iou_xyxy(cand["bbox"], prev["bbox"])
+                    if iou > self.iou_threshold:
+                        overlap = True
+                        break
+                if not overlap:
+                    selected.append(cand)
+            kept.extend(selected)
+
+        return kept
+
+    def _draw_detections(self, frame_bgr: np.ndarray, detections: List[Dict[str, Any]]) -> np.ndarray:
+        if not detections:
+            return frame_bgr.copy()
+
+        annotated = frame_bgr.copy()
+        for det in detections:
+            x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
+            conf = float(det["confidence"])
+            label = f"{det['class_name']} {conf:.2f}"
+
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 220, 0), 2)
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+            cv2.rectangle(
+                annotated,
+                (x1, max(0, y1 - th - 6)),
+                (x1 + tw + 6, y1),
+                (0, 220, 0),
+                -1,
+            )
+            cv2.putText(
+                annotated,
+                label,
+                (x1 + 3, max(10, y1 - 4)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                (0, 0, 0),
+                1,
+                cv2.LINE_AA,
+            )
+
+        return annotated
+
+    def _parse_predictions(
+        self,
+        outputs: Sequence[Any],
+        frame_w: int,
+        frame_h: int,
+    ) -> List[Dict[str, Any]]:
+        all_candidates: List[List[Dict[str, Any]]] = []
+        for out in outputs:
+            if isinstance(out, np.ndarray):
+                parsed = self._decode_output_array(out, frame_w, frame_h)
+                if parsed:
+                    all_candidates.append(parsed)
+
+        if not all_candidates:
+            return []
+
+        # Choose output branch with most usable detections and apply NMS.
+        all_candidates.sort(key=len, reverse=True)
+        return self._nms(all_candidates[0])
+
     def infer(self, frame_bgr: np.ndarray) -> InferenceResult:
+        frame_h, frame_w = frame_bgr.shape[:2]
         model_input = self._preprocess(frame_bgr)
         start = time.perf_counter()
         outputs = self.session.run(None, {self.input_name: model_input})
         latency_ms = (time.perf_counter() - start) * 1000.0
 
+        predictions = self._parse_predictions(outputs, frame_w=frame_w, frame_h=frame_h)
+        annotated = self._draw_detections(frame_bgr, predictions)
+        summary = f"detections={len(predictions)} | {self._summarize_outputs(outputs)}"
+
         return InferenceResult(
             latency_ms=latency_ms,
-            detections=0,
-            output_summary=self._summarize_outputs(outputs),
-            annotated_frame=frame_bgr.copy(),
+            detections=len(predictions),
+            output_summary=summary,
+            annotated_frame=annotated,
+            predictions=predictions,
         )
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -310,6 +642,9 @@ class OnnxBackend(BaseBackend):
             "input_type": self.input_type,
             "layout": "NHWC" if self.channels_last else "NCHW",
             "resolved_hw": [self.height, self.width],
+            "classes": self.class_names,
+            "confidence": self.confidence,
+            "iou_threshold": self.iou_threshold,
         }
 
 
@@ -1459,7 +1794,13 @@ class InferenceToolApp:
                     device=device,
                 )
             elif suffix == ".onnx":
-                backend = OnnxBackend(model_path=model_path, prefer_gpu=self.prefer_gpu_var.get())
+                backend = OnnxBackend(
+                    model_path=model_path,
+                    prefer_gpu=self.prefer_gpu_var.get(),
+                    confidence=confidence,
+                    iou=iou,
+                    labels_path=labels_path,
+                )
             else:
                 raise RuntimeError(f"Unsupported model format: {suffix}")
 
@@ -1608,7 +1949,7 @@ class InferenceToolApp:
 
         layout = load_yolo_dataset_layout(dataset_path, dataset_split)
         if layout.get("is_yolo"):
-            if isinstance(self.backend, DetectorBackend):
+            if isinstance(self.backend, (DetectorBackend, OnnxBackend)):
                 self._enqueue_log(
                     f"YOLO dataset detected ({layout.get('yaml_path')}); split={dataset_split}. Running evaluation report mode."
                 )
@@ -1785,9 +2126,9 @@ class InferenceToolApp:
 
     def _run_yolo_dataset_eval(self, cfg: Dict[str, Any], layout: Dict[str, Any], dataset_root: str) -> None:
         assert self.backend is not None
-        if not isinstance(self.backend, DetectorBackend):
+        if not isinstance(self.backend, (DetectorBackend, OnnxBackend)):
             raise RuntimeError(
-                "YOLO evaluation report requires a detector backend (.pt/.pth/.hef), because generic ONNX outputs are model-specific."
+                "YOLO evaluation report requires parsed detection outputs (.pt/.pth/.hef or supported ONNX detection layout)."
             )
 
         files = layout.get("images", [])
