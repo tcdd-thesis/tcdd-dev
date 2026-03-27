@@ -82,6 +82,84 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# One-time startup diagnostic flag for camera channel-order sanity checks.
+_channel_sanity_logged = False
+
+
+def _log_channel_sanity_once(frame, source="picamera2.capture_array"):
+    """Log a one-time channel sanity diagnostic for raw camera frames.
+
+    This is a practical red/blue startup probe: if you point a bright red (or blue)
+    object at the center during boot, the log clearly shows which channel is dominant
+    and therefore what byte order the runtime frame uses.
+    """
+    global _channel_sanity_logged
+
+    if _channel_sanity_logged:
+        return
+    _channel_sanity_logged = True
+
+    if frame is None:
+        logger.warning("[ChannelSanity] Startup probe skipped: no frame available")
+        return
+    if not isinstance(frame, np.ndarray) or frame.ndim < 3 or frame.shape[2] < 3:
+        logger.warning(
+            "[ChannelSanity] Startup probe skipped: unexpected frame shape=%s",
+            getattr(frame, "shape", None),
+        )
+        return
+
+    h, w = frame.shape[:2]
+    x0, x1 = int(w * 0.40), int(w * 0.60)
+    y0, y1 = int(h * 0.40), int(h * 0.60)
+    roi = frame[y0:y1, x0:x1]
+    if roi.size == 0:
+        roi = frame
+
+    roi_i16 = roi.astype(np.int16)
+    c0_mean = float(np.mean(roi_i16[:, :, 0]))
+    c1_mean = float(np.mean(roi_i16[:, :, 1]))
+    c2_mean = float(np.mean(roi_i16[:, :, 2]))
+
+    margin = 20
+    red_like_ratio = float(np.mean(
+        (roi_i16[:, :, 2] > roi_i16[:, :, 0] + margin)
+        & (roi_i16[:, :, 2] > roi_i16[:, :, 1] + margin)
+    ))
+    blue_like_ratio = float(np.mean(
+        (roi_i16[:, :, 0] > roi_i16[:, :, 2] + margin)
+        & (roi_i16[:, :, 0] > roi_i16[:, :, 1] + margin)
+    ))
+    colorful_ratio = float(np.mean(
+        (np.max(roi_i16, axis=2) - np.min(roi_i16, axis=2)) > margin
+    ))
+
+    if c2_mean - c0_mean > 15:
+        order_hint = "BGR-like (ch2 > ch0)"
+    elif c0_mean - c2_mean > 15:
+        order_hint = "RGB-like (ch0 > ch2)"
+    else:
+        order_hint = "ambiguous (ch0 ~= ch2)"
+
+    logger.info(
+        "[ChannelSanity] source=%s roi=%dx%d C0=%.1f C1=%.1f C2=%.1f hint=%s "
+        "red_like=%.3f blue_like=%.3f colorful=%.3f",
+        source,
+        roi.shape[1],
+        roi.shape[0],
+        c0_mean,
+        c1_mean,
+        c2_mean,
+        order_hint,
+        red_like_ratio,
+        blue_like_ratio,
+        colorful_ratio,
+    )
+    logger.info(
+        "[ChannelSanity] Red/Blue proof guide: with a RED object centered, BGR expects C2>C0; "
+        "RGB expects C0>C2. With a BLUE object, BGR expects C0>C2; RGB expects C2>C0."
+    )
+
 
 @contextmanager
 def camera_resource():
@@ -198,8 +276,12 @@ def initialize_camera():
             camera.start()
             # Warm up camera and let AWB stabilize
             time.sleep(1.0)
+
+            # One-time startup probe to verify runtime channel order on-device.
+            _log_channel_sanity_once(camera.capture_array(), source="picamera2.capture_array(RGB888)")
+
             logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
-                         f"FrameDuration={frame_duration_us}µs, RGB888+cvtColor)")
+                         f"FrameDuration={frame_duration_us}µs, RGB888+copy)")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Pi Camera: {e}")
