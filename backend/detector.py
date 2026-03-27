@@ -77,8 +77,6 @@ class Detector:
         self._output_vstreams = None
         self._hailo_input_vstream = None
         self._hailo_input_names = []
-        self._hailo_send_buffer = None
-        self._hailo_expected_nbytes = None
         
         # Parse model path(s) based on engine
         model_config = config.get('detection.model_files', [])
@@ -243,12 +241,6 @@ class Detector:
             # Cache the input vstream object for fast per-frame access
             self._hailo_input_vstream = self._input_vstreams.get(
                 self._hailo_input_names[0])
-
-            # Persistent owned buffer avoids 0-byte memoryview issues seen on
-            # some aarch64 pyhailort/pybind11 combinations.
-            input_h, input_w = int(self.input_size[1]), int(self.input_size[0])
-            self._hailo_send_buffer = np.zeros((input_h, input_w, 3), dtype=np.uint8)
-            self._hailo_expected_nbytes = int(self._hailo_send_buffer.nbytes)
             
             self.loaded = True
             logger.info("\u2705 HEF model loaded on Hailo NPU!")
@@ -290,8 +282,6 @@ class Detector:
                 self._input_vstreams_ctx = None
                 self._input_vstreams = None
             self._hailo_input_vstream = None
-            self._hailo_send_buffer = None
-            self._hailo_expected_nbytes = None
             
             # 4. Release network group, HEF, device
             self.hailo_network_group = None
@@ -594,22 +584,7 @@ class Detector:
         py::array> conversion that causes 0-byte MemoryView on aarch64.
         """
         try:
-            if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
-                return []
-
             frame_h, frame_w = frame.shape[:2]
-
-            if frame_h <= 0 or frame_w <= 0:
-                return []
-
-            # Normalize input channels to BGR-3.
-            if frame.ndim == 2:
-                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            elif frame.ndim == 3 and frame.shape[2] == 4:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-            elif frame.ndim != 3 or frame.shape[2] != 3:
-                logger.warning(f"Unsupported frame shape for Hailo: {frame.shape}")
-                return []
             
             # Preprocess: resize to 640x640
             resized = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
@@ -618,36 +593,13 @@ class Detector:
             # HEF models have quantization built-in: send uint8 [0-255] directly.
             # Ensure C-contiguous array so Hailo C library can read the buffer.
             input_frame = np.ascontiguousarray(resized, dtype=np.uint8)
-
-            if self._hailo_send_buffer is None or self._hailo_send_buffer.shape != input_frame.shape:
-                self._hailo_send_buffer = np.empty_like(input_frame)
-                self._hailo_expected_nbytes = int(self._hailo_send_buffer.nbytes)
-
-            # Copy into owned persistent memory to avoid pybind memoryview edge cases.
-            np.copyto(self._hailo_send_buffer, input_frame)
-
-            if self._hailo_expected_nbytes is None:
-                self._hailo_expected_nbytes = int(self._hailo_send_buffer.nbytes)
-
-            if int(self._hailo_send_buffer.nbytes) != int(self._hailo_expected_nbytes):
-                raise RuntimeError(
-                    f"Unexpected Hailo input buffer size: {self._hailo_send_buffer.nbytes} "
-                    f"(expected {self._hailo_expected_nbytes})"
-                )
+            input_batch = np.expand_dims(input_frame, axis=0)  # (1, 640, 640, 3)
             
-            logger.debug(f"Hailo send: shape={self._hailo_send_buffer.shape}, "
-                         f"dtype={self._hailo_send_buffer.dtype}, nbytes={self._hailo_send_buffer.nbytes}")
+            logger.debug(f"Hailo send: shape={input_batch.shape}, "
+                         f"dtype={input_batch.dtype}, nbytes={input_batch.nbytes}")
             
             # Send frame through InputVStream (passes py::array directly to C++)
-            try:
-                self._hailo_input_vstream.send(self._hailo_send_buffer)
-            except Exception as send_error:
-                # One-shot fallback: force brand-new owned C-order memory.
-                logger.warning(f"Hailo send retry with copied buffer due to: {send_error}")
-                fallback = np.frombuffer(
-                    self._hailo_send_buffer.tobytes(), dtype=np.uint8
-                ).reshape(self._hailo_send_buffer.shape).copy(order='C')
-                self._hailo_input_vstream.send(fallback)
+            self._hailo_input_vstream.send(input_batch)
             
             # Receive and parse output from each OutputVStream
             detections = []
