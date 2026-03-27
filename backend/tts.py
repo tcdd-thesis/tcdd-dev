@@ -9,6 +9,7 @@ No Python TTS library needed — just the system ``espeak`` package.
 """
 
 import logging
+import json
 import os
 import shutil
 import subprocess
@@ -205,6 +206,8 @@ class TTSEngine:
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
         self.cooldown_seconds = self._cfg("tts.cooldown_seconds", 10)
+        self.profiles_file = self._cfg("tts.profiles_file", "backend/models/tts_profiles.json")
+        self.active_profile = self._cfg("tts.active_profile", "default")
 
         # Internal state
         self._last_spoken: dict[str, float] = {}
@@ -213,9 +216,16 @@ class TTSEngine:
         self._thread: threading.Thread | None = None
         self._engine_ready = False
         self._on_speak_callback = None  # Called with (text, label, priority) when alert fires
+
         self._on_error_callback = None   # Called with (message: str) when TTS fails fatally
         self._consecutive_failures = 0
         self._max_consecutive_failures = 3
+        self._mapping_lock = threading.Lock()
+        self._alerts_map: dict[str, str] = dict(TRAFFIC_ALERTS)
+        self._priority_map: dict[str, int] = dict(PRIORITY_TIERS)
+        self._profile_source = "legacy"
+        self._profile_load_error = ""
+        self._warned_unmapped_labels = set()
 
         if not HAS_TTS:
             logger.warning("TTS engine disabled — espeak is not installed")
@@ -225,6 +235,9 @@ class TTSEngine:
         if not self.enabled:
             logger.info("TTS engine disabled via configuration")
             return
+
+        # Load profile-driven mappings before starting worker.
+        self.reload_profile_config()
 
         # Start the background worker
         self._start_worker()
@@ -238,6 +251,118 @@ class TTSEngine:
         if self.config:
             return self.config.get(key, default)
         return default
+
+    def _set_active_profile_maps(
+        self,
+        alerts_map: dict,
+        priority_map: dict,
+        profile_source: str,
+        profile_name: str,
+        load_error: str = "",
+    ):
+        """Atomically swap the active prompt/priority maps used by process_detections."""
+        with self._mapping_lock:
+            self._alerts_map = alerts_map
+            self._priority_map = priority_map
+            self._profile_source = profile_source
+            self.active_profile = profile_name
+            self._profile_load_error = load_error
+            self._warned_unmapped_labels = set()
+
+    def reload_profile_config(self):
+        """
+        Reload prompt/priority mappings from the configured profile registry.
+
+        Fallback behavior: if registry loading fails, legacy hardcoded maps are used.
+        """
+        profiles_file = self._cfg("tts.profiles_file", "backend/models/tts_profiles.json")
+        profile_name = self._cfg("tts.active_profile", "default")
+        self.profiles_file = profiles_file
+
+        fallback_alerts = dict(TRAFFIC_ALERTS)
+        fallback_priorities = dict(PRIORITY_TIERS)
+
+        if not profiles_file:
+            logger.warning("TTS profile registry path is empty; using legacy mappings")
+            self._set_active_profile_maps(
+                fallback_alerts,
+                fallback_priorities,
+                profile_source="legacy",
+                profile_name="legacy",
+                load_error="profiles_file is empty",
+            )
+            return
+
+        try:
+            with open(profiles_file, "r", encoding="utf-8") as f:
+                registry = json.load(f)
+
+            profiles = registry.get("profiles", {})
+            if not isinstance(profiles, dict) or not profiles:
+                raise ValueError("missing or invalid 'profiles' object")
+
+            profile = profiles.get(profile_name)
+            if not isinstance(profile, dict):
+                raise ValueError(f"profile '{profile_name}' not found")
+
+            prompts = profile.get("prompts", {})
+            priorities = profile.get("priorities", {})
+
+            if not isinstance(prompts, dict) or not prompts:
+                raise ValueError(f"profile '{profile_name}' has no valid prompts map")
+            if priorities and not isinstance(priorities, dict):
+                raise ValueError(f"profile '{profile_name}' priorities must be an object")
+
+            active_alerts = {}
+            for key, value in prompts.items():
+                k = str(key).strip()
+                v = str(value).strip()
+                if k and v:
+                    active_alerts[k] = v
+
+            active_priorities = {}
+            for key, value in priorities.items():
+                k = str(key).strip()
+                if not k:
+                    continue
+                try:
+                    active_priorities[k] = int(value)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "TTS profile '%s': invalid priority for '%s': %r",
+                        profile_name,
+                        k,
+                        value,
+                    )
+
+            if not active_alerts:
+                raise ValueError(f"profile '{profile_name}' produced an empty prompts map")
+
+            self._set_active_profile_maps(
+                active_alerts,
+                active_priorities,
+                profile_source="registry",
+                profile_name=profile_name,
+            )
+            logger.info(
+                "TTS profile loaded: %s (%s prompts, %s priorities)",
+                profile_name,
+                len(active_alerts),
+                len(active_priorities),
+            )
+
+        except Exception as e:
+            logger.warning(
+                "TTS profile registry load failed (%s). Falling back to legacy mappings.",
+                e,
+            )
+            self._set_active_profile_maps(
+                fallback_alerts,
+                fallback_priorities,
+                profile_source="legacy",
+                profile_name="legacy",
+                load_error=str(e),
+            )
 
     # -----------------------------------------------------------------
     # Background worker
@@ -372,6 +497,10 @@ class TTSEngine:
         self.speech_rate = self._cfg("tts.speech_rate", 160)
         self.volume = self._cfg("tts.volume", 1.0)
 
+        with self._mapping_lock:
+            alerts_map = self._alerts_map
+            priority_map = self._priority_map
+
         now = time.time()
 
         # Build candidate list: (priority, label)
@@ -380,14 +509,24 @@ class TTSEngine:
             label = det.get("class_name", "").strip()
             if not label:
                 continue
-            if label not in TRAFFIC_ALERTS:
-                logger.warning(f"TTS: label '{label}' not found in TRAFFIC_ALERTS — skipping")
+            if label not in alerts_map:
+                should_warn = False
+                with self._mapping_lock:
+                    if label not in self._warned_unmapped_labels:
+                        self._warned_unmapped_labels.add(label)
+                        should_warn = True
+                if should_warn:
+                    logger.warning(
+                        "TTS: label '%s' not found in active profile '%s' — skipping",
+                        label,
+                        self.active_profile,
+                    )
                 continue
             # Cooldown check
             last_time = self._last_spoken.get(label, 0)
             if now - last_time < self.cooldown_seconds:
                 continue
-            priority = PRIORITY_TIERS.get(label, DEFAULT_PRIORITY)
+            priority = priority_map.get(label, DEFAULT_PRIORITY)
             candidates.append((priority, label))
 
         if not candidates:
@@ -397,7 +536,7 @@ class TTSEngine:
         candidates.sort(key=lambda c: c[0])
         _, best_label = candidates[0]
 
-        message = TRAFFIC_ALERTS[best_label]
+        message = alerts_map[best_label]
         self._last_spoken[best_label] = now
 
         # Enqueue for the worker thread
@@ -407,7 +546,7 @@ class TTSEngine:
         # Fire the on_speak callback (used by phone audio relay)
         if self._on_speak_callback:
             try:
-                priority = PRIORITY_TIERS.get(best_label, DEFAULT_PRIORITY)
+                priority = priority_map.get(best_label, DEFAULT_PRIORITY)
                 self._on_speak_callback(message, best_label, priority)
             except Exception as e:
                 logger.error(f"TTS on_speak callback error: {e}")
@@ -466,6 +605,9 @@ class TTSEngine:
 
     def get_info(self) -> dict:
         """Return a status dict (useful for the /api/status endpoint)."""
+        with self._mapping_lock:
+            labels_mapped = len(self._alerts_map)
+
         return {
             "enabled": self.enabled,
             "ready": self.is_ready(),
@@ -473,5 +615,9 @@ class TTSEngine:
             "volume": self.volume,
             "cooldown_seconds": self.cooldown_seconds,
             "queue_size": self._queue.qsize(),
-            "labels_mapped": len(TRAFFIC_ALERTS),
+            "labels_mapped": labels_mapped,
+            "active_profile": self.active_profile,
+            "profiles_file": self.profiles_file,
+            "profile_source": self._profile_source,
+            "profile_load_error": self._profile_load_error,
         }

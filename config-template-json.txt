@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0-b202602270810",
+  "version": "0.2.1-b202603262339",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -171,8 +171,10 @@
     "speech_rate": 160,            // Speech speed (words per minute)
                                     // 120 = slow, 160 = normal, 200 = fast
     "volume": 1.0,                 // Volume: 0.0 (mute) to 1.0 (max)
-    "cooldown_seconds": 10         // Seconds before same alert can repeat
-                                    // Prevents repetitive announcements
+    "cooldown_seconds": 10,        // Seconds before same alert can repeat
+                    // Prevents repetitive announcements
+    "profiles_file": "backend/models/tts_profiles.json", // TTS profile registry JSON
+    "active_profile": "default"   // Active profile id in the registry
   },
 
 

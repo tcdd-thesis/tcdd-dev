@@ -199,9 +199,11 @@ def on_config_change(old_config, new_config):
         if tts_changed and tts_engine:
             logger.info("TTS settings changed, updating TTS engine...")
             tts_engine.enabled = new_config.get('tts', {}).get('enabled', True)
+            tts_engine.voice = new_config.get('tts', {}).get('voice', 'en+f3')
             tts_engine.speech_rate = new_config.get('tts', {}).get('speech_rate', 160)
             tts_engine.volume = new_config.get('tts', {}).get('volume', 1.0)
             tts_engine.cooldown_seconds = new_config.get('tts', {}).get('cooldown_seconds', 10)
+            tts_engine.reload_profile_config()
             logger.info("TTS settings updated")
         
         # Broadcast changes to all connected clients
