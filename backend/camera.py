@@ -168,7 +168,15 @@ def initialize_camera():
             logger.info("Initializing Raspberry Pi Camera...")
             camera = Picamera2()
             
-            # Configure camera with auto white balance enabled
+            # Request "RGB888" from the ISP.  Despite the name, Picamera2
+            # on RPi actually delivers BGR byte order for this format
+            # (matching OpenCV's native convention).  This was confirmed
+            # by the working reference code in test_tpu.py which uses
+            # RGB888 frames directly with no cvtColor — and colors are
+            # correct.
+            #
+            # get_frame() only needs a .copy() to release the DMA buffer
+            # before it's recycled — no channel conversion at all.
             config = camera.create_preview_configuration(
                 main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"},
                 buffer_count=2  # ≥4 buffers to sustain full frame rate
@@ -191,7 +199,7 @@ def initialize_camera():
             # Warm up camera and let AWB stabilize
             time.sleep(1.0)
             logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
-                         f"FrameDuration={frame_duration_us}µs)")
+                         f"FrameDuration={frame_duration_us}µs, RGB888+cvtColor)")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Pi Camera: {e}")
@@ -296,10 +304,18 @@ def get_frame(manual_awb=False):
     
     try:
         if USE_PICAMERA and isinstance(camera, Picamera2):
-            # Picamera2 outputs RGB888 — convert once to BGR
+            # capture_array() returns a numpy view into Picamera2's DMA
+            # buffer.  cvtColor(RGB→BGR) serves double duty:
+            #   1. Converts RGB888 → BGR (OpenCV-native channel order)
+            #   2. Copies data out of the DMA buffer before it's recycled
+            # Cost is identical to a plain .copy() — the R↔B swap is
+            # Picamera2 with format="RGB888" actually delivers BGR byte
+            # order on RPi (confirmed by the working reference in
+            # test_tpu.py).  No channel conversion is needed — just copy
+            # the data out of the DMA buffer before it's recycled.
             frame = camera.capture_array()
             if frame is not None:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                frame = frame.copy()
         else:
             # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
