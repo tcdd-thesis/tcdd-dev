@@ -626,11 +626,12 @@ def close_app():
         '''
     else:
         # Manual run (terminal) — kill processes directly
+        # NOTE: using 'pkill' without '-f' so it matches process names only,
+        # not the full command line (which would match this bash -c script itself)
         logger.info("Running manually — using direct kill")
         kill_script = f'''
             sleep 1
-            pkill -f chromium-browser 2>/dev/null
-            pkill -f chromium 2>/dev/null
+            pkill chromium 2>/dev/null
             kill {pid} 2>/dev/null
             sleep 3
             kill -9 {pid} 2>/dev/null
