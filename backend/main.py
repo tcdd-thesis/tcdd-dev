@@ -576,13 +576,6 @@ def graceful_shutdown():
     # Stop streaming loop
     is_streaming = False
     
-    # Notify connected clients
-    try:
-        socketio.emit('server_shutdown', {'message': 'Server shutting down'})
-        socketio.sleep(0.2)
-    except Exception as e:
-        logger.debug(f"Could not emit shutdown event: {e}")
-    
     # Stop camera
     try:
         if camera:
@@ -621,24 +614,42 @@ def close_app():
     
     logger.info("Close app requested via API")
     
-    # Kill Chromium browser
+    running_under_systemd = bool(os.environ.get('INVOCATION_ID'))
+    pid = os.getpid()
+    
+    if running_under_systemd:
+        # When managed by systemd, use systemctl stop — this tells systemd
+        # the stop was intentional so Restart=on-failure won't bring it back.
+        # systemd sends SIGTERM to the process group (kills bash, python, chromium).
+        logger.info("Running under systemd — using systemctl stop")
+        kill_script = f'''
+            sleep 1
+            sudo systemctl stop tcdd.service
+        '''
+    else:
+        # Manual run (terminal) — kill processes directly
+        # NOTE: using 'pkill' without '-f' so it matches process names only,
+        # not the full command line (which would match this bash -c script itself)
+        logger.info("Running manually — using direct kill")
+        kill_script = f'''
+            sleep 1
+            pkill chromium 2>/dev/null
+            kill {pid} 2>/dev/null
+            sleep 3
+            kill -9 {pid} 2>/dev/null
+            fuser -k 5000/tcp 2>/dev/null
+        '''
+    
     try:
         subprocess.Popen(
-            ['pkill', '-f', 'chromium'],
+            ['bash', '-c', kill_script],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
         )
     except Exception as e:
-        logger.warning(f"Could not kill Chromium: {e}")
-    
-    # Schedule graceful shutdown + exit in background thread
-    def _deferred_exit():
-        import time
-        time.sleep(1)  # Allow HTTP response to be sent
-        graceful_shutdown()
-        os._exit(0)
-    
-    threading.Thread(target=_deferred_exit, daemon=True).start()
+        logger.error(f"Failed to initiate close: {e}")
+        return jsonify({'error': str(e)}), 500
     
     return jsonify({'message': 'Closing application...'}), 200
 

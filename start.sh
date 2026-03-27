@@ -52,6 +52,14 @@ if [ -f "$SERVICE_SRC" ]; then
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE_NAME"
     echo "$SERVICE_NAME installed and enabled for autostart."
+    
+    # Allow tcdd-thesis to stop/start the service without password (needed for close-app)
+    SUDOERS_FILE="/etc/sudoers.d/tcdd-service"
+    if [ ! -f "$SUDOERS_FILE" ]; then
+        echo "Installing sudoers rule for service management..."
+        echo "tcdd-thesis ALL=NOPASSWD: /bin/systemctl stop tcdd.service, /bin/systemctl start tcdd.service, /bin/systemctl restart tcdd.service" | sudo tee "$SUDOERS_FILE" > /dev/null
+        sudo chmod 0440 "$SUDOERS_FILE"
+    fi
 else
     echo "Warning: Service file not found at $SERVICE_SRC — skipping installation."
 fi
@@ -107,9 +115,11 @@ sleep 0.5
 
 # Trap to clean up children on script exit
 cleanup() {
+    pkill -f chromium-browser 2>/dev/null
     pkill -f chromium 2>/dev/null
     kill $BACKEND_PID 2>/dev/null
     wait $BACKEND_PID 2>/dev/null
+    fuser -k $PORT/tcp 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
