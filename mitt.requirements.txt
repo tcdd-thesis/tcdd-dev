@@ -1,6 +1,8 @@
 # Base requirements
-numpy>=1.26
-opencv-python>=4.8
+# NOTE: Hailo pyhailort on Raspberry Pi is sensitive to NumPy ABI changes.
+# Keep NumPy on 1.x for HEF inference compatibility.
+numpy==1.26.4
+opencv-python==4.10.0.84
 pillow>=10.0
 pyyaml>=6.0
 matplotlib>=3.8
