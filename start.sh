@@ -127,8 +127,22 @@ trap cleanup EXIT INT TERM
 python backend/main.py &
 BACKEND_PID=$!
 
-# Wait for server to be ready
-sleep 5
+# Wait for server to be ready (poll until it responds, up to 60s)
+echo "Waiting for server to start on port $PORT..."
+MAX_WAIT=60
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    if curl -s -o /dev/null -w '' "http://localhost:$PORT/api/status" 2>/dev/null; then
+        echo "Server is ready! (took ${WAITED}s)"
+        break
+    fi
+    sleep 2
+    WAITED=$((WAITED + 2))
+done
+
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "Warning: Server did not respond within ${MAX_WAIT}s. Launching browser anyway."
+fi
 
 # Start browser with touch support enabled
 chromium-browser \

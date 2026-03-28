@@ -250,6 +250,21 @@ class PairingManager:
             logger.info(f"Device unpaired: {old_device.get('device_name')}")
             return True
     
+    def cancel_pending(self) -> bool:
+        """
+        Cancel any pending pairing token without affecting the current paired device.
+        Used when the pairing wizard is cancelled mid-flow.
+        
+        Returns:
+            bool: True if a pending token was cleared, False if none existed
+        """
+        with self._lock:
+            if self._pending_token is None:
+                return False
+            self._pending_token = None
+            logger.info("Pending pairing token cancelled")
+            return True
+    
     def set_disconnect_callback(self, callback):
         """
         Set callback function to disconnect a device.

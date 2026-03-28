@@ -51,7 +51,11 @@ const state = {
     _undoTimer: null,
     // Camera health state
     _cameraStale: false,
-    _lastServerFrameTime: 0
+    _lastServerFrameTime: 0,
+    // Pairing wizard state — suppresses hotspot toasts during wizard flow
+    _wizardActive: false,
+    _wizardClosing: false,
+    _pairingJustSucceeded: false
 };
 
 // ============================================================================
@@ -1400,6 +1404,8 @@ async function loadPairingStatus() {
 async function unpairDevice() {
     const btn = document.getElementById('btn-unpair');
     setBtnLoading(btn, true, 'Unpairing...');
+    // Suppress hotspot toasts during the unpair sequence
+    state._wizardActive = true;
     try {
         const result = await api.post('/pair/unpair');
 
@@ -1418,6 +1424,7 @@ async function unpairDevice() {
         console.error('Failed to unpair:', error);
         showToast('Failed to unpair device', 'error');
     } finally {
+        state._wizardActive = false;
         setBtnLoading(btn, false);
     }
 }
@@ -1452,6 +1459,11 @@ async function startPairingWizard(force = false) {
 
     const modal = document.getElementById('pairing-wizard-modal');
     if (!modal) return;
+
+    // Activate wizard mode — suppresses hotspot SocketIO toasts
+    state._wizardActive = true;
+    state._wizardClosing = false;
+    state._pairingJustSucceeded = false;
 
     // Reset Wizard State — step 1 now shows inline spinner while hotspot starts
     resetWizardStep1();
@@ -1610,27 +1622,36 @@ async function wizardAdvanceToStep2() {
 }
 
 function closePairingWizard() {
+    // Guard against double invocation (e.g., device_paired event + user click)
+    if (state._wizardClosing) return;
+    state._wizardClosing = true;
+
     stopPolling();
     const modal = document.getElementById('pairing-wizard-modal');
     if (modal) modal.style.display = 'none';
 
-    // Aggressively shut down the hotspot if it's open, unless we are CERTAIN we just successfully paired.
-    api.get('/pair/status').then(res => {
-        // If there is no paired device at all, we must be aborting the wizard. Close the hotspot.
-        if (res && res.is_paired === true) {
-            console.log("Wizard closed after successful pair.");
-        } else {
-            console.log("Wizard cancelled or closed without pair. Stopping hotspot...");
-            api.post('/hotspot/stop').then(() => {
-                showToast('Pairing cancelled. Reconnecting to WiFi...', 'info');
-            }).catch(e => console.warn('Failed to stop hotspot on wizard close', e));
-        }
-    }).catch(e => {
-        console.error('Failed to check pair status on close, tearing down hotspot anyway', e);
-        api.post('/hotspot/stop').catch(err => console.error(err));
-    });
+    const justPaired = state._pairingJustSucceeded;
 
-    loadPairingStatus();
+    if (justPaired) {
+        // Successful pairing — no need to stop hotspot, no cancel cleanup
+        console.log("Wizard closed after successful pair.");
+        state._wizardActive = false;
+        loadPairingStatus();
+    } else {
+        // Wizard was cancelled — clean up server state then stop hotspot
+        console.log("Wizard cancelled or closed without pair. Cleaning up...");
+        // Cancel the dangling pending token on the server
+        api.post('/pair/cancel').catch(e => console.warn('Failed to cancel pending token', e));
+        // Stop hotspot (idempotent — won't emit events if already off)
+        api.post('/hotspot/stop').then(() => {
+            showToast('Pairing cancelled. Reconnecting to WiFi...', 'info');
+        }).catch(e => {
+            console.warn('Failed to stop hotspot on wizard close', e);
+        }).finally(() => {
+            state._wizardActive = false;
+            loadPairingStatus();
+        });
+    }
 }
 
 // ============================================================================
@@ -2389,33 +2410,48 @@ function connectWebSocket() {
         console.log('Device paired:', data);
         showToast(`${data.device_name || 'Device'} paired!`, 'success');
 
+        // Mark success so closePairingWizard knows not to cancel/teardown hotspot
+        state._pairingJustSucceeded = true;
+
         // Close the wizard modal if it's open
         closePairingWizard();
 
         if (state.currentPage === 'settings') loadPairingStatus();
 
-        // If audio gate was active, show enable-audio prompt
-        if (_audioGateActive) {
-            showEnableAudioPrompt();
-        }
+        // Always check if audio output still needs to be enabled after pairing.
+        // Previously this only triggered when _audioGateActive was true (i.e., pairing
+        // was initiated from the home page audio gate), but pairing through Settings
+        // left audio unconfigured and the gate kept reappearing.
+        api.get('/audio/check').then(audioData => {
+            if (!audioData.audio_ready) {
+                showEnableAudioPrompt();
+            }
+        }).catch(e => console.warn('Audio check after pairing failed:', e));
     });
 
     state.socket.on('device_unpaired', () => {
         console.log('Device unpaired');
-        if (state.currentPage === 'settings') loadPairingStatus();
+        // Always refresh pairing UI, not just when on settings page
+        loadPairingStatus();
     });
 
     // Listen for hotspot state changes (sync RPi ↔ mobile)
     state.socket.on('hotspot_started', (data) => {
         console.log('Hotspot started:', data);
         updateHotspotUI(true, data.ssid);
-        showToast('Hotspot started', 'success');
+        // Suppress toast when wizard is managing the flow
+        if (!state._wizardActive) {
+            showToast('Hotspot started', 'success');
+        }
     });
 
     state.socket.on('hotspot_stopped', () => {
         console.log('Hotspot stopped');
         updateHotspotUI(false);
-        showToast('Hotspot stopped', 'info');
+        // Suppress toast when wizard or unpair is managing the flow
+        if (!state._wizardActive) {
+            showToast('Hotspot stopped', 'info');
+        }
     });
 
     // Listen for config updates from server
