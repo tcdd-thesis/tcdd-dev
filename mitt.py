@@ -1170,21 +1170,68 @@ def save_yolo_eval_report(
     cm_norm = np.divide(cm, np.maximum(cm_row_sum, 1.0))
 
     labels = list(class_names) + ["background"]
-    fig, ax = plt.subplots(figsize=(9, 8))
-    im = ax.imshow(cm_norm, cmap="Blues", vmin=0.0, vmax=1.0)
-    ax.set_title("Confusion Matrix (row-normalized)")
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Ground Truth")
-    ax.set_xticks(np.arange(len(labels)))
-    ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_yticklabels(labels)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    fig.tight_layout()
-    cm_path = out_root / "confusion_matrix.png"
-    fig.savefig(cm_path, dpi=180)
-    plt.close(fig)
-    files["confusion_matrix.png"] = str(cm_path)
+
+    def draw_confusion_matrix(
+        matrix: np.ndarray,
+        *,
+        title: str,
+        filename: str,
+        colorbar_label: str,
+        value_fmt: str,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+    ) -> None:
+        fig, ax = plt.subplots(figsize=(9, 8))
+        im = ax.imshow(matrix, cmap="Blues", vmin=vmin, vmax=vmax)
+        ax.set_title(title)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Ground Truth")
+        ax.set_xticks(np.arange(len(labels)))
+        ax.set_yticks(np.arange(len(labels)))
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+        ax.set_yticklabels(labels)
+
+        threshold = (float(np.nanmax(matrix)) / 2.0) if matrix.size else 0.0
+        for row_idx in range(matrix.shape[0]):
+            for col_idx in range(matrix.shape[1]):
+                value = matrix[row_idx, col_idx]
+                text_color = "white" if value > threshold else "black"
+                ax.text(
+                    col_idx,
+                    row_idx,
+                    format(value, value_fmt),
+                    ha="center",
+                    va="center",
+                    color=text_color,
+                    fontsize=8,
+                )
+
+        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        cbar.set_label(colorbar_label)
+        fig.tight_layout()
+
+        out_path = out_root / filename
+        fig.savefig(out_path, dpi=180)
+        plt.close(fig)
+        files[filename] = str(out_path)
+
+    draw_confusion_matrix(
+        cm_norm,
+        title="Confusion Matrix (row-normalized)",
+        filename="confusion_matrix.png",
+        colorbar_label="Normalized value",
+        value_fmt=".2f",
+        vmin=0.0,
+        vmax=1.0,
+    )
+
+    draw_confusion_matrix(
+        confusion_matrix.astype(np.float64),
+        title="Confusion Matrix (raw counts)",
+        filename="confusion_matrix_raw.png",
+        colorbar_label="Count",
+        value_fmt=".0f",
+    )
 
     return files
 
@@ -2536,6 +2583,13 @@ class InferenceToolApp:
                     ap_this_iou.append(float(ap))
             ap_per_iou.append(ap_this_iou)
 
+        split_sign_counts: List[int] = [0 for _ in range(class_count)]
+        for rec in records:
+            for gt_obj in rec.get("gt", []):
+                cls_id = int(gt_obj.get("cls", -1))
+                if 0 <= cls_id < class_count:
+                    split_sign_counts[cls_id] += 1
+
         ap_array = np.asarray(ap_per_iou, dtype=np.float64)
         map50 = float(np.nanmean(ap_array[0])) if ap_array.size else 0.0
         map50_95 = float(np.nanmean(ap_array)) if ap_array.size else 0.0
@@ -2565,6 +2619,8 @@ class InferenceToolApp:
             "unknown_class_predictions": unknown_class_pred,
             "class_names": class_names,
             "gt_per_class": {class_names[idx]: gt_per_class[idx] for idx in range(class_count)},
+            "split_sign_count_per_class": {class_names[idx]: int(split_sign_counts[idx]) for idx in range(class_count)},
+            "split_sign_total": int(sum(split_sign_counts)),
             "precision": best_precision,
             "recall": best_recall,
             "f1": best_f1,
@@ -2616,6 +2672,7 @@ class InferenceToolApp:
         self._enqueue_log(f"PR curve: {report_files.get('pr_curve.png', 'n/a')}")
         self._enqueue_log(f"F1-confidence curve: {report_files.get('f1_conf_curve.png', 'n/a')}")
         self._enqueue_log(f"Confusion matrix: {report_files.get('confusion_matrix.png', 'n/a')}")
+        self._enqueue_log(f"Confusion matrix (raw): {report_files.get('confusion_matrix_raw.png', 'n/a')}")
 
     def _open_camera(self, source: str, width: int, height: int, fps: int, raw_order: str = "RGB") -> Any:
         if source == "rpi_camera":
