@@ -196,6 +196,44 @@
                         </div>
                     </div>
                     <div class="setting-row">
+                        <label for="setting-af-mode">Autofocus Mode</label>
+                        <select id="setting-af-mode" class="select-touch">
+                            <option value="off">Off</option>
+                            <option value="manual">Manual</option>
+                            <option value="auto">Auto</option>
+                            <option value="continuous">Continuous</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label for="setting-af-speed">AF Speed</label>
+                        <select id="setting-af-speed" class="select-touch">
+                            <option value="normal">Normal</option>
+                            <option value="fast">Fast</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label for="setting-af-range">AF Range</label>
+                        <select id="setting-af-range" class="select-touch">
+                            <option value="normal">Normal</option>
+                            <option value="macro">Macro</option>
+                            <option value="full">Full</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label for="setting-af-trigger">
+                            Trigger AF on Start
+                        </label>
+                        <input type="checkbox" id="setting-af-trigger">
+                    </div>
+                    <div class="setting-row">
+                        <label>Manual Lens Position</label>
+                        <div class="slider-container">
+                            <input type="range" id="setting-lens-position" class="slider-touch" min="0" max="10"
+                                value="0" step="0.1">
+                            <span id="lens-position-display" class="slider-value">0.0</span>
+                        </div>
+                    </div>
+                    <div class="setting-row">
                         <label>Version</label>
                         <span class="setting-value">1.0.0</span>
                     </div>

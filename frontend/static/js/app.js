@@ -38,7 +38,12 @@ const state = {
     // Track original settings for unsaved changes detection
     originalSettings: {
         brightness: 50,
-        confidence: 50
+        confidence: 50,
+        autofocusMode: 'continuous',
+        autofocusSpeed: 'normal',
+        autofocusRange: 'normal',
+        lensPosition: 0.0,
+        autofocusTriggerOnStart: true
     },
     // WebSocket reconnection state tracking
     _wsWasConnected: false,
@@ -388,12 +393,63 @@ function goHome() {
 function hasSettingsChanged() {
     const brightnessSlider = document.getElementById('setting-brightness');
     const confidenceSlider = document.getElementById('setting-confidence');
+    const afModeSelect = document.getElementById('setting-af-mode');
+    const afSpeedSelect = document.getElementById('setting-af-speed');
+    const afRangeSelect = document.getElementById('setting-af-range');
+    const afTriggerCheckbox = document.getElementById('setting-af-trigger');
+    const lensSlider = document.getElementById('setting-lens-position');
 
     const currentBrightness = brightnessSlider ? parseInt(brightnessSlider.value) : state.originalSettings.brightness;
     const currentConfidence = confidenceSlider ? parseInt(confidenceSlider.value) : state.originalSettings.confidence;
+    const currentAfMode = afModeSelect ? String(afModeSelect.value || 'continuous') : state.originalSettings.autofocusMode;
+    const currentAfSpeed = afSpeedSelect ? String(afSpeedSelect.value || 'normal') : state.originalSettings.autofocusSpeed;
+    const currentAfRange = afRangeSelect ? String(afRangeSelect.value || 'normal') : state.originalSettings.autofocusRange;
+    const currentLensPosition = lensSlider ? parseFloat(lensSlider.value || '0') : state.originalSettings.lensPosition;
+    const currentAfTrigger = afTriggerCheckbox ? Boolean(afTriggerCheckbox.checked) : state.originalSettings.autofocusTriggerOnStart;
 
     return currentBrightness !== state.originalSettings.brightness ||
-        currentConfidence !== state.originalSettings.confidence;
+        currentConfidence !== state.originalSettings.confidence ||
+        currentAfMode !== state.originalSettings.autofocusMode ||
+        currentAfSpeed !== state.originalSettings.autofocusSpeed ||
+        currentAfRange !== state.originalSettings.autofocusRange ||
+        Math.abs(currentLensPosition - state.originalSettings.lensPosition) >= 0.05 ||
+        currentAfTrigger !== state.originalSettings.autofocusTriggerOnStart;
+}
+
+function updateAutofocusUiRules() {
+    const afModeSelect = document.getElementById('setting-af-mode');
+    const afSpeedSelect = document.getElementById('setting-af-speed');
+    const afRangeSelect = document.getElementById('setting-af-range');
+    const afTriggerCheckbox = document.getElementById('setting-af-trigger');
+    const lensSlider = document.getElementById('setting-lens-position');
+
+    if (!afModeSelect) return;
+
+    const mode = String(afModeSelect.value || 'continuous').toLowerCase();
+    const isManual = mode === 'manual';
+    const isAuto = mode === 'auto';
+    const supportsAfTuning = mode === 'auto' || mode === 'continuous';
+
+    if (afSpeedSelect) afSpeedSelect.disabled = !supportsAfTuning;
+    if (afRangeSelect) afRangeSelect.disabled = !supportsAfTuning;
+    if (afTriggerCheckbox) afTriggerCheckbox.disabled = !isAuto;
+    if (lensSlider) lensSlider.disabled = !isManual;
+}
+
+function getAutofocusSettingsFromUi() {
+    const afModeSelect = document.getElementById('setting-af-mode');
+    const afSpeedSelect = document.getElementById('setting-af-speed');
+    const afRangeSelect = document.getElementById('setting-af-range');
+    const afTriggerCheckbox = document.getElementById('setting-af-trigger');
+    const lensSlider = document.getElementById('setting-lens-position');
+
+    return {
+        autofocus_mode: afModeSelect ? String(afModeSelect.value || 'continuous') : 'continuous',
+        autofocus_speed: afSpeedSelect ? String(afSpeedSelect.value || 'normal') : 'normal',
+        autofocus_range: afRangeSelect ? String(afRangeSelect.value || 'normal') : 'normal',
+        lens_position: lensSlider ? parseFloat(lensSlider.value || '0') : 0.0,
+        autofocus_trigger_on_start: afTriggerCheckbox ? Boolean(afTriggerCheckbox.checked) : true
+    };
 }
 
 /**
@@ -1663,9 +1719,41 @@ async function loadSettings() {
             confidenceDisplay.textContent = Math.round(confidence * 100) + '%';
         }
 
+        // Autofocus controls
+        let afMode = String(config.camera?.autofocus_mode || 'continuous').toLowerCase();
+        let afSpeed = String(config.camera?.autofocus_speed || 'normal').toLowerCase();
+        let afRange = String(config.camera?.autofocus_range || 'normal').toLowerCase();
+        const lensPosition = parseFloat(config.camera?.lens_position ?? 0.0);
+        const afTriggerOnStart = config.camera?.autofocus_trigger_on_start !== false;
+
+        if (!['off', 'manual', 'auto', 'continuous'].includes(afMode)) afMode = 'continuous';
+        if (!['normal', 'fast'].includes(afSpeed)) afSpeed = 'normal';
+        if (!['normal', 'macro', 'full'].includes(afRange)) afRange = 'normal';
+
+        const afModeSelect = document.getElementById('setting-af-mode');
+        const afSpeedSelect = document.getElementById('setting-af-speed');
+        const afRangeSelect = document.getElementById('setting-af-range');
+        const afTriggerCheckbox = document.getElementById('setting-af-trigger');
+        const lensSlider = document.getElementById('setting-lens-position');
+        const lensDisplay = document.getElementById('lens-position-display');
+
+        if (afModeSelect) afModeSelect.value = afMode;
+        if (afSpeedSelect) afSpeedSelect.value = afSpeed;
+        if (afRangeSelect) afRangeSelect.value = afRange;
+        if (afTriggerCheckbox) afTriggerCheckbox.checked = afTriggerOnStart;
+        if (lensSlider) lensSlider.value = Number.isFinite(lensPosition) ? lensPosition.toFixed(1) : '0.0';
+        if (lensDisplay) lensDisplay.textContent = Number.isFinite(lensPosition) ? lensPosition.toFixed(1) : '0.0';
+
+        updateAutofocusUiRules();
+
         // Store original settings for change detection
         state.originalSettings.brightness = brightness;
         state.originalSettings.confidence = Math.round(confidence * 100);
+        state.originalSettings.autofocusMode = afMode;
+        state.originalSettings.autofocusSpeed = afSpeed;
+        state.originalSettings.autofocusRange = afRange;
+        state.originalSettings.lensPosition = Number.isFinite(lensPosition) ? lensPosition : 0.0;
+        state.originalSettings.autofocusTriggerOnStart = afTriggerOnStart;
 
         // Load WiFi status
         await loadWifiStatus();
@@ -1708,6 +1796,7 @@ async function saveSettings() {
 
         // Get confidence
         const confidence = parseFloat(document.getElementById('setting-confidence').value) / 100;
+        const autofocus = getAutofocusSettingsFromUi();
 
         const config = {
             display: {
@@ -1715,13 +1804,27 @@ async function saveSettings() {
             },
             detection: {
                 confidence: confidence
+            },
+            camera: {
+                autofocus_mode: autofocus.autofocus_mode,
+                autofocus_speed: autofocus.autofocus_speed,
+                autofocus_range: autofocus.autofocus_range,
+                lens_position: autofocus.lens_position,
+                autofocus_trigger_on_start: autofocus.autofocus_trigger_on_start
             }
         };
 
         // Store previous config for undo
         const prevConfig = {
             display: { brightness: state.originalSettings.brightness },
-            detection: { confidence: state.originalSettings.confidence / 100 }
+            detection: { confidence: state.originalSettings.confidence / 100 },
+            camera: {
+                autofocus_mode: state.originalSettings.autofocusMode,
+                autofocus_speed: state.originalSettings.autofocusSpeed,
+                autofocus_range: state.originalSettings.autofocusRange,
+                lens_position: state.originalSettings.lensPosition,
+                autofocus_trigger_on_start: state.originalSettings.autofocusTriggerOnStart
+            }
         };
 
         const response = await api.put('/config', config);
@@ -1731,6 +1834,11 @@ async function saveSettings() {
         // Update original settings after successful save
         state.originalSettings.brightness = brightness;
         state.originalSettings.confidence = Math.round(confidence * 100);
+        state.originalSettings.autofocusMode = autofocus.autofocus_mode;
+        state.originalSettings.autofocusSpeed = autofocus.autofocus_speed;
+        state.originalSettings.autofocusRange = autofocus.autofocus_range;
+        state.originalSettings.lensPosition = autofocus.lens_position;
+        state.originalSettings.autofocusTriggerOnStart = autofocus.autofocus_trigger_on_start;
 
         showUndoToast(prevConfig);
 
@@ -1781,6 +1889,11 @@ async function undoSettings() {
         // Restore UI
         state.originalSettings.brightness = prev.display.brightness;
         state.originalSettings.confidence = Math.round(prev.detection.confidence * 100);
+        state.originalSettings.autofocusMode = prev.camera?.autofocus_mode || state.originalSettings.autofocusMode;
+        state.originalSettings.autofocusSpeed = prev.camera?.autofocus_speed || state.originalSettings.autofocusSpeed;
+        state.originalSettings.autofocusRange = prev.camera?.autofocus_range || state.originalSettings.autofocusRange;
+        state.originalSettings.lensPosition = Number.isFinite(prev.camera?.lens_position) ? prev.camera.lens_position : state.originalSettings.lensPosition;
+        state.originalSettings.autofocusTriggerOnStart = prev.camera?.autofocus_trigger_on_start !== false;
 
         if (state.currentPage === 'settings') loadSettings();
         showToast('Settings reverted', 'info');
@@ -1798,6 +1911,11 @@ function resetToDefaults() {
     // Default values
     const defaultBrightness = 50;
     const defaultConfidence = 50;
+    const defaultAfMode = 'continuous';
+    const defaultAfSpeed = 'normal';
+    const defaultAfRange = 'normal';
+    const defaultLensPosition = 0.0;
+    const defaultAfTriggerOnStart = true;
 
     // Update sliders
     const brightnessSlider = document.getElementById('setting-brightness');
@@ -1815,6 +1933,22 @@ function resetToDefaults() {
         confidenceSlider.value = defaultConfidence;
         confidenceDisplay.textContent = defaultConfidence + '%';
     }
+
+    const afModeSelect = document.getElementById('setting-af-mode');
+    const afSpeedSelect = document.getElementById('setting-af-speed');
+    const afRangeSelect = document.getElementById('setting-af-range');
+    const afTriggerCheckbox = document.getElementById('setting-af-trigger');
+    const lensSlider = document.getElementById('setting-lens-position');
+    const lensDisplay = document.getElementById('lens-position-display');
+
+    if (afModeSelect) afModeSelect.value = defaultAfMode;
+    if (afSpeedSelect) afSpeedSelect.value = defaultAfSpeed;
+    if (afRangeSelect) afRangeSelect.value = defaultAfRange;
+    if (afTriggerCheckbox) afTriggerCheckbox.checked = defaultAfTriggerOnStart;
+    if (lensSlider) lensSlider.value = defaultLensPosition.toFixed(1);
+    if (lensDisplay) lensDisplay.textContent = defaultLensPosition.toFixed(1);
+
+    updateAutofocusUiRules();
 
     showToast('Reset to defaults', 'info');
 }
@@ -2657,6 +2791,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const value = e.target.value;
         document.getElementById('confidence-display').textContent = value + '%';
     });
+
+    // Autofocus settings controls
+    const afModeSelect = document.getElementById('setting-af-mode');
+    const lensSlider = document.getElementById('setting-lens-position');
+    const lensDisplay = document.getElementById('lens-position-display');
+
+    if (afModeSelect) {
+        afModeSelect.addEventListener('change', () => {
+            updateAutofocusUiRules();
+        });
+    }
+
+    if (lensSlider && lensDisplay) {
+        lensSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value || '0');
+            lensDisplay.textContent = Number.isFinite(value) ? value.toFixed(1) : '0.0';
+        });
+    }
 
     // Connect WebSocket
     connectWebSocket();
