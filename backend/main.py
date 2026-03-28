@@ -1324,6 +1324,24 @@ def unpair_device():
         logger.error(f"Error unpairing device: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/pair/cancel', methods=['POST'])
+def cancel_pairing():
+    """
+    Cancel a pending pairing token without affecting the current paired device.
+    Used when the pairing wizard is closed mid-flow.
+    Only accessible from touchscreen (local).
+    """
+    if not is_local_request():
+        return jsonify({'error': 'Cancel can only be triggered from touchscreen'}), 403
+    
+    try:
+        cleared = pairing_manager.cancel_pending()
+        logger.info(f"Pairing cancel requested, token cleared: {cleared}")
+        return jsonify({'success': True, 'token_cleared': cleared}), 200
+    except Exception as e:
+        logger.error(f"Error cancelling pairing: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/pair')
 def pair_landing_page():
     """
@@ -1428,9 +1446,15 @@ def start_hotspot():
 def stop_hotspot():
     """
     Stop the WiFi hotspot.
+    Idempotent — returns success without emitting events if already stopped.
     """
     
     try:
+        # Check if hotspot is already off to avoid redundant events
+        status = hotspot_manager.get_status()
+        if not status.get('active', False):
+            return jsonify({'success': True, 'already_stopped': True}), 200
+        
         result = hotspot_manager.stop()
         
         if result['success']:

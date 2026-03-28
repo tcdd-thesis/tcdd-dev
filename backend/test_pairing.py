@@ -170,6 +170,23 @@ def test_pairing_manager():
     assert 'has_pending_token' in status
     print("  PASSED")
     
+    # Test 13: Cancel pending token (when one exists)
+    print("\n[Test 13] Cancel Pending Token")
+    pm2.generate_pairing_token()
+    assert pm2.get_pending_token() is not None, "Should have a pending token"
+    cancelled = pm2.cancel_pending()
+    assert cancelled == True, "Should return True when cancelling an existing token"
+    assert pm2.get_pending_token() is None, "Token should be cleared after cancel"
+    print(f"  Cancelled: {cancelled}")
+    print("  PASSED")
+    
+    # Test 14: Cancel pending token (when none exists)
+    print("\n[Test 14] Cancel When No Pending Token")
+    cancelled_again = pm2.cancel_pending()
+    assert cancelled_again == False, "Should return False when no token to cancel"
+    print(f"  Cancel result: {cancelled_again}")
+    print("  PASSED")
+    
     # Cleanup test file
     print("\n" + "=" * 60)
     print("ALL TESTS PASSED!")
