@@ -76,6 +76,13 @@ def _strip_json_comments(text: str) -> str:
 # Fallback priority for any unknown label
 DEFAULT_PRIORITY = 5
 
+# Fixed persistence gate defaults for TTS debounce (v1).
+PERSISTENCE_MIN_VISIBLE_MS = 120.0
+PERSISTENCE_MIN_CONSECUTIVE = 3
+PERSISTENCE_RESET_GAP_SECONDS = 0.35
+PERSISTENCE_STALE_SECONDS = 1.0
+PERSISTENCE_LOG_INTERVAL_SECONDS = 2.0
+
 
 class TTSEngine:
     """
@@ -131,6 +138,13 @@ class TTSEngine:
         self._profile_source = "uninitialized"
         self._profile_load_error = ""
         self._warned_unmapped_labels = set()
+        self._persistence_min_visible_ms = PERSISTENCE_MIN_VISIBLE_MS
+        self._persistence_min_consecutive = PERSISTENCE_MIN_CONSECUTIVE
+        self._persistence_reset_gap_seconds = PERSISTENCE_RESET_GAP_SECONDS
+        self._persistence_stale_seconds = PERSISTENCE_STALE_SECONDS
+        self._persistence_log_interval_seconds = PERSISTENCE_LOG_INTERVAL_SECONDS
+        self._persistence_state: dict[str, dict[str, float | int]] = {}
+        self._persistence_log_last: dict[str, float] = {}
 
         if not HAS_TTS:
             logger.warning("TTS engine disabled — espeak is not installed")
@@ -435,6 +449,98 @@ class TTSEngine:
     # Public API
     # -----------------------------------------------------------------
 
+    def _dedupe_detections_by_label(self, detections: list[dict]) -> list[dict]:
+        """Keep the highest-confidence detection per label for each pass."""
+        best_by_label: dict[str, tuple[float, dict]] = {}
+
+        for det in detections:
+            label = str(det.get("class_name", "")).strip()
+            if not label:
+                continue
+
+            try:
+                confidence = float(det.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+
+            current_best = best_by_label.get(label)
+            if current_best is None or confidence > current_best[0]:
+                best_by_label[label] = (confidence, det)
+
+        return [item[1] for item in best_by_label.values()]
+
+    def _apply_persistence_gate(self, detections: list[dict], now: float) -> list[dict]:
+        """
+        Suppress labels that do not persist long enough across inference passes.
+
+        A label becomes TTS-eligible only when BOTH conditions are met:
+        - visible for at least ``self._persistence_min_visible_ms``
+        - seen for at least ``self._persistence_min_consecutive`` consecutive passes
+        """
+        deduped = self._dedupe_detections_by_label(detections)
+        present_labels = {
+            str(det.get("class_name", "")).strip()
+            for det in deduped
+            if str(det.get("class_name", "")).strip()
+        }
+
+        # Break streaks for labels not seen in this pass and remove stale entries.
+        for label in list(self._persistence_state.keys()):
+            state = self._persistence_state[label]
+            if label not in present_labels:
+                state["consecutive"] = 0
+            if now - float(state.get("last_seen", 0.0)) > self._persistence_stale_seconds:
+                self._persistence_state.pop(label, None)
+                self._persistence_log_last.pop(label, None)
+
+        if not deduped:
+            return []
+
+        passed: list[dict] = []
+        for det in deduped:
+            label = str(det.get("class_name", "")).strip()
+            if not label:
+                continue
+
+            state = self._persistence_state.get(label)
+            if not state or int(state.get("consecutive", 0)) == 0:
+                state = {
+                    "first_seen": now,
+                    "last_seen": now,
+                    "consecutive": 1,
+                }
+                self._persistence_state[label] = state
+            else:
+                gap = now - float(state.get("last_seen", 0.0))
+                if gap > self._persistence_reset_gap_seconds:
+                    state["first_seen"] = now
+                    state["consecutive"] = 1
+                else:
+                    state["consecutive"] = int(state.get("consecutive", 0)) + 1
+                state["last_seen"] = now
+
+            visible_ms = (now - float(state["first_seen"])) * 1000.0
+            if (
+                int(state["consecutive"]) >= self._persistence_min_consecutive
+                and visible_ms >= self._persistence_min_visible_ms
+            ):
+                passed.append(det)
+                continue
+
+            last_log = self._persistence_log_last.get(label, 0.0)
+            if now - last_log >= self._persistence_log_interval_seconds:
+                logger.debug(
+                    "TTS persistence gate waiting: label=%s consecutive=%s/%s visible_ms=%.0f/%.0f",
+                    label,
+                    int(state["consecutive"]),
+                    self._persistence_min_consecutive,
+                    visible_ms,
+                    self._persistence_min_visible_ms,
+                )
+                self._persistence_log_last[label] = now
+
+        return passed
+
     def process_detections(self, detections: list[dict]):
         """
         Accept a list of detections from a single frame and speak only
@@ -446,9 +552,6 @@ class TTSEngine:
             detections: List of detection dicts from Detector.detect().
         """
         if not self.enabled or not self._engine_ready:
-            return
-
-        if not detections:
             return
 
         # Reload runtime settings from config each call (cheap dict lookups)
@@ -469,6 +572,9 @@ class TTSEngine:
             return
 
         now = time.time()
+        detections = self._apply_persistence_gate(detections or [], now)
+        if not detections:
+            return
 
         # Build candidate list: (priority, label)
         candidates = []
@@ -583,6 +689,9 @@ class TTSEngine:
             "speech_rate": self.speech_rate,
             "volume": self.volume,
             "cooldown_seconds": self.cooldown_seconds,
+            "persistence_min_visible_ms": self._persistence_min_visible_ms,
+            "persistence_min_consecutive": self._persistence_min_consecutive,
+            "persistence_reset_gap_seconds": self._persistence_reset_gap_seconds,
             "queue_size": self._queue.qsize(),
             "labels_mapped": labels_mapped,
             "active_profile": self.active_profile,
