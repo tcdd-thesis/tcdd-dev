@@ -1236,6 +1236,16 @@ def save_yolo_eval_report(
     return files
 
 
+def save_video_detection_report(report_dir: str, summary: Dict[str, Any]) -> str:
+    out_root = Path(report_dir)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    out_path = out_root / "video_detection_report.json"
+    with out_path.open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
+    return str(out_path)
+
+
 class InferenceToolApp:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -2366,6 +2376,7 @@ class InferenceToolApp:
         e2e_samples: List[float] = []
         system_samples: List[Dict[str, float]] = []
         detections_total = 0
+        detections_per_class: Dict[str, int] = {}
         preview_count = 0
         processed = 0
 
@@ -2392,6 +2403,16 @@ class InferenceToolApp:
                 e2e_samples.append(e2e_ms)
                 detections_total += result.detections
 
+                for pred in result.predictions or []:
+                    class_name = str(pred.get("class_name", "")).strip()
+                    if not class_name:
+                        cls_raw = pred.get("cls", pred.get("class", ""))
+                        if isinstance(cls_raw, (int, np.integer)):
+                            class_name = f"class_{int(cls_raw)}"
+                        else:
+                            class_name = "unknown"
+                    detections_per_class[class_name] = detections_per_class.get(class_name, 0) + 1
+
                 if result.annotated_frame is not None and (preview_count % 3 == 0):
                     self._enqueue_preview(result.annotated_frame)
                 preview_count += 1
@@ -2406,6 +2427,7 @@ class InferenceToolApp:
                     system_samples.append(sampled)
                     summary = {
                         "count": float(processed),
+                        "detection_total": float(detections_total),
                         "stream_fps": run_fps,
                         "avg_ms": window_stats.get("avg_ms", 0.0),
                         "p95_ms": window_stats.get("p95_ms", 0.0),
@@ -2426,6 +2448,7 @@ class InferenceToolApp:
             final_stats = compute_stats(samples)
             if final_stats:
                 final_stats["stream_frames"] = float(processed)
+                final_stats["detection_total"] = float(detections_total)
                 final_stats["avg_detections"] = detections_total / max(1, processed)
                 e2e_final = compute_stats(e2e_samples)
                 if e2e_final:
@@ -2435,6 +2458,36 @@ class InferenceToolApp:
                 system_samples.append(self._sample_system_metrics())
                 final_stats.update(self._aggregate_metrics(system_samples))
                 self._enqueue_stats(final_stats)
+
+            elapsed = max(time.perf_counter() - start, 0.0)
+            sorted_counts = {
+                name: int(count)
+                for name, count in sorted(
+                    detections_per_class.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            }
+            video_report_dir = os.path.join(
+                "data",
+                "mitt",
+                datetime.now().strftime("%Y%m%d_%H%M%S_%f") + "_video",
+            )
+            video_summary: Dict[str, Any] = {
+                "video_path": video_path,
+                "source_fps": source_fps,
+                "frames_total": total_frames if total_frames > 0 else None,
+                "frames_processed": processed,
+                "run_seconds": elapsed,
+                "run_fps": (processed / elapsed) if elapsed > 0 else 0.0,
+                "detection_total": int(detections_total),
+                "avg_detections_per_frame": (detections_total / processed) if processed > 0 else 0.0,
+                "detections_per_class": sorted_counts,
+                "stopped_by_user": bool(self.stop_event.is_set()),
+            }
+            video_report_path = save_video_detection_report(video_report_dir, video_summary)
+
+            self._enqueue_log(f"Video detection total: {detections_total}")
+            self._enqueue_log(f"Video detection report: {video_report_path}")
 
             if self.stop_event.is_set():
                 self._enqueue_log("Video run stopped")
@@ -2865,6 +2918,7 @@ class InferenceToolApp:
     def _update_stats(self, stats: Dict[str, float]) -> None:
         ordered_keys = [
             "count",
+            "detection_total",
             "dataset_files",
             "processed_files",
             "stream_frames",
@@ -2896,6 +2950,7 @@ class InferenceToolApp:
         ]
 
         labels = {
+            "detection_total": "total detections",
             "camera_to_detect_avg_ms": "cam->det avg ms",
             "camera_to_detect_p95_ms": "cam->det p95 ms",
             "e2e_avg_ms": "e2e avg ms",
@@ -2905,13 +2960,13 @@ class InferenceToolApp:
 
         def format_item(key: str, value: float) -> str:
             label = labels.get(key, key)
-            if key in {"count", "dataset_files", "processed_files", "stream_frames"}:
+            if key in {"count", "detection_total", "dataset_files", "processed_files", "stream_frames"}:
                 return f"{label}: {int(value)}"
             return f"{label}: {value:.3f}"
 
         if self.small_screen_mode:
             compact_rows = [
-                ["count", "stream_frames", "dataset_files", "processed_files"],
+                ["count", "stream_frames", "detection_total", "dataset_files", "processed_files"],
                 ["stream_fps", "fps", "camera_to_detect_avg_ms", "camera_to_detect_p95_ms"],
                 ["e2e_avg_ms", "e2e_p95_ms", "avg_ms", "p95_ms"],
                 ["avg_detections", "cpu_util_pct", "temp_c", "power_w", "hailo_util_pct"],
