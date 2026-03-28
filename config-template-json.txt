@@ -182,7 +182,7 @@
     "volume": 1.0,                 // Volume: 0.0 (mute) to 1.0 (max)
     "cooldown_seconds": 10,        // Seconds before same alert can repeat
                     // Prevents repetitive announcements
-    "profiles_file": "backend/models/tts_profiles.json", // TTS profile registry JSON
+    "profiles_file": "data/tts_profiles.json", // TTS profile registry JSON
     "active_profile": "default"   // Active profile id in the registry
   },
 
