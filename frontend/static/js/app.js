@@ -2418,10 +2418,15 @@ function connectWebSocket() {
 
         if (state.currentPage === 'settings') loadPairingStatus();
 
-        // If audio gate was active, show enable-audio prompt
-        if (_audioGateActive) {
-            showEnableAudioPrompt();
-        }
+        // Always check if audio output still needs to be enabled after pairing.
+        // Previously this only triggered when _audioGateActive was true (i.e., pairing
+        // was initiated from the home page audio gate), but pairing through Settings
+        // left audio unconfigured and the gate kept reappearing.
+        api.get('/audio/check').then(audioData => {
+            if (!audioData.audio_ready) {
+                showEnableAudioPrompt();
+            }
+        }).catch(e => console.warn('Audio check after pairing failed:', e));
     });
 
     state.socket.on('device_unpaired', () => {
