@@ -1,5 +1,5 @@
 {
-  "version": "0.2.1-b202603262339",
+  "version": "0.2.2-b202603280858",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -33,6 +33,11 @@
     // Camera Control
     "auto_exposure": true,         // Automatic exposure
     "use_mock": false,             // Force mock camera (for testing)
+
+    // Picamera2 raw frame channel order from capture_array() when format="RGB888"
+    // "RGB" = assume capture_array is RGB and convert to canonical BGR
+    // "BGR" = assume capture_array is already BGR (no channel swap)
+    "picamera_raw_order": "RGB",
     
     // White Balance
     "manual_awb": false            // Enable manual (CPU-based) white balance correction
@@ -51,6 +56,10 @@
     "engine": "ncnn",                       // Detection engine: "pt" (PyTorch)
                                             //                   "ncnn" (Tencent NCNN)
                                             //                   "hef" (Hailo Executable Format)
+    "input_color_space": "AUTO",            // Input color sent to detector:
+                        // "AUTO" = RGB for ncnn/hef, BGR for ultralytics
+                        // "RGB"  = always convert BGR -> RGB before detect
+                        // "BGR"  = send canonical BGR directly
     // Model Configuration
     "model_files": [
       "backend/models/model.pt"             // Model file path(s)

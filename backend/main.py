@@ -134,6 +134,29 @@ _latest_result_lock = threading.Lock()
 _pipeline_frame_count = 0       # Frames captured by camera thread
 _pipeline_infer_count = 0       # Frames processed by inference thread
 _last_frame_time = 0.0          # monotonic timestamp of last camera frame
+_detector_input_color_space = 'BGR'
+
+
+def _resolve_detector_input_color_space() -> str:
+    """Resolve detector input color space for runtime inference."""
+    setting = str(config.get('detection.input_color_space', 'AUTO')).strip().upper()
+    if setting in ('RGB', 'BGR'):
+        return setting
+    if setting != 'AUTO':
+        logger.warning("Invalid detection.input_color_space=%r; falling back to AUTO", setting)
+
+    engine = str(config.get('detection.engine', 'ultralytics')).strip().lower()
+    # NCNN/HEF paths are usually exported/trained with RGB tensor inputs.
+    if engine in ('ncnn', 'hef'):
+        return 'RGB'
+    return 'BGR'
+
+
+def _prepare_model_input_frame(frame_bgr):
+    """Prepare detector input frame from canonical BGR camera frame."""
+    if _detector_input_color_space == 'RGB':
+        return cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    return frame_bgr
 
 # ============================================================================
 # CONFIGURATION CHANGE HANDLERS
@@ -144,7 +167,7 @@ def on_config_change(old_config, new_config):
     Handle configuration changes and update running components
     This is called automatically when config.json is modified
     """
-    global camera, detector, display_controller, tts_engine
+    global camera, detector, display_controller, tts_engine, _detector_input_color_space
     
     # Guard: skip live updates if system isn't fully initialized yet
     if not app_ready:
@@ -181,6 +204,13 @@ def on_config_change(old_config, new_config):
         if detector_changed and detector:
             logger.info("Detector settings changed, reloading detector...")
             detector = Detector(config)
+            _detector_input_color_space = _resolve_detector_input_color_space()
+            logger.info(
+                "Detector input color space resolved to %s (setting=%s, engine=%s)",
+                _detector_input_color_space,
+                str(config.get('detection.input_color_space', 'AUTO')).strip().upper(),
+                str(config.get('detection.engine', 'ultralytics')).strip().lower(),
+            )
             logger.info("Detector reloaded with new settings")
         
         # Update display brightness if changed
@@ -227,7 +257,7 @@ def on_config_change(old_config, new_config):
 
 def initialize():
     """Initialize camera and detector and start background streaming"""
-    global camera, detector, display_controller, tts_engine, is_streaming, pairing_manager, hotspot_manager, bluetooth_manager
+    global camera, detector, display_controller, tts_engine, is_streaming, pairing_manager, hotspot_manager, bluetooth_manager, _detector_input_color_space
 
     try:
         logger.info("Initializing pairing manager...")
@@ -270,6 +300,13 @@ def initialize():
         
         logger.info("Initializing detector...")
         detector = Detector(config)
+        _detector_input_color_space = _resolve_detector_input_color_space()
+        logger.info(
+            "Detector input color space resolved to %s (setting=%s, engine=%s)",
+            _detector_input_color_space,
+            str(config.get('detection.input_color_space', 'AUTO')).strip().upper(),
+            str(config.get('detection.engine', 'ultralytics')).strip().lower(),
+        )
         
         logger.info("Initializing TTS engine...")
         tts_engine = TTSEngine(config)
@@ -1649,7 +1686,8 @@ def _inference_loop():
                 continue
             _prev_frame_id = cur_id
 
-            detections = detector.detect(frame)
+            model_frame = _prepare_model_input_frame(frame)
+            detections = detector.detect(model_frame)
             annotated = detector.draw_detections(frame, detections)
 
             with _latest_result_lock:

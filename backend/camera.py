@@ -84,6 +84,32 @@ logger = logging.getLogger(__name__)
 
 # One-time startup diagnostic flag for camera channel-order sanity checks.
 _channel_sanity_logged = False
+_picamera_raw_order = 'RGB'
+_detector_input_color_space = 'BGR'
+
+
+def _resolve_picamera_raw_order():
+    """Resolve expected channel order from Picamera2 capture_array()."""
+    raw_order = str(config.get('camera.picamera_raw_order', 'RGB')).strip().upper()
+    if raw_order not in ('RGB', 'BGR'):
+        logger.warning("Invalid camera.picamera_raw_order=%r; falling back to RGB", raw_order)
+        raw_order = 'RGB'
+    return raw_order
+
+
+def _resolve_detector_input_color_space():
+    """Resolve detector input color space for this runtime."""
+    setting = str(config.get('detection.input_color_space', 'AUTO')).strip().upper()
+    if setting in ('RGB', 'BGR'):
+        return setting
+    if setting != 'AUTO':
+        logger.warning("Invalid detection.input_color_space=%r; falling back to AUTO", setting)
+
+    engine = str(config.get('detection.engine', 'ultralytics')).strip().lower()
+    # NCNN/HEF pipelines are typically trained/exported for RGB input.
+    if engine in ('ncnn', 'hef'):
+        return 'RGB'
+    return 'BGR'
 
 
 def _log_channel_sanity_once(frame, source="picamera2.capture_array"):
@@ -239,7 +265,7 @@ class Camera:
 
 def initialize_camera():
     """Initialize Raspberry Pi camera or fallback to USB camera."""
-    global camera
+    global camera, _picamera_raw_order, _detector_input_color_space
     
     if USE_PICAMERA:
         try:
@@ -280,8 +306,13 @@ def initialize_camera():
             # One-time startup probe to verify runtime channel order on-device.
             _log_channel_sanity_once(camera.capture_array(), source="picamera2.capture_array(RGB888)")
 
+            _picamera_raw_order = _resolve_picamera_raw_order()
+            _detector_input_color_space = _resolve_detector_input_color_space()
+            logger.info("Picamera raw channel order assumption: %s (camera.picamera_raw_order)", _picamera_raw_order)
+            logger.info("Detector input color space resolved to %s", _detector_input_color_space)
+
             logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
-                         f"FrameDuration={frame_duration_us}µs, RGB888+copy)")
+                         f"FrameDuration={frame_duration_us}µs, RGB888->BGR)")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Pi Camera: {e}")
@@ -386,18 +417,16 @@ def get_frame(manual_awb=False):
     
     try:
         if USE_PICAMERA and isinstance(camera, Picamera2):
-            # capture_array() returns a numpy view into Picamera2's DMA
-            # buffer.  cvtColor(RGB→BGR) serves double duty:
-            #   1. Converts RGB888 → BGR (OpenCV-native channel order)
-            #   2. Copies data out of the DMA buffer before it's recycled
-            # Cost is identical to a plain .copy() — the R↔B swap is
-            # Picamera2 with format="RGB888" actually delivers BGR byte
-            # order on RPi (confirmed by the working reference in
-            # test_tpu.py).  No channel conversion is needed — just copy
-            # the data out of the DMA buffer before it's recycled.
-            frame = camera.capture_array()
-            if frame is not None:
-                frame = frame.copy()
+            # capture_array() returns a numpy view into Picamera2's DMA buffer.
+            # Convert to canonical BGR for all downstream OpenCV consumers and
+            # copy out of DMA before buffer recycle.
+            raw = camera.capture_array()
+            frame = None
+            if raw is not None:
+                if _picamera_raw_order == 'RGB':
+                    frame = cv2.cvtColor(raw, cv2.COLOR_RGB2BGR)
+                else:
+                    frame = raw.copy()
         else:
             # OpenCV VideoCapture — already BGR
             ret, frame = camera.read()
@@ -435,7 +464,9 @@ def detect_signs(frame):
     if detector is None:
         return dummy_detections(frame.shape)
     try:
-        results = detector.detect(frame)
+        model_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if _detector_input_color_space == 'RGB' else frame
+
+        results = detector.detect(model_frame)
         detections = []
         timestamp = time.time()
         # Ultralytics/NCNN results are iterable
