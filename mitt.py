@@ -685,9 +685,12 @@ class OpenCVCapture:
 
 
 class PiCamera2Capture:
-    def __init__(self, width: int, height: int, fps: int):
+    def __init__(self, width: int, height: int, fps: int, raw_order: str = "RGB"):
         if Picamera2 is None:
             raise RuntimeError("picamera2 is not installed.")
+
+        mode = str(raw_order or "RGB").strip().upper()
+        self.raw_order = mode if mode in ("RGB", "BGR") else "RGB"
 
         self.camera = Picamera2()
         config = self.camera.create_preview_configuration(
@@ -708,10 +711,12 @@ class PiCamera2Capture:
         time.sleep(1.0)
 
     def read(self) -> Optional[np.ndarray]:
-        rgb = self.camera.capture_array()
-        if rgb is None:
+        raw = self.camera.capture_array()
+        if raw is None:
             return None
-        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        if self.raw_order == "RGB":
+            return cv2.cvtColor(raw, cv2.COLOR_RGB2BGR)
+        return raw.copy()
 
     def release(self) -> None:
         try:
@@ -1221,6 +1226,7 @@ class InferenceToolApp:
         self.camera_source_var = tk.StringVar(value="0")
         self.device_var = tk.StringVar(value="cpu")
         self.input_color_space_var = tk.StringVar(value="BGR")
+        self.cam_raw_order_var = tk.StringVar(value="RGB")
 
         self.use_hailo_var = tk.BooleanVar(value=True)
         self.prefer_gpu_var = tk.BooleanVar(value=False)
@@ -1400,6 +1406,15 @@ class InferenceToolApp:
         ttk.Label(self.camera_row, text="FPS").pack(side=tk.LEFT, padx=(8, 2))
         self.cam_fps_entry = ttk.Entry(self.camera_row, textvariable=self.cam_fps_var, width=6)
         self.cam_fps_entry.pack(side=tk.LEFT)
+        ttk.Label(self.camera_row, text="Pi Raw").pack(side=tk.LEFT, padx=(8, 2))
+        self.cam_raw_order_combo = ttk.Combobox(
+            self.camera_row,
+            textvariable=self.cam_raw_order_var,
+            values=["RGB", "BGR"],
+            width=6,
+            state="readonly",
+        )
+        self.cam_raw_order_combo.pack(side=tk.LEFT)
 
         bench_frame = ttk.LabelFrame(left, text="Benchmark")
         bench_frame.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
@@ -1726,6 +1741,7 @@ class InferenceToolApp:
         self._set_control_state(self.cam_width_entry, is_camera)
         self._set_control_state(self.cam_height_entry, is_camera)
         self._set_control_state(self.cam_fps_entry, is_camera)
+        self._set_control_state(self.cam_raw_order_combo, is_camera, readonly_when_enabled=True)
 
         # Iterations are only used in single-image mode
         self._set_control_state(self.iterations_entry, is_image)
@@ -1965,6 +1981,10 @@ class InferenceToolApp:
         color = str(self.input_color_space_var.get() or "BGR").strip().upper()
         return "RGB" if color == "RGB" else "BGR"
 
+    def _selected_cam_raw_order(self) -> str:
+        order = str(self.cam_raw_order_var.get() or "RGB").strip().upper()
+        return "BGR" if order == "BGR" else "RGB"
+
     def _infer_with_color_space(self, frame_bgr: np.ndarray) -> Tuple[InferenceResult, float]:
         assert self.backend is not None
 
@@ -2085,6 +2105,7 @@ class InferenceToolApp:
             "cam_width": self._parse_int(self.cam_width_var.get(), 640, minimum=64),
             "cam_height": self._parse_int(self.cam_height_var.get(), 480, minimum=64),
             "cam_fps": self._parse_int(self.cam_fps_var.get(), 30, minimum=1),
+            "cam_raw_order": self._selected_cam_raw_order(),
         }
 
         self.stop_event.clear()
@@ -2596,9 +2617,9 @@ class InferenceToolApp:
         self._enqueue_log(f"F1-confidence curve: {report_files.get('f1_conf_curve.png', 'n/a')}")
         self._enqueue_log(f"Confusion matrix: {report_files.get('confusion_matrix.png', 'n/a')}")
 
-    def _open_camera(self, source: str, width: int, height: int, fps: int) -> Any:
+    def _open_camera(self, source: str, width: int, height: int, fps: int, raw_order: str = "RGB") -> Any:
         if source == "rpi_camera":
-            return PiCamera2Capture(width=width, height=height, fps=fps)
+            return PiCamera2Capture(width=width, height=height, fps=fps, raw_order=raw_order)
 
         try:
             index = int(source)
@@ -2613,10 +2634,14 @@ class InferenceToolApp:
         width = cfg["cam_width"]
         height = cfg["cam_height"]
         fps = cfg["cam_fps"]
+        raw_order = str(cfg.get("cam_raw_order", "RGB")).strip().upper()
         warmup = cfg["warmup"]
 
-        camera = self._open_camera(source=source, width=width, height=height, fps=fps)
-        self._enqueue_log(f"Camera opened source={source} {width}x{height}@{fps}")
+        camera = self._open_camera(source=source, width=width, height=height, fps=fps, raw_order=raw_order)
+        if source == "rpi_camera":
+            self._enqueue_log(f"Camera opened source={source} {width}x{height}@{fps} raw_order={raw_order}")
+        else:
+            self._enqueue_log(f"Camera opened source={source} {width}x{height}@{fps}")
 
         samples: List[float] = []
         e2e_samples: List[float] = []
