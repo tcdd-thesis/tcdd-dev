@@ -1501,7 +1501,15 @@ class InferenceToolApp:
 
         stats_frame = ttk.LabelFrame(left, text="Statistics")
         stats_frame.pack(fill=tk.X, padx=self.compact_pad if self.small_screen_mode else 4, pady=self.compact_pad if self.small_screen_mode else 4)
-        ttk.Label(stats_frame, textvariable=self.stats_var, justify=tk.LEFT).pack(fill=tk.X, padx=6, pady=6)
+        stats_wrap = max(260, self.screen_w - 36) if self.small_screen_mode else 0
+        self.stats_label = ttk.Label(
+            stats_frame,
+            textvariable=self.stats_var,
+            justify=tk.LEFT,
+            anchor="w",
+            wraplength=stats_wrap,
+        )
+        self.stats_label.pack(fill=tk.X, padx=6, pady=6)
 
         self.model_info_text = ScrolledText(left, height=7)
         if not self.small_screen_mode:
@@ -2730,17 +2738,17 @@ class InferenceToolApp:
             frame_count = 0
 
             while not self.stop_event.is_set():
-                capture_start = time.perf_counter()
+                pipeline_start = time.perf_counter()
                 frame = camera.read()
-                capture_ms = (time.perf_counter() - capture_start) * 1000.0
                 if frame is None:
                     continue
 
                 result, e2e_ms = self._infer_with_color_space(frame)
+                pipeline_ms = (time.perf_counter() - pipeline_start) * 1000.0
                 frame_count += 1
                 samples.append(result.latency_ms)
                 e2e_samples.append(e2e_ms)
-                camera_to_detect_samples.append(capture_ms + e2e_ms)
+                camera_to_detect_samples.append(pipeline_ms)
                 detections_total += result.detections
 
                 if result.annotated_frame is not None and (preview_count % 3 == 0):
@@ -2860,26 +2868,26 @@ class InferenceToolApp:
             "dataset_files",
             "processed_files",
             "stream_frames",
+            "stream_fps",
+            "fps",
+            "camera_to_detect_avg_ms",
+            "camera_to_detect_p95_ms",
+            "e2e_avg_ms",
+            "e2e_p95_ms",
+            "avg_ms",
+            "p95_ms",
             "precision",
             "recall",
             "f1",
             "best_conf",
             "map50",
             "map50_95",
-            "avg_ms",
             "min_ms",
             "max_ms",
             "p50_ms",
             "p90_ms",
-            "p95_ms",
             "p99_ms",
             "std_ms",
-            "e2e_avg_ms",
-            "e2e_p95_ms",
-            "camera_to_detect_avg_ms",
-            "camera_to_detect_p95_ms",
-            "fps",
-            "stream_fps",
             "avg_detections",
             "cpu_util_pct",
             "hailo_util_pct",
@@ -2887,15 +2895,43 @@ class InferenceToolApp:
             "power_w",
         ]
 
+        labels = {
+            "camera_to_detect_avg_ms": "cam->det avg ms",
+            "camera_to_detect_p95_ms": "cam->det p95 ms",
+            "e2e_avg_ms": "e2e avg ms",
+            "e2e_p95_ms": "e2e p95 ms",
+            "stream_fps": "stream fps",
+        }
+
+        def format_item(key: str, value: float) -> str:
+            label = labels.get(key, key)
+            if key in {"count", "dataset_files", "processed_files", "stream_frames"}:
+                return f"{label}: {int(value)}"
+            return f"{label}: {value:.3f}"
+
+        if self.small_screen_mode:
+            compact_rows = [
+                ["count", "stream_frames", "dataset_files", "processed_files"],
+                ["stream_fps", "fps", "camera_to_detect_avg_ms", "camera_to_detect_p95_ms"],
+                ["e2e_avg_ms", "e2e_p95_ms", "avg_ms", "p95_ms"],
+                ["avg_detections", "cpu_util_pct", "temp_c", "power_w", "hailo_util_pct"],
+                ["precision", "recall", "f1", "best_conf", "map50", "map50_95"],
+            ]
+
+            lines: List[str] = []
+            for row in compact_rows:
+                parts = [format_item(key, stats[key]) for key in row if key in stats]
+                if parts:
+                    lines.append(" | ".join(parts))
+
+            self.stats_var.set("\n".join(lines) if lines else "No statistics yet")
+            return
+
         lines: List[str] = []
         for key in ordered_keys:
             if key not in stats:
                 continue
-            value = stats[key]
-            if key in {"count", "dataset_files", "processed_files", "stream_frames"}:
-                lines.append(f"{key}: {int(value)}")
-            else:
-                lines.append(f"{key}: {value:.3f}")
+            lines.append(format_item(key, stats[key]))
 
         self.stats_var.set("\n".join(lines) if lines else "No statistics yet")
 
