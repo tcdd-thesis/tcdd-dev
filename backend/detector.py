@@ -110,10 +110,6 @@ class Detector:
         self.confidence = config.get('detection.confidence', 0.5)
         self.iou_threshold = config.get('detection.iou_threshold', 0.45)
         self.input_size = (640, 640)  # Standard YOLO input size
-        self.preprocess_mode = str(config.get('detection.preprocess_mode', 'letterbox')).strip().lower()
-        if self.preprocess_mode not in ('letterbox', 'stretch'):
-            logger.warning("Invalid detection.preprocess_mode=%r; falling back to letterbox", self.preprocess_mode)
-            self.preprocess_mode = 'letterbox'
         
         self._load_model()
     
@@ -123,70 +119,6 @@ class Detector:
             return None
         with open(labels_path, 'r') as f:
             return [line.strip() for line in f if line.strip()]
-
-    def _preprocess_frame(self, frame):
-        """Preprocess frame for model input and return remap metadata."""
-        h, w = frame.shape[:2]
-        target_w, target_h = self.input_size
-
-        if self.preprocess_mode == 'stretch':
-            resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
-            meta = {
-                'mode': 'stretch',
-                'orig_w': w,
-                'orig_h': h,
-                'target_w': target_w,
-                'target_h': target_h,
-            }
-            return resized, meta
-
-        # YOLO-style letterbox preserves aspect ratio and pads to model size.
-        scale = min(target_w / max(w, 1), target_h / max(h, 1))
-        new_w = max(1, int(round(w * scale)))
-        new_h = max(1, int(round(h * scale)))
-
-        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        canvas = np.full((target_h, target_w, 3), 114, dtype=np.uint8)
-        pad_x = (target_w - new_w) // 2
-        pad_y = (target_h - new_h) // 2
-        canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized
-
-        meta = {
-            'mode': 'letterbox',
-            'orig_w': w,
-            'orig_h': h,
-            'target_w': target_w,
-            'target_h': target_h,
-            'scale': scale,
-            'pad_x': pad_x,
-            'pad_y': pad_y,
-        }
-        return canvas, meta
-
-    def _map_bbox_to_original(self, x1, y1, x2, y2, meta):
-        """Map bbox from model input space back to original frame space."""
-        orig_w = meta['orig_w']
-        orig_h = meta['orig_h']
-
-        if meta['mode'] == 'stretch':
-            sx = orig_w / max(meta['target_w'], 1)
-            sy = orig_h / max(meta['target_h'], 1)
-            ox1 = x1 * sx
-            oy1 = y1 * sy
-            ox2 = x2 * sx
-            oy2 = y2 * sy
-        else:
-            scale = max(meta['scale'], 1e-9)
-            ox1 = (x1 - meta['pad_x']) / scale
-            oy1 = (y1 - meta['pad_y']) / scale
-            ox2 = (x2 - meta['pad_x']) / scale
-            oy2 = (y2 - meta['pad_y']) / scale
-
-        ox1 = int(max(0, min(orig_w - 1, ox1)))
-        oy1 = int(max(0, min(orig_h - 1, oy1)))
-        ox2 = int(max(0, min(orig_w - 1, ox2)))
-        oy2 = int(max(0, min(orig_h - 1, oy2)))
-        return ox1, oy1, ox2, oy2
 
     def _load_model(self):
         if self.engine == 'ultralytics':
@@ -421,10 +353,10 @@ class Detector:
     def _detect_ncnn(self, frame):
         try:
             h, w = frame.shape[:2]
-            logger.debug(f"Processing frame: {w}x{h} (preprocess={self.preprocess_mode})")
+            logger.debug(f"Processing frame: {w}x{h}")
             
-            # Preprocess frame with configurable mode.
-            img, pre_meta = self._preprocess_frame(frame)
+            # Preprocess: resize to model input size
+            img = cv2.resize(frame, self.input_size)
             # Create NCNN Mat from numpy array (use RGB format directly)
             mat_in = ncnn.Mat.from_pixels(img, ncnn.Mat.PixelType.PIXEL_RGB, self.input_size[0], self.input_size[1])
             
@@ -483,12 +415,20 @@ class Detector:
                     if max_conf < self.confidence:
                         continue
                     
-                    # Convert center box in model space, then remap to original frame.
-                    x1m = x_center - width / 2
-                    y1m = y_center - height / 2
-                    x2m = x_center + width / 2
-                    y2m = y_center + height / 2
-                    x1, y1, x2, y2 = self._map_bbox_to_original(x1m, y1m, x2m, y2m, pre_meta)
+                    # Convert from center format to corner format and scale to original image size
+                    scale_x = w / self.input_size[0]
+                    scale_y = h / self.input_size[1]
+                    
+                    x1 = int((x_center - width / 2) * scale_x)
+                    y1 = int((y_center - height / 2) * scale_y)
+                    x2 = int((x_center + width / 2) * scale_x)
+                    y2 = int((y_center + height / 2) * scale_y)
+                    
+                    # Clip to image boundaries
+                    x1 = max(0, min(x1, w))
+                    y1 = max(0, min(y1, h))
+                    x2 = max(0, min(x2, w))
+                    y2 = max(0, min(y2, h))
                     
                     class_name = self.labels[max_class] if self.labels and max_class < len(self.labels) else str(max_class)
                     
@@ -524,12 +464,20 @@ class Detector:
                     if max_conf < self.confidence:
                         continue
                     
-                    # Convert center box in model space, then remap to original frame.
-                    x1m = x_center - width / 2
-                    y1m = y_center - height / 2
-                    x2m = x_center + width / 2
-                    y2m = y_center + height / 2
-                    x1, y1, x2, y2 = self._map_bbox_to_original(x1m, y1m, x2m, y2m, pre_meta)
+                    # Convert from center format to corner format and scale to original image size
+                    scale_x = w / self.input_size[0]
+                    scale_y = h / self.input_size[1]
+                    
+                    x1 = int((x_center - width / 2) * scale_x)
+                    y1 = int((y_center - height / 2) * scale_y)
+                    x2 = int((x_center + width / 2) * scale_x)
+                    y2 = int((y_center + height / 2) * scale_y)
+                    
+                    # Clip to image boundaries
+                    x1 = max(0, min(x1, w))
+                    y1 = max(0, min(y1, h))
+                    x2 = max(0, min(x2, w))
+                    y2 = max(0, min(y2, h))
                     
                     class_name = self.labels[max_class] if self.labels and max_class < len(self.labels) else str(max_class)
                     
@@ -638,8 +586,8 @@ class Detector:
         try:
             frame_h, frame_w = frame.shape[:2]
             
-            # Preprocess frame with configurable mode.
-            resized, pre_meta = self._preprocess_frame(frame)
+            # Preprocess: resize to 640x640
+            resized = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
             
             # Camera pipeline now delivers BGR directly — no conversion needed.
             # HEF models have quantization built-in: send uint8 [0-255] directly.
@@ -683,14 +631,11 @@ class Detector:
                         if confidence < self.confidence:
                             continue
                         
-                        # Map normalized model-input coords back to original frame size.
-                        x1m = x1 * self.input_size[0]
-                        y1m = y1 * self.input_size[1]
-                        x2m = x2 * self.input_size[0]
-                        y2m = y2 * self.input_size[1]
-                        x1_scaled, y1_scaled, x2_scaled, y2_scaled = self._map_bbox_to_original(
-                            x1m, y1m, x2m, y2m, pre_meta
-                        )
+                        # Scale normalized coords to original frame size
+                        x1_scaled = int(max(0, min(frame_w - 1, x1 * frame_w)))
+                        y1_scaled = int(max(0, min(frame_h - 1, y1 * frame_h)))
+                        x2_scaled = int(max(0, min(frame_w - 1, x2 * frame_w)))
+                        y2_scaled = int(max(0, min(frame_h - 1, y2 * frame_h)))
                         
                         class_name = (class_names[class_idx]
                                       if class_idx < len(class_names)
@@ -824,6 +769,5 @@ class Detector:
             'model': model_display,
             'loaded': self.loaded,
             'confidence_threshold': self.confidence,
-            'classes': self.labels if self.labels else [],
-            'preprocess_mode': self.preprocess_mode,
+            'classes': self.labels if self.labels else []
         }
