@@ -1741,22 +1741,31 @@ def stream_video():
                     })
                     _camera_was_stale = False
 
+            # Grab latest raw frame snapshot
+            with _latest_frame_lock:
+                latest_frame = _latest_frame
+
             # Grab latest annotated frame + detections
             with _latest_result_lock:
                 annotated_frame = _latest_annotated
                 detections = list(_latest_detections)
                 cur_infer_id = _pipeline_infer_count
 
-            if annotated_frame is None or cur_infer_id == _prev_infer_id:
-                # No new inference result yet — yield and retry
-                socketio.sleep(0.005)
-                dropped_frames += 1
-                continue
-            _prev_infer_id = cur_infer_id
+            has_new_inference = annotated_frame is not None and cur_infer_id != _prev_infer_id
+            if has_new_inference:
+                frame_to_emit = annotated_frame
+                _prev_infer_id = cur_infer_id
+            else:
+                # Keep live feed moving even when inference is slower than camera/encode.
+                if latest_frame is None and annotated_frame is None:
+                    socketio.sleep(0.005)
+                    dropped_frames += 1
+                    continue
+                frame_to_emit = latest_frame if latest_frame is not None else annotated_frame
 
             # JPEG encode (cv2.imencode benchmarked faster than simplejpeg on RPi5)
             jpeg_start = datetime.now()
-            _, buf = cv2.imencode('.jpg', annotated_frame, encode_params)
+            _, buf = cv2.imencode('.jpg', frame_to_emit, encode_params)
             jpeg_bytes = buf.tobytes()
             jpeg_end = datetime.now()
 
@@ -1777,44 +1786,46 @@ def stream_video():
             # --- TTS Alert ---
             # Pass detections to TTS engine; it picks the highest-priority
             # alert, checks cooldowns, and queues speech on its own thread.
-            if tts_engine:
+            if has_new_inference and tts_engine:
                 tts_engine.process_detections(detections)
             # Simple example: derive and log violation events (stub)
             # In a real implementation, this would use tracked vehicles, signal state, and rules.
             # Here we log a synthetic violation when a STOP sign is detected with high confidence.
             
-            # Violation logging (stub)
-            try:
-                stop_dets = [d for d in detections if d.get('class_name', '').lower() in ('stop', 'stop_sign')]
-                if stop_dets:
-                    top = max(stop_dets, key=lambda d: d.get('confidence', 0))
-                    if top.get('confidence', 0) >= max(0.85, config.get('detection.confidence', 0.5)):
-                        event_time = datetime.now()
-                        event = {
-                            'id': f"evt_{event_time.strftime('%Y%m%d_%H%M%S')}_{frame_count:06d}",
-                            'timestamp': event_time.isoformat(),
-                            'violation_type': 'stop_sign',
-                            'confidence': float(top['confidence']),
-                            'driver_action': 'unknown',
-                            'action_confidence': 0.0,
-                            'vehicle': {'track_id': None},
-                            'context': {'camera_id': 'cam-01', 'frame_id': frame_count},
-                            'evidence': {
-                                'sign_detected': {'label': top['class_name'], 'conf': float(top['confidence'])},
-                                'bboxes': {'sign': top['bbox']}
-                            },
-                            'thresholds': {'decision_threshold': config.get('detection.confidence', 0.5)},
-                            'severity': 'low',
-                            'review': {'status': 'auto'},
-                            'model': detector.get_info() if detector else {'engine': 'unknown', 'model': 'n/a'}
-                        }
-                        violations_logger.log(event)
-            except Exception as e:
-                logger.debug(f"Violation logging skipped: {e}")
+            # Violation logging (stub) — only on fresh inference results.
+            if has_new_inference:
+                try:
+                    stop_dets = [d for d in detections if d.get('class_name', '').lower() in ('stop', 'stop_sign')]
+                    if stop_dets:
+                        top = max(stop_dets, key=lambda d: d.get('confidence', 0))
+                        if top.get('confidence', 0) >= max(0.85, config.get('detection.confidence', 0.5)):
+                            event_time = datetime.now()
+                            event = {
+                                'id': f"evt_{event_time.strftime('%Y%m%d_%H%M%S')}_{frame_count:06d}",
+                                'timestamp': event_time.isoformat(),
+                                'violation_type': 'stop_sign',
+                                'confidence': float(top['confidence']),
+                                'driver_action': 'unknown',
+                                'action_confidence': 0.0,
+                                'vehicle': {'track_id': None},
+                                'context': {'camera_id': 'cam-01', 'frame_id': frame_count},
+                                'evidence': {
+                                    'sign_detected': {'label': top['class_name'], 'conf': float(top['confidence'])},
+                                    'bboxes': {'sign': top['bbox']}
+                                },
+                                'thresholds': {'decision_threshold': config.get('detection.confidence', 0.5)},
+                                'severity': 'low',
+                                'review': {'status': 'auto'},
+                                'model': detector.get_info() if detector else {'engine': 'unknown', 'model': 'n/a'}
+                            }
+                            violations_logger.log(event)
+                except Exception as e:
+                    logger.debug(f"Violation logging skipped: {e}")
 
             # Metrics (only every N frames to reduce psutil overhead)
             frame_count += 1
-            total_detections += len(detections)
+            if has_new_inference:
+                total_detections += len(detections)
             if frame_count % metrics_interval == 0:
                 now = datetime.now()
                 elapsed = (now - last_fps_time).total_seconds()
