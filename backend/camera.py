@@ -362,6 +362,19 @@ class Camera:
     def is_running(self):
         """Check if camera is running"""
         return self._running and self._camera is not None
+
+    def apply_focus_settings(self):
+        """Apply focus-related settings to a running camera without restart."""
+        if not self._running or self._camera is None:
+            logger.warning("Cannot apply focus settings: camera is not running")
+            return False
+
+        if USE_PICAMERA and isinstance(self._camera, Picamera2):
+            _apply_picamera_focus_controls(self._camera)
+            return True
+
+        logger.info("Focus settings ignored: active camera backend does not support Picamera2 focus controls")
+        return False
     
     def get_frame(self):
         """Get a frame from the camera"""

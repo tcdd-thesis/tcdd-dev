@@ -135,6 +135,13 @@ _pipeline_frame_count = 0       # Frames captured by camera thread
 _pipeline_infer_count = 0       # Frames processed by inference thread
 _last_frame_time = 0.0          # monotonic timestamp of last camera frame
 _detector_input_color_space = 'BGR'
+_FOCUS_ONLY_CAMERA_KEYS = {
+    'autofocus_mode',
+    'autofocus_speed',
+    'autofocus_range',
+    'lens_position',
+    'autofocus_trigger_on_start',
+}
 
 
 def _resolve_detector_input_color_space() -> str:
@@ -177,10 +184,18 @@ def on_config_change(old_config, new_config):
     logger.info("Configuration changed, updating components...")
     
     try:
+        old_camera_cfg = old_config.get('camera', {}) or {}
+        new_camera_cfg = new_config.get('camera', {}) or {}
+
         # Check camera settings changes
         camera_changed = (
-            old_config.get('camera') != new_config.get('camera')
+            old_camera_cfg != new_camera_cfg
         )
+        changed_camera_keys = {
+            k for k in (set(old_camera_cfg.keys()) | set(new_camera_cfg.keys()))
+            if old_camera_cfg.get(k) != new_camera_cfg.get(k)
+        }
+        focus_only_changed = bool(changed_camera_keys) and changed_camera_keys.issubset(_FOCUS_ONLY_CAMERA_KEYS)
         
         # Check detector settings changes
         detector_changed = (
@@ -192,13 +207,30 @@ def on_config_change(old_config, new_config):
             old_config.get('display') != new_config.get('display')
         )
         
-        # Restart camera if settings changed
+        # Apply focus-only camera changes live; restart only when required.
         if camera_changed and camera:
-            logger.info("Camera settings changed, restarting camera...")
-            camera.stop()
-            camera = Camera(config)
-            camera.start()
-            logger.info("Camera restarted with new settings")
+            if focus_only_changed:
+                logger.info("Focus settings changed (%s), applying live without camera restart", sorted(changed_camera_keys))
+                applied = False
+                if hasattr(camera, 'apply_focus_settings'):
+                    try:
+                        applied = bool(camera.apply_focus_settings())
+                    except Exception as e:
+                        logger.warning("Live focus apply failed, will restart camera: %s", e)
+                if applied:
+                    logger.info("Live focus settings applied")
+                else:
+                    logger.info("Focus settings could not be applied live; restarting camera...")
+                    camera.stop()
+                    camera = Camera(config)
+                    camera.start()
+                    logger.info("Camera restarted with new settings")
+            else:
+                logger.info("Camera settings changed (%s), restarting camera...", sorted(changed_camera_keys))
+                camera.stop()
+                camera = Camera(config)
+                camera.start()
+                logger.info("Camera restarted with new settings")
         
         # Reload detector if model or confidence changed
         if detector_changed and detector:

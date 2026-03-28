@@ -44,7 +44,8 @@
     "autofocus_speed": "normal",    // "normal" or "fast"
     "autofocus_range": "normal",    // "normal", "macro", "full"
     "lens_position": 0.0,             // Used when autofocus_mode="manual"
-    "autofocus_trigger_on_start": true,
+                      // Typical sweep: 0.0 (far/infinity), 0.5, 1.0, 2.0, 4.0 (close/macro)
+    "autofocus_trigger_on_start": true, // Applies to autofocus_mode="auto" only
     
     // White Balance
     "manual_awb": false            // Enable manual (CPU-based) white balance correction
