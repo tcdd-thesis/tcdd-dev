@@ -2600,6 +2600,10 @@ class InferenceToolApp:
                 ap50_per_class[cls_name] = float(ap_array[0, cls_id]) if not np.isnan(ap_array[0, cls_id]) else 0.0
 
         confusion = compute_confusion_matrix(records, class_count=class_count, conf_thr=best_conf, iou_thr=0.5)
+        correct_per_class: Dict[str, int] = {
+            class_names[idx]: int(confusion[idx, idx]) for idx in range(class_count)
+        }
+        correct_total = int(sum(correct_per_class.values()))
         latency_stats = compute_stats(latencies)
         e2e_stats = compute_stats(e2e_samples)
 
@@ -2621,6 +2625,12 @@ class InferenceToolApp:
             "gt_per_class": {class_names[idx]: gt_per_class[idx] for idx in range(class_count)},
             "split_sign_count_per_class": {class_names[idx]: int(split_sign_counts[idx]) for idx in range(class_count)},
             "split_sign_total": int(sum(split_sign_counts)),
+            "correctly_classified_per_class": correct_per_class,
+            "correctly_classified_total": correct_total,
+            "correctly_classified_criteria": {
+                "confidence_threshold": best_conf,
+                "iou_threshold": 0.5,
+            },
             "precision": best_precision,
             "recall": best_recall,
             "f1": best_f1,
