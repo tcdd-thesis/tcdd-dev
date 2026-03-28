@@ -147,6 +147,11 @@ def _resolve_autofocus_range():
 def _apply_picamera_focus_controls(cam):
     """Apply autofocus/lens controls for Picamera2 when supported."""
     mode = _resolve_autofocus_mode()
+
+    if mode == 'off':
+        logger.info("Autofocus mode is off; skipping autofocus control injection (legacy behavior)")
+        return
+
     mode_map = {
         'off': 0,
         'manual': 0,
@@ -154,25 +159,29 @@ def _apply_picamera_focus_controls(cam):
         'continuous': 2,
     }
 
-    controls = {
-        'AfMode': mode_map[mode],
-        'AfSpeed': _resolve_autofocus_speed(),
-        'AfRange': _resolve_autofocus_range(),
-    }
-
-    if mode == 'manual':
+    controls = {'AfMode': mode_map[mode]}
+    if mode in ('auto', 'continuous'):
+        controls['AfSpeed'] = _resolve_autofocus_speed()
+        controls['AfRange'] = _resolve_autofocus_range()
+    elif mode == 'manual':
         lens_position = float(config.get('camera.lens_position', 0.0))
         controls['LensPosition'] = lens_position
 
     try:
         cam.set_controls(controls)
-        logger.info(
-            "Autofocus configured: mode=%s speed=%d range=%d%s",
-            mode,
-            controls['AfSpeed'],
-            controls['AfRange'],
-            f" lens_position={controls['LensPosition']:.2f}" if 'LensPosition' in controls else "",
-        )
+        if mode in ('auto', 'continuous'):
+            logger.info(
+                "Autofocus configured: mode=%s speed=%d range=%d",
+                mode,
+                controls['AfSpeed'],
+                controls['AfRange'],
+            )
+        else:
+            logger.info(
+                "Autofocus configured: mode=%s%s",
+                mode,
+                f" lens_position={controls['LensPosition']:.2f}" if 'LensPosition' in controls else "",
+            )
     except Exception as e:
         logger.warning("Extended autofocus controls not applied (%s); trying minimal AfMode only", e)
         minimal = {'AfMode': mode_map[mode]}

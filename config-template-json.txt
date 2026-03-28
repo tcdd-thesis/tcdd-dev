@@ -41,6 +41,7 @@
 
     // Camera Module 3 autofocus controls
     "autofocus_mode": "continuous", // "off", "manual", "auto", "continuous"
+                      // "off" uses legacy behavior (no autofocus control writes)
     "autofocus_speed": "normal",    // "normal" or "fast"
     "autofocus_range": "normal",    // "normal", "macro", "full"
     "lens_position": 0.0,             // Used when autofocus_mode="manual"

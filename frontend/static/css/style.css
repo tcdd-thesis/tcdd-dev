@@ -1054,6 +1054,12 @@ body:not(.touchscreen) #page-logs.active {
   min-width: 100px;
 }
 
+/* Ensure dropdown option text remains readable across browser native menus. */
+.select-touch option {
+  color: #111;
+  background: #fff;
+}
+
 /* ========== Settings Styles ========== */
 .settings-container-compact {
   padding: 15px;
