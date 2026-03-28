@@ -84,6 +84,7 @@ logger = logging.getLogger(__name__)
 
 # One-time startup diagnostic flag for camera channel-order sanity checks.
 _channel_sanity_logged = False
+_focus_sanity_logged = False
 _picamera_raw_order = 'RGB'
 _detector_input_color_space = 'BGR'
 
@@ -110,6 +111,112 @@ def _resolve_detector_input_color_space():
     if engine in ('ncnn', 'hef'):
         return 'RGB'
     return 'BGR'
+
+
+def _resolve_autofocus_mode():
+    """Resolve autofocus mode for Camera Module 3."""
+    mode = str(config.get('camera.autofocus_mode', 'continuous')).strip().lower()
+    if mode not in ('off', 'auto', 'continuous', 'manual'):
+        logger.warning("Invalid camera.autofocus_mode=%r; falling back to continuous", mode)
+        mode = 'continuous'
+    return mode
+
+
+def _resolve_autofocus_speed():
+    """Resolve autofocus speed enum (0=normal, 1=fast)."""
+    speed = str(config.get('camera.autofocus_speed', 'normal')).strip().lower()
+    if speed == 'fast':
+        return 1
+    if speed != 'normal':
+        logger.warning("Invalid camera.autofocus_speed=%r; falling back to normal", speed)
+    return 0
+
+
+def _resolve_autofocus_range():
+    """Resolve autofocus range enum (0=normal, 1=macro, 2=full)."""
+    af_range = str(config.get('camera.autofocus_range', 'normal')).strip().lower()
+    if af_range == 'macro':
+        return 1
+    if af_range == 'full':
+        return 2
+    if af_range != 'normal':
+        logger.warning("Invalid camera.autofocus_range=%r; falling back to normal", af_range)
+    return 0
+
+
+def _apply_picamera_focus_controls(cam):
+    """Apply autofocus/lens controls for Picamera2 when supported."""
+    mode = _resolve_autofocus_mode()
+    mode_map = {
+        'off': 0,
+        'manual': 0,
+        'auto': 1,
+        'continuous': 2,
+    }
+
+    controls = {
+        'AfMode': mode_map[mode],
+        'AfSpeed': _resolve_autofocus_speed(),
+        'AfRange': _resolve_autofocus_range(),
+    }
+
+    if mode == 'manual':
+        lens_position = float(config.get('camera.lens_position', 0.0))
+        controls['LensPosition'] = lens_position
+
+    try:
+        cam.set_controls(controls)
+        logger.info(
+            "Autofocus configured: mode=%s speed=%d range=%d%s",
+            mode,
+            controls['AfSpeed'],
+            controls['AfRange'],
+            f" lens_position={controls['LensPosition']:.2f}" if 'LensPosition' in controls else "",
+        )
+    except Exception as e:
+        logger.warning("Extended autofocus controls not applied (%s); trying minimal AfMode only", e)
+        minimal = {'AfMode': mode_map[mode]}
+        if mode == 'manual' and 'LensPosition' in controls:
+            minimal['LensPosition'] = controls['LensPosition']
+        try:
+            cam.set_controls(minimal)
+            logger.info(
+                "Autofocus minimally configured: mode=%s%s",
+                mode,
+                f" lens_position={minimal['LensPosition']:.2f}" if 'LensPosition' in minimal else "",
+            )
+        except Exception as e2:
+            logger.warning("Autofocus controls not applied: %s", e2)
+            return
+
+    if mode == 'auto' and bool(config.get('camera.autofocus_trigger_on_start', True)):
+        try:
+            cam.autofocus_cycle(wait=False)
+            logger.info("Autofocus cycle triggered on startup")
+        except Exception:
+            # Some Picamera2 versions may not expose autofocus_cycle
+            logger.debug("autofocus_cycle() not available on this Picamera2 build")
+
+
+def _log_focus_sanity_once(frame, source="picamera2.capture_array"):
+    """Log one-time focus sharpness metric using variance of Laplacian."""
+    global _focus_sanity_logged
+
+    if _focus_sanity_logged:
+        return
+    _focus_sanity_logged = True
+
+    if frame is None or not isinstance(frame, np.ndarray) or frame.ndim < 2:
+        logger.warning("[FocusSanity] Startup probe skipped: invalid frame")
+        return
+
+    try:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+        score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        verdict = "sharp" if score >= 120.0 else ("soft" if score >= 60.0 else "blurred")
+        logger.info("[FocusSanity] source=%s laplacian_var=%.1f verdict=%s", source, score, verdict)
+    except Exception as e:
+        logger.warning("[FocusSanity] Startup probe failed: %s", e)
 
 
 def _log_channel_sanity_once(frame, source="picamera2.capture_array"):
@@ -298,18 +405,28 @@ def initialize_camera():
                 "AwbMode": 0,                # 0 = Auto mode for adaptive color correction
                 "FrameDurationLimits": (frame_duration_us, frame_duration_us),
             })
-            
+
             camera.start()
             # Warm up camera and let AWB stabilize
             time.sleep(1.0)
 
-            # One-time startup probe to verify runtime channel order on-device.
-            _log_channel_sanity_once(camera.capture_array(), source="picamera2.capture_array(RGB888)")
+            # Configure autofocus after start for better API compatibility.
+            _apply_picamera_focus_controls(camera)
+
+            # One-time startup probes to verify channel order and sharpness.
+            probe_raw = camera.capture_array()
+            _log_channel_sanity_once(probe_raw, source="picamera2.capture_array(RGB888)")
 
             _picamera_raw_order = _resolve_picamera_raw_order()
             _detector_input_color_space = _resolve_detector_input_color_space()
             logger.info("Picamera raw channel order assumption: %s (camera.picamera_raw_order)", _picamera_raw_order)
             logger.info("Detector input color space resolved to %s", _detector_input_color_space)
+
+            if probe_raw is not None:
+                if probe_raw.ndim == 3 and probe_raw.shape[2] == 4:
+                    probe_raw = probe_raw[:, :, :3]
+                probe_bgr = cv2.cvtColor(probe_raw, cv2.COLOR_RGB2BGR) if _picamera_raw_order == 'RGB' else probe_raw.copy()
+                _log_focus_sanity_once(probe_bgr, source="picamera2.capture_array(startup)")
 
             logger.info(f"Raspberry Pi Camera initialized ({CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS} FPS, "
                          f"FrameDuration={frame_duration_us}µs, RGB888->BGR)")
@@ -423,6 +540,9 @@ def get_frame(manual_awb=False):
             raw = camera.capture_array()
             frame = None
             if raw is not None:
+                if raw.ndim == 3 and raw.shape[2] == 4:
+                    # Drop alpha/X channel if present; keep color channels only.
+                    raw = raw[:, :, :3]
                 if _picamera_raw_order == 'RGB':
                     frame = cv2.cvtColor(raw, cv2.COLOR_RGB2BGR)
                 else:

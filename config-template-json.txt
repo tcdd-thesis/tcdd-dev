@@ -1,5 +1,5 @@
 {
-  "version": "0.2.2-b202603280858",
+  "version": "0.2.3-b202603280955",
 
   // =============================================================================
   // SERVER CONFIGURATION
@@ -38,6 +38,13 @@
     // "RGB" = assume capture_array is RGB and convert to canonical BGR
     // "BGR" = assume capture_array is already BGR (no channel swap)
     "picamera_raw_order": "RGB",
+
+    // Camera Module 3 autofocus controls
+    "autofocus_mode": "continuous", // "off", "manual", "auto", "continuous"
+    "autofocus_speed": "normal",    // "normal" or "fast"
+    "autofocus_range": "normal",    // "normal", "macro", "full"
+    "lens_position": 0.0,             // Used when autofocus_mode="manual"
+    "autofocus_trigger_on_start": true,
     
     // White Balance
     "manual_awb": false            // Enable manual (CPU-based) white balance correction
@@ -57,9 +64,12 @@
                                             //                   "ncnn" (Tencent NCNN)
                                             //                   "hef" (Hailo Executable Format)
     "input_color_space": "AUTO",            // Input color sent to detector:
-                        // "AUTO" = RGB for ncnn/hef, BGR for ultralytics
-                        // "RGB"  = always convert BGR -> RGB before detect
-                        // "BGR"  = send canonical BGR directly
+                                            // "AUTO" = RGB for ncnn/hef, BGR for ultralytics
+                                            // "RGB"  = always convert BGR -> RGB before detect
+                                            // "BGR"  = send canonical BGR directly
+    "preprocess_mode": "letterbox",         // Preprocess before inference:
+                                            // "letterbox" = preserve aspect ratio + pad (YOLO-style)
+                                            // "stretch"   = direct resize to model input
     // Model Configuration
     "model_files": [
       "backend/models/model.pt"             // Model file path(s)
