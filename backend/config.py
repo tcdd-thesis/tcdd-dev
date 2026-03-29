@@ -8,6 +8,7 @@ Supports real-time updates and file watching
 import json
 import os
 import logging
+import copy
 from threading import Lock, RLock
 from datetime import datetime
 
@@ -132,7 +133,7 @@ class Config:
             current_mtime = self._get_file_mtime()
             if current_mtime and current_mtime != self._last_modified:
                 logger.info("Config file changed, reloading...")
-                old_config = self.config.copy()
+                old_config = copy.deepcopy(self.config)
                 self.config = self._load_config()
                 self._last_modified = current_mtime
                 
@@ -197,7 +198,7 @@ class Config:
             save: Whether to save to file immediately (default: True)
         """
         with self._lock:
-            old_config = self.config.copy()
+            old_config = copy.deepcopy(self.config)
             
             keys = key.split('.')
             config = self.config
@@ -228,7 +229,7 @@ class Config:
         """
         self.reload()
         with self._lock:
-            return self.config.copy()
+            return copy.deepcopy(self.config)
     
     def update(self, data, save=True):
         """
@@ -240,7 +241,7 @@ class Config:
             save: Whether to save to file immediately (default: True)
         """
         with self._lock:
-            old_config = self.config.copy()
+            old_config = copy.deepcopy(self.config)
             self._deep_update(self.config, data)
             logger.info(f"Config batch update: {len(data)} changes")
             
